@@ -13,25 +13,29 @@ use async_std::stream::StreamExt;
 use configparser::ini::Ini;
 use std::collections::HashMap;
 
-fn proximity_graph(proximity_signal: f32){
 
-    // not working
-    //let i = 0.1f32;
+fn proximity_graph(proximity_signal: f32){
+    // Not quite working, need to loop it
+    let mut pat_meter = String::new();
+
     println!("prox {}", proximity_signal);
     if proximity_signal < 0.1{
-        let pat_meter = String::from("|          |");
-        println!("{}", pat_meter);
+        pat_meter = String::from("|          |");
     }
-    else{
-        //let pat_meter = String::from("|     NOT BLANK |");    }
-        println!("YO");// pat_meter);
+
+    println!("prox {}", proximity_signal);
+    if proximity_signal < 0.2{
+        pat_meter = String::from("|          |");
     }
-    //println!("{}", pat_meter);
+    let proximity_signal =  proximity_signal * 10.0;
+    let proximity_signal = proximity_signal.round() as i32;
+
+    println!("{}", proximity_signal);
 
 }
 
 fn process_pat(proximity_signal: f32, max_speed: f32, min_speed: f32) -> i32 {
-    proximity_graph(proximity_signal);
+    //proximity_graph(proximity_signal);
     // Process the proximetery signal to a motor speed signal
     let headpat_delta:f32 = max_speed - min_speed; // Take the differance, so when at low proximetery values, the lowest value still buzzes the motor                      
     let headpat_tx = headpat_delta * proximity_signal + min_speed;
