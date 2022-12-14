@@ -1,7 +1,7 @@
 // Headpat IO 
 // by Sideways / Jason Beattie
 
-// Need to get the importing of IP stuff working
+// Fix Snake, add change OSC paramter names for arduino
 
 // OSC Setup
 
@@ -72,7 +72,7 @@ fn banner_txt(){
 
 }
 
-fn load_config() -> (String, f32, f32, String, String, String) {
+fn load_config() -> (String, String, f32, f32, String, String, String, String, String) {
     let mut config = Ini::new();
 
     match config.load("./config.ini") {
@@ -86,6 +86,7 @@ fn load_config() -> (String, f32, f32, String, String, String) {
     };
 
     let headpat_device_ip = config.get("Device_Setup", "headpat_io_ip").unwrap();
+    let headpat_device_port = config.get("Device_Setup", "headpat_io_port").unwrap();
 
     let min_speed = config.get("Haptic_Setup", "min_speed").unwrap();
     let min_speed_float: f32 = min_speed.parse().unwrap();
@@ -101,10 +102,15 @@ fn load_config() -> (String, f32, f32, String, String, String) {
     let proximity_parameter = config.get("OSC_Setup", "proximity_parameter").unwrap();
     let max_speed_parameter = config.get("OSC_Setup", "max_speed_parameter").unwrap();
 
-    // Print Banner
-    banner_txt();
+    let ch_1_address = config.get("OSC_Setup", "ch_1_address").unwrap();
+    let ch_2_address = config.get("OSC_Setup", "ch_2_address").unwrap();
+
+
+    
     println!("");
-    println!("Headpat Device IP: {}", headpat_device_ip);
+    banner_txt(); // Print Banner
+    println!("");
+    println!("Headpat Device: {}:{}", headpat_device_ip, headpat_device_port);
     println!("");
     println!("Vibration Configuration");
     println!("Min Speed: {}%", min_speed);
@@ -112,19 +118,25 @@ fn load_config() -> (String, f32, f32, String, String, String) {
     println!("");    
     println!("OSC Configuration");
     println!("Listening for OSC on port: {}", port_rx);
-    println!("Headpat proximity parameter name: {}", proximity_parameter);
+    println!("Headpat proximity parameter name: {}", proximity_parameter); 
     println!("Max Speed parameter name: {}", max_speed_parameter);
+    println!(""); 
+    println!("Headpat Motor OSC address: {}", ch_1_address);
+    println!("Headpat LED OSC address: {}", ch_2_address);
     println!("");
     println!("Waiting for pats...");
     
     // Return Tuple
     (
         headpat_device_ip,
+        headpat_device_port,
         min_speed_float,
         max_speed_float,
         port_rx,
         proximity_parameter,
         max_speed_parameter,
+        ch_1_address,
+        ch_2_address,
     )
 }
 
@@ -132,7 +144,16 @@ fn load_config() -> (String, f32, f32, String, String, String) {
 async fn main() -> Result<()> {
      
     // Import Config 
-    let (headpat_device_ip, min_speed, mut max_speed, port_rx, proximity_parameter, max_speed_parameter) = load_config();
+    let (headpat_device_ip,
+        headpat_device_port,
+        min_speed,
+        mut max_speed,
+        port_rx,
+        proximity_parameter,
+        max_speed_parameter,
+        ch_1_address,
+        ch_2_address
+    ) = load_config();
 
     // Setup Rx Socket                          
     let rx_socket_address  = vec!["127.0.0.1", &port_rx];
@@ -141,7 +162,8 @@ async fn main() -> Result<()> {
 
     // Setup Tx Socket
     let tx_socket = OscSocket::bind("0.0.0.0:0").await?;
-    let tx_socket_address = vec![headpat_device_ip.to_string(), "8888".to_string()]; //----------------------------------------- Headpat Device Port Setup / default 8888
+    //let tx_socket_address = vec![headpat_device_ip.to_string(), "8888".to_string()]; //----------------------------------------- Headpat Device Port Setup / default 8888
+    let tx_socket_address = vec![headpat_device_ip.to_string(), headpat_device_port.to_string()];
     let tx_socket_address = tx_socket_address.join(":");
 
     tx_socket.connect(tx_socket_address).await?;
