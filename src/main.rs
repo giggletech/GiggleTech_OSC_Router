@@ -16,17 +16,22 @@ use std::collections::HashMap;
 fn proximity_graph(proximity_signal: f32){
 
     // not working
-
+    //let i = 0.1f32;
+    println!("prox {}", proximity_signal);
     if proximity_signal < 0.1{
         let pat_meter = String::from("|          |");
+        println!("{}", pat_meter);
     }
-    let pat_meter = String::from("|     NOT BLANK |");    
-    println!("{}", pat_meter);
+    else{
+        //let pat_meter = String::from("|     NOT BLANK |");    }
+        println!("YO");// pat_meter);
+    }
+    //println!("{}", pat_meter);
 
 }
 
 fn process_pat(proximity_signal: f32, max_speed: f32, min_speed: f32) -> i32 {
-
+    proximity_graph(proximity_signal);
     // Process the proximetery signal to a motor speed signal
     let headpat_delta:f32 = max_speed - min_speed; // Take the differance, so when at low proximetery values, the lowest value still buzzes the motor                      
     let headpat_tx = headpat_delta * proximity_signal + min_speed;
@@ -35,6 +40,7 @@ fn process_pat(proximity_signal: f32, max_speed: f32, min_speed: f32) -> i32 {
     let proximity_signal = format!("{:.2}", proximity_signal);
     let max_speed = format!("{:.2}", max_speed);
 
+    
     if headpat_tx > 99{
         eprintln!("Prox: {} Motor Tx: {} Max Speed:{}", proximity_signal, headpat_tx, max_speed);
     }
