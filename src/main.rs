@@ -34,7 +34,14 @@ fn process_pat(proximity_signal: f32, max_speed: f32, min_speed: f32) -> i32 {
     let headpat_tx = headpat_tx as i32;
     let proximity_signal = format!("{:.2}", proximity_signal);
     let max_speed = format!("{:.2}", max_speed);
-    eprintln!("Prox: {} Motor Tx: {} Max Speed:{}", proximity_signal, headpat_tx, max_speed);
+
+    if headpat_tx > 99{
+        eprintln!("Prox: {} Motor Tx: {} Max Speed:{}", proximity_signal, headpat_tx, max_speed);
+    }
+    else{
+        eprintln!("Prox: {} Motor Tx: {} Max Speed:{}:", proximity_signal, headpat_tx, max_speed);
+    }
+    
     
     headpat_tx
 }
@@ -124,11 +131,10 @@ async fn main() -> Result<()> {
 
     // Setup Tx Socket
     let tx_socket = OscSocket::bind("0.0.0.0:0").await?;
+    let tx_socket_address = vec![headpat_device_ip.to_string(), "8888".to_string()]; //----------------------------------------- Headpat Device Port Setup / default 8888
+    let tx_socket_address = tx_socket_address.join(":");
 
-    // Connect to Headpat IO
-
-    
-    tx_socket.connect("192.168.1.136:8888").await?;
+    tx_socket.connect(tx_socket_address).await?;
 
     // Listen for incoming packets on the first socket.
     while let Some(packet) = rx_socket.next().await {
