@@ -1,6 +1,8 @@
 // Headpat IO 
 // by Sideways / Jason Beattie
 
+// Need to get the importing of IP stuff working
+
 // OSC Setup
 
 use async_osc::{prelude::*, OscPacket, OscSocket, OscType, Result};
@@ -116,13 +118,16 @@ async fn main() -> Result<()> {
     let (headpat_device_ip, min_speed, mut max_speed, port_rx, proximity_parameter, max_speed_parameter) = load_config();
 
     // Setup Rx Socket                          
-
-    let mut rx_socket = OscSocket::bind("127.0.0.1:9001").await?;
+    let rx_socket_address  = vec!["127.0.0.1", &port_rx];
+    let rx_socket_address = rx_socket_address.join(":");
+    let mut rx_socket = OscSocket::bind(rx_socket_address).await?;
 
     // Setup Tx Socket
     let tx_socket = OscSocket::bind("0.0.0.0:0").await?;
 
     // Connect to Headpat IO
+
+    
     tx_socket.connect("192.168.1.136:8888").await?;
 
     // Listen for incoming packets on the first socket.
