@@ -160,13 +160,27 @@ async fn main() -> Result<()> {
     let rx_socket_address = rx_socket_address.join(":");
     let mut rx_socket = OscSocket::bind(rx_socket_address).await?;
 
-    // Setup Tx Socket
-    let tx_socket = OscSocket::bind("0.0.0.0:0").await?;
-    //let tx_socket_address = vec![headpat_device_ip.to_string(), "8888".to_string()]; //----------------------------------------- Headpat Device Port Setup / default 8888
+    // Setup Tx Socket Address
     let tx_socket_address = vec![headpat_device_ip.to_string(), headpat_device_port.to_string()];
     let tx_socket_address = tx_socket_address.join(":");
+    
+    
+    // Connect to Tx socket
+    let tx_socket = OscSocket::bind("0.0.0.0:0").await?;
+    tx_socket.connect(tx_socket_address).await?; 
 
-    tx_socket.connect(tx_socket_address).await?;
+    // OSC Address Setup
+    let avatar_address = "/avatar/parameters/";
+    let proximity_address = vec![avatar_address.to_string(), proximity_parameter.to_string()];
+    let proximity_address = proximity_address.join("");
+    println!("{}", proximity_address);
+
+
+    // Setup Tx OSC Address                                    not working!
+    let tx_osc_address_1 = ch_1_address.to_string();
+    let tx_osc_address_2 = ch_2_address.to_string();
+
+    
 
     // Listen for incoming packets on the first socket.
     while let Some(packet) = rx_socket.next().await {
