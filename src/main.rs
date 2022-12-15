@@ -196,7 +196,7 @@ async fn main() -> Result<()> {
                     let max_speed = format!("{:.2}", max_speed);
                     eprintln!("Headpat Max Speed: {}", max_speed);
                 }
-                ("/avatar/parameters/Headpat_prox_1", &[OscType::Float(proximity_reading)]) => {
+                (proximity_address, &[OscType::Float(proximity_reading)]) => {
                     if proximity_reading == 0.0 {
                         // Send 5 Stop Packets to Device
                         println!("Stopping pats...");
