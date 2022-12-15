@@ -194,7 +194,7 @@ async fn main() -> Result<()> {
     //let tx_osc_address_2 = ch_2_address.to_string();
     
     // Address Setup Not working, exclude for now cuze its working - but I need to be able to change these
-    // these carnt be constants becuase the config will need to load new var
+
     const MAX_SPEED_ADDRESS: &str = "/avatar/parameters/Headpat_max";
     const PROXIMITY_ADDRESS: &str = "/avatar/parameters/Headpat_prox_1";
 
@@ -238,6 +238,7 @@ async fn main() -> Result<()> {
                 }
                 _ => {}
             },
+<<<<<<< HEAD
         }  
         
         
@@ -261,6 +262,9 @@ async fn main() -> Result<()> {
 
 
         
+=======
+        }         
+>>>>>>> parent of 7ef02b8 (Clean Code)
     }
     Ok(())
 }
