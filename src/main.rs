@@ -140,6 +140,19 @@ fn load_config() -> (String, String, f32, f32, String, String, String, String, S
     )
 }
 
+fn create_address(parameter: &str) -> String {
+
+    let avatar_address = "/avatar/parameters/";
+    // Create a new vector containing the avatar address and the parameter
+    let address_parts = vec![avatar_address.to_string(), parameter.to_string()];
+    // Join the parts together with no separator
+    let address = address_parts.join("");
+    // Trim the address to remove any leading or trailing white space
+    address.trim().to_string()
+}
+
+
+
 #[async_std::main]
 async fn main() -> Result<()> {
      
@@ -170,13 +183,13 @@ async fn main() -> Result<()> {
     tx_socket.connect(tx_socket_address).await?; 
 
     // OSC Address Setup
-    let avatar_address = "/avatar/parameters/";
-    let proximity_address = vec![avatar_address.to_string(), proximity_parameter.to_string()];
-    let proximity_address = proximity_address.join("");
-    println!("{}", proximity_address);
+    let proximity_address = create_address( &proximity_parameter);
+    println!("prod add{}", proximity_address);
+    let max_speed_address = create_address(&max_speed_parameter);
+    println!("maxa speed{}", max_speed_address);
 
 
-    // Setup Tx OSC Address                                    not working!
+    // Setup Tx OSC Address  NOT WORKING                                  
     let tx_osc_address_1 = ch_1_address.to_string();
     let tx_osc_address_2 = ch_2_address.to_string();
 
@@ -185,7 +198,7 @@ async fn main() -> Result<()> {
     // Listen for incoming packets on the first socket.
     while let Some(packet) = rx_socket.next().await {
 
-        let (packet, _peer_addr) = packet?;
+        let (packet, peer_addr) = packet?;
         // Filter OSC Signals : Headpat Max & Headpat Prox 
         match packet {
             OscPacket::Bundle(_) => {}
@@ -196,7 +209,7 @@ async fn main() -> Result<()> {
                     let max_speed = format!("{:.2}", max_speed);
                     eprintln!("Headpat Max Speed: {}", max_speed);
                 }
-                (proximity_address, &[OscType::Float(proximity_reading)]) => {
+                ("/avatar/parameters/Headpat_prox_1", &[OscType::Float(proximity_reading)]) => {
                     if proximity_reading == 0.0 {
                         // Send 5 Stop Packets to Device
                         println!("Stopping pats...");
