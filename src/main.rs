@@ -221,7 +221,7 @@ async fn main() -> Result<()> {
     
     // Address Setup Not working, exclude for now cuze its working - but I need to be able to change these
     // these carnt be constants becuase the config will need to load new var
-    const MAX_SPEED_ADDRESS: &str = "/avatar/parameters/Headpat_max";
+    
     const PROXIMITY_ADDRESS: &str = "/avatar/parameters/Headpat_prox_1";
 
     // Old Device Addresses
@@ -234,6 +234,8 @@ async fn main() -> Result<()> {
     
 
     // Listen for incoming packets on the first socket.
+    const MAX_SPEED_ADDRESS: &str = "/avatar/parameters/Headpat_max";
+
     while let Some(packet) = rx_socket.next().await {
 
         let (packet, peer_addr) = packet?;
@@ -249,7 +251,7 @@ async fn main() -> Result<()> {
                     const MAX_SPEED_LOW_LIMIT: f32 = 0.15;
                     if max_speed < MAX_SPEED_LOW_LIMIT {
                         max_speed = MAX_SPEED_LOW_LIMIT;
-                        println!("Lower Limit of Speed Reached | ")
+                        //println!("Lower Limit of Speed Reached | ")
                     }
                     let max_speed = format!("{:.2}", max_speed);
                     eprintln!("Headpat Max Speed: {}", max_speed);
