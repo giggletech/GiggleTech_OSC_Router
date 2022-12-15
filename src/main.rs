@@ -196,8 +196,7 @@ async fn main() -> Result<()> {
     //let tx_osc_address_2 = ch_2_address.to_string();
     
     // Address Setup Not working, exclude for now cuze its working - but I need to be able to change these
-    // Setup for changing OSC address not working :()
-    
+
     const MAX_SPEED_ADDRESS: &str = "/avatar/parameters/Headpat_max";
     const PROXIMITY_ADDRESS: &str = "/avatar/parameters/Headpat_prox_1";
 
@@ -214,7 +213,7 @@ async fn main() -> Result<()> {
         match packet {
             OscPacket::Bundle(_) => {}
             OscPacket::Message(message) => match &message.as_tuple() {
-                ("/avatar/parameters/Headpat_max", &[OscType::Float(max_speed_rx)]) => {
+                (MAX_SPEED_ADDRESS, &[OscType::Float(max_speed_rx)]) => {
                     
                     max_speed = max_speed_rx;
                     let max_speed = format!("{:.2}", max_speed);
