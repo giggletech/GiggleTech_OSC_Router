@@ -1,6 +1,7 @@
 // Headpat IO 
 // by Sideways / Jason Beattie
 // OSC Setup
+// broken roll back
 
 use async_osc::{prelude::*, OscPacket, OscSocket, OscType, Result};
 use async_std::stream::StreamExt;
@@ -209,21 +210,18 @@ async fn main() -> Result<()> {
 
         match packet {
             OscPacket::Bundle(_) => {}
-            OscPacket::Message(message) => 
-            
-            match &message.as_tuple() {
-                // Max Speed address match
+            OscPacket::Message(message) => match &message.as_tuple() {
                 (MAX_SPEED_ADDRESS, &[OscType::Float(max_speed_rx)]) => {
                     
                     max_speed = max_speed_rx;
                     let max_speed = format!("{:.2}", max_speed);
                     eprintln!("Headpat Max Speed: {}", max_speed);
                 }
-                // Proximity Address Match
                 (PROXIMITY_ADDRESS, &[OscType::Float(proximity_reading)]) => {
                     if proximity_reading == 0.0 {
                         // Send 5 Stop Packets to Device
                         println!("Stopping pats...");
+        
                         for _ in 0..5 {
                             tx_socket
                                 .send((TX_OSC_ADDRESS_1, (0i32,)))
@@ -238,7 +236,6 @@ async fn main() -> Result<()> {
                             .await?;
                     }
                 }
-
                 _ => {}
             },
         }  
@@ -263,16 +260,7 @@ async fn main() -> Result<()> {
 
 
 
-
-
-
-
-
-
-
-
-
-
+        
     }
     Ok(())
 }
