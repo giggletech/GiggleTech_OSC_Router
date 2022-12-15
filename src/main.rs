@@ -1,8 +1,5 @@
 // Headpat IO 
 // by Sideways / Jason Beattie
-
-// Fix Snake, add change OSC paramter names for arduino
-
 // OSC Setup
 
 use async_osc::{prelude::*, OscPacket, OscSocket, OscType, Result};
@@ -200,7 +197,6 @@ async fn main() -> Result<()> {
     const MAX_SPEED_ADDRESS: &str = "/avatar/parameters/Headpat_max";
     const PROXIMITY_ADDRESS: &str = "/avatar/parameters/Headpat_prox_1";
 
-
     const TX_OSC_ADDRESS_1: &str = "/avatar/parameters/Headpat_prox_1";
     const TX_OSC_ADDRESS_2: &str = "/avatar/parameters/Headpat_prox_1";
 
@@ -209,7 +205,8 @@ async fn main() -> Result<()> {
 
         let (packet, peer_addr) = packet?;
         // Filter OSC Signals : Headpat Max & Headpat Prox 
-        let max_speed_address = create_address(&max_speed_parameter);
+        //let max_speed_address = create_address(&max_speed_parameter);
+
         match packet {
             OscPacket::Bundle(_) => {}
             OscPacket::Message(message) => match &message.as_tuple() {
