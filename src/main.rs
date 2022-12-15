@@ -193,7 +193,7 @@ async fn main() -> Result<()> {
     //let tx_osc_address_2 = ch_2_address.to_string();
     
     // Address Setup Not working, exclude for now cuze its working - but I need to be able to change these
-
+    // these carnt be constants becuase the config will need to load new var
     const MAX_SPEED_ADDRESS: &str = "/avatar/parameters/Headpat_max";
     const PROXIMITY_ADDRESS: &str = "/avatar/parameters/Headpat_prox_1";
 
@@ -209,18 +209,21 @@ async fn main() -> Result<()> {
 
         match packet {
             OscPacket::Bundle(_) => {}
-            OscPacket::Message(message) => match &message.as_tuple() {
+            OscPacket::Message(message) => 
+            
+            match &message.as_tuple() {
+                // Max Speed address match
                 (MAX_SPEED_ADDRESS, &[OscType::Float(max_speed_rx)]) => {
                     
                     max_speed = max_speed_rx;
                     let max_speed = format!("{:.2}", max_speed);
                     eprintln!("Headpat Max Speed: {}", max_speed);
                 }
+                // Proximity Address Match
                 (PROXIMITY_ADDRESS, &[OscType::Float(proximity_reading)]) => {
                     if proximity_reading == 0.0 {
                         // Send 5 Stop Packets to Device
                         println!("Stopping pats...");
-        
                         for _ in 0..5 {
                             tx_socket
                                 .send((TX_OSC_ADDRESS_1, (0i32,)))
@@ -235,9 +238,41 @@ async fn main() -> Result<()> {
                             .await?;
                     }
                 }
+
                 _ => {}
             },
-        }         
+        }  
+        
+        
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
     }
     Ok(())
 }
