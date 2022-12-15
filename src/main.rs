@@ -28,12 +28,15 @@ fn proximity_graph(proximity_signal: f32){
 
 }
 
-fn process_pat(proximity_signal: f32, max_speed: f32, min_speed: f32) -> i32 {
+fn process_pat(proximity_signal: f32, max_speed: f32, min_speed: f32, speed_scale: f32) -> i32 {
     //proximity_graph(proximity_signal);
     // Process the proximetery signal to a motor speed signal
+    const MOTOR_SPEED_SCALE: f32 = 0.66; // Motor is being powered off the 5v rail, rated for 3.3v
+
     let headpat_delta:f32 = max_speed - min_speed; // Take the differance, so when at low proximetery values, the lowest value still buzzes the motor                      
     let headpat_tx = headpat_delta * proximity_signal + min_speed;
-    let headpat_tx = headpat_tx * 255.0;
+    
+    let headpat_tx = headpat_tx * MOTOR_SPEED_SCALE * speed_scale* 255.0;
     let headpat_tx = headpat_tx as i32;
     let proximity_signal = format!("{:.2}", proximity_signal);
     let max_speed = format!("{:.2}", max_speed);
@@ -66,7 +69,7 @@ fn banner_txt(){
 
 }
 
-fn load_config() -> (String, String, f32, f32, String, String, String, String, String) {
+fn load_config() -> (String, String, f32, f32, f32, String, String, String, String, String) {
     let mut config = Ini::new();
 
     match config.load("./config.ini") {
@@ -91,6 +94,10 @@ fn load_config() -> (String, String, f32, f32, String, String, String, String, S
     let max_speed_float: f32 = max_speed.parse().unwrap();
     let max_speed_float: f32 = max_speed_float / 100.0;
 
+    let speed_scale = config.get("Haptic_Setup", "max_speed_scale").unwrap();
+    let speed_scale_float: f32 = speed_scale.parse().unwrap();
+    let speed_scale_float: f32 = speed_scale_float / 100.0;    
+
 
     let port_rx = config.get("OSC_Setup", "port_rx").unwrap();
     let proximity_parameter = config.get("OSC_Setup", "proximity_parameter").unwrap();
@@ -109,6 +116,7 @@ fn load_config() -> (String, String, f32, f32, String, String, String, String, S
     println!("Vibration Configuration");
     println!("Min Speed: {}%", min_speed);
     println!("Max Speed: {}%", max_speed);
+    println!("Speed Scaling: {}%", speed_scale);
     println!("");    
     println!("OSC Configuration");
     println!("Listening for OSC on port: {}", port_rx);
@@ -126,6 +134,7 @@ fn load_config() -> (String, String, f32, f32, String, String, String, String, S
         headpat_device_port,
         min_speed_float,
         max_speed_float,
+        speed_scale_float,
         port_rx,
         proximity_parameter,
         max_speed_parameter,
@@ -162,6 +171,7 @@ async fn main() -> Result<()> {
         headpat_device_port,
         min_speed,
         mut max_speed,
+        speed_scale,
         port_rx,
         proximity_parameter,
         max_speed_parameter,
@@ -181,6 +191,10 @@ async fn main() -> Result<()> {
     let tx_socket = OscSocket::bind("0.0.0.0:0").await?;
     tx_socket.connect(tx_socket_address).await?; 
 
+
+    // Headpat Constants
+    
+
     // OSC Address Setup
 
     // Setup from config file not working
@@ -198,8 +212,14 @@ async fn main() -> Result<()> {
     const MAX_SPEED_ADDRESS: &str = "/avatar/parameters/Headpat_max";
     const PROXIMITY_ADDRESS: &str = "/avatar/parameters/Headpat_prox_1";
 
-    const TX_OSC_ADDRESS_1: &str = "/avatar/parameters/Headpat_prox_1";
-    const TX_OSC_ADDRESS_2: &str = "/avatar/parameters/Headpat_prox_1";
+    // Old Device Addresses
+    //const TX_OSC_ADDRESS_1: &str = "/avatar/parameters/Headpat_prox_0";
+    //const TX_OSC_ADDRESS_2: &str = "/avatar/parameters/Headpat_prox_1";
+
+    // New Device Addresses
+    const TX_OSC_MOTOR_ADDRESS: &str = "/avatar/parameters/motor";
+    const TX_OSC_LED_ADDRESS_2: &str = "/avatar/parameters/led";
+    
 
     // Listen for incoming packets on the first socket.
     while let Some(packet) = rx_socket.next().await {
@@ -224,15 +244,16 @@ async fn main() -> Result<()> {
         
                         for _ in 0..5 {
                             tx_socket
-                                .send((TX_OSC_ADDRESS_1, (0i32,)))
+                                .send((TX_OSC_MOTOR_ADDRESS, (0i32,)))
                                 .await?;
                         }
                     } else {
                         // Process Pat signal to send to Device   
-                        let motor_speed_tx = process_pat(proximity_reading, max_speed, min_speed);
+                        let motor_speed_tx = process_pat(proximity_reading, max_speed, min_speed, speed_scale);
+                        
         
                         tx_socket
-                            .send((TX_OSC_ADDRESS_1, (motor_speed_tx,)))
+                            .send((TX_OSC_MOTOR_ADDRESS, (motor_speed_tx,)))
                             .await?;
                     }
                 }
