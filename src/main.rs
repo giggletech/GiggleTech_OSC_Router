@@ -7,12 +7,8 @@
 
 use async_osc::{prelude::*, OscPacket, OscSocket, OscType, Result};
 use async_std::stream::StreamExt;
-
-// config.ini setup
-
 use configparser::ini::Ini;
 use std::collections::HashMap;
-
 
 fn proximity_graph(proximity_signal: f32){
     // Not quite working, need to loop it
@@ -151,8 +147,6 @@ fn create_address(parameter: &str) -> String {
     address.trim().to_string()
 }
 
-
-
 fn create_socket_address(host: &str, port: &str) -> String {
     
     // Define a function to create a socket address from a host and port
@@ -161,8 +155,6 @@ fn create_socket_address(host: &str, port: &str) -> String {
     // Join the parts together with a colon separator
     address_parts.join(":")
 }
-
-
 
 #[async_std::main]
 async fn main() -> Result<()> {
@@ -202,7 +194,8 @@ async fn main() -> Result<()> {
     let tx_osc_address_1 = ch_1_address.to_string();
     let tx_osc_address_2 = ch_2_address.to_string();
 
-    
+    const MAX_SPEED_ADDRESS: &str = "/avatar/parameters/Headpat_max";
+    const PROXIMITY_ADDRESS: &str = "/avatar/parameters/Headpat_prox_1";    
 
     // Listen for incoming packets on the first socket.
     while let Some(packet) = rx_socket.next().await {
@@ -212,13 +205,13 @@ async fn main() -> Result<()> {
         match packet {
             OscPacket::Bundle(_) => {}
             OscPacket::Message(message) => match &message.as_tuple() {
-                ("/avatar/parameters/Headpat_max", &[OscType::Float(max_speed_rx)]) => {
+                (MAX_SPEED_ADDRESS, &[OscType::Float(max_speed_rx)]) => {
                     
                     max_speed = max_speed_rx;
                     let max_speed = format!("{:.2}", max_speed);
                     eprintln!("Headpat Max Speed: {}", max_speed);
                 }
-                ("/avatar/parameters/Headpat_prox_1", &[OscType::Float(proximity_reading)]) => {
+                (PROXIMITY_ADDRESS, &[OscType::Float(proximity_reading)]) => {
                     if proximity_reading == 0.0 {
                         // Send 5 Stop Packets to Device
                         println!("Stopping pats...");
