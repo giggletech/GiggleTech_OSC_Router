@@ -153,6 +153,17 @@ fn create_address(parameter: &str) -> String {
 
 
 
+fn create_socket_address(host: &str, port: &str) -> String {
+    
+    // Define a function to create a socket address from a host and port
+    // Create a new vector containing the host and port
+    let address_parts = vec![host, port];
+    // Join the parts together with a colon separator
+    address_parts.join(":")
+}
+
+
+
 #[async_std::main]
 async fn main() -> Result<()> {
      
@@ -168,17 +179,15 @@ async fn main() -> Result<()> {
         ch_2_address
     ) = load_config();
 
-    // Setup Rx Socket                          
-    let rx_socket_address  = vec!["127.0.0.1", &port_rx];
-    let rx_socket_address = rx_socket_address.join(":");
-    let mut rx_socket = OscSocket::bind(rx_socket_address).await?;
 
-    // Setup Tx Socket Address
-    let tx_socket_address = vec![headpat_device_ip.to_string(), headpat_device_port.to_string()];
-    let tx_socket_address = tx_socket_address.join(":");
-    
+    // // Setup Socket Address
+    let rx_socket_address = create_socket_address("127.0.0.1", &port_rx);
+
+    // Use the function to create the Tx socket address
+    let tx_socket_address = create_socket_address(&headpat_device_ip, &headpat_device_port);
     
     // Connect to Tx socket
+    let mut rx_socket = OscSocket::bind(rx_socket_address).await?;
     let tx_socket = OscSocket::bind("0.0.0.0:0").await?;
     tx_socket.connect(tx_socket_address).await?; 
 
