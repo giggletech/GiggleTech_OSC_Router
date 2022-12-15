@@ -69,6 +69,7 @@ fn banner_txt(){
 
 }
 
+
 fn load_config() -> (String, String, f32, f32, f32, String, String, String, String, String) {
     let mut config = Ini::new();
 
@@ -91,8 +92,16 @@ fn load_config() -> (String, String, f32, f32, f32, String, String, String, Stri
     
 
     let max_speed = config.get("Haptic_Setup", "max_speed").unwrap();
-    let max_speed_float: f32 = max_speed.parse().unwrap();
-    let max_speed_float: f32 = max_speed_float / 100.0;
+    let mut max_speed_float: f32 = max_speed.parse().unwrap();
+    let mut max_speed_float: f32 = max_speed_float / 100.0;
+    const MAX_SPEED_LOW_LIMIT: f32 = 0.05;
+    if max_speed_float < MAX_SPEED_LOW_LIMIT {
+        // Update the value of max_speed_float by using the `mut` keyword
+        // and the assignment operator (=)
+        max_speed_float = MAX_SPEED_LOW_LIMIT;
+        //println!("Max Speed below allowed limit: setting to {}%", max_speed_float * 100.0);
+    }
+
 
     let speed_scale = config.get("Haptic_Setup", "max_speed_scale").unwrap();
     let speed_scale_float: f32 = speed_scale.parse().unwrap();
@@ -109,13 +118,14 @@ fn load_config() -> (String, String, f32, f32, f32, String, String, String, Stri
 
     
     println!("");
-    banner_txt(); // Print Banner
+   
+    banner_txt();
     println!("");
     println!("Headpat Device: {}:{}", headpat_device_ip, headpat_device_port);
     println!("");
     println!("Vibration Configuration");
     println!("Min Speed: {}%", min_speed);
-    println!("Max Speed: {}%", max_speed);
+    println!("Max Speed: {}%", max_speed_float*100.0);
     println!("Speed Scaling: {}%", speed_scale);
     println!("");    
     println!("OSC Configuration");
@@ -141,6 +151,8 @@ fn load_config() -> (String, String, f32, f32, f32, String, String, String, Stri
         ch_1_address,
         ch_2_address,
     )
+
+    
 }
 
 fn create_address(parameter: &str) -> String {
