@@ -1,7 +1,7 @@
 // Headpat IO 
 // by Sideways / Jason Beattie
 // OSC Setup
-// broken roll back
+// working but roll back anyway
 
 use async_osc::{prelude::*, OscPacket, OscSocket, OscType, Result};
 use async_std::stream::StreamExt;
@@ -194,7 +194,7 @@ async fn main() -> Result<()> {
     //let tx_osc_address_2 = ch_2_address.to_string();
     
     // Address Setup Not working, exclude for now cuze its working - but I need to be able to change these
-
+    // these carnt be constants becuase the config will need to load new var
     const MAX_SPEED_ADDRESS: &str = "/avatar/parameters/Headpat_max";
     const PROXIMITY_ADDRESS: &str = "/avatar/parameters/Headpat_prox_1";
 
@@ -238,8 +238,6 @@ async fn main() -> Result<()> {
                 }
                 _ => {}
             },
-<<<<<<< HEAD
-<<<<<<< HEAD
         }  
         
         
@@ -263,12 +261,6 @@ async fn main() -> Result<()> {
 
 
         
-=======
-        }         
->>>>>>> parent of 7ef02b8 (Clean Code)
-=======
-        }         
->>>>>>> parent of 7ef02b8 (Clean Code)
     }
     Ok(())
 }
