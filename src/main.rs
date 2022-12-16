@@ -8,30 +8,19 @@ use async_std::stream::StreamExt;
 use configparser::ini::Ini;
 use std::collections::HashMap;
 
-fn proximity_graph(proximity_signal: f32){
-    // Not quite working, need to loop it
-    // let mut pat_meter = String::new();
+fn proximity_graph(proximity_signal: f32) -> String {
+    
+    let num_dashes = (proximity_signal * 10.0) as i32; // Calculate number of dashes based on scale value
+    let graph = "-".repeat(num_dashes as usize); // Generate string with dashes
 
-    // println!("prox {}", proximity_signal);
-    // if proximity_signal < 0.1{
-    //     pat_meter = String::from("|          |");
-    // }
-
-    // // println!("prox {}", proximity_signal);
-    // // else if proximity_signal < 0.2{
-    // //     pat_meter = String::from("|          |");
-    // // }
-    // let proximity_signal =  proximity_signal * 10.0;
-    // let proximity_signal = proximity_signal.round() as i32;
-
-    // println!("{}", pat_meter);
-
-
-
+    graph // Return graph string
 }
 
 fn process_pat(proximity_signal: f32, max_speed: f32, min_speed: f32, speed_scale: f32) -> i32 {
-    //proximity_graph(proximity_signal);
+    
+    
+    let graph_str =  proximity_graph(proximity_signal); // collect graph 
+
     // Process the proximetery signal to a motor speed signal
     const MOTOR_SPEED_SCALE: f32 = 0.66; // Motor is being powered off the 5v rail, rated for 3.3v
 
@@ -43,12 +32,14 @@ fn process_pat(proximity_signal: f32, max_speed: f32, min_speed: f32, speed_scal
     let proximity_signal = format!("{:.2}", proximity_signal);
     let max_speed = format!("{:.2}", max_speed);
 
-    
+
+
+
     if headpat_tx > 99{
-        eprintln!("Prox: {} Motor Tx: {} Max Speed:{}", proximity_signal, headpat_tx, max_speed);
+        eprintln!("Prox: {} Motor Tx: {} Max Speed:{} {}", proximity_signal, headpat_tx, max_speed, graph_str );
     }
     else{
-        eprintln!("Prox: {} Motor Tx: {} Max Speed:{}:", proximity_signal, headpat_tx, max_speed);
+        eprintln!("Prox: {} Motor Tx: {} Max Speed:{}  {}", proximity_signal, headpat_tx, max_speed, graph_str);
     }
     
     
