@@ -1,12 +1,9 @@
 // Headpat IO 
 // by Sideways / Jason Beattie
-// OSC Setup
-// working but roll back anyway
 
 use async_osc::{prelude::*, OscPacket, OscSocket, OscType, Result};
 use async_std::stream::StreamExt;
 use configparser::ini::Ini;
-use std::collections::HashMap;
 
 fn proximity_graph(proximity_signal: f32) -> String {
     
@@ -14,7 +11,7 @@ fn proximity_graph(proximity_signal: f32) -> String {
     let mut graph = "".to_string(); // Initialize empty string
 
     graph.push_str("-".repeat(num_dashes as usize).as_str()); // Add dashes to string
-    graph.push('➤'); // Add arrow character to end of string
+    graph.push('>'); // Add arrow character to end of string
 
     graph // Return graph string
 }
@@ -32,7 +29,6 @@ fn print_speed_limit(headpat_max_rx: f32) {
 
     println!("Speed Limit: {}% {}", headpat_max_rx_print, max_meter);
 }
-
 
 
 fn process_pat(proximity_signal: f32, max_speed: f32, min_speed: f32, speed_scale: f32) -> i32 {
@@ -69,7 +65,6 @@ fn banner_txt(){
 
 }
 
-
 fn load_config() -> (String, String, f32, f32, f32, String) {
     let mut config = Ini::new();
 
@@ -78,11 +73,6 @@ fn load_config() -> (String, String, f32, f32, f32, String) {
         Ok(_) => {}
     }
 
-    let map = match config.get_map() {
-        None => HashMap::new(),
-        Some(map) => map,
-    };
-
     let headpat_device_ip = config.get("Device_Setup", "headpat_io_ip").unwrap();
     let headpat_device_port = config.get("Device_Setup", "headpat_io_port").unwrap();
 
@@ -90,7 +80,6 @@ fn load_config() -> (String, String, f32, f32, f32, String) {
     let min_speed_float: f32 = min_speed.parse().unwrap();
     let min_speed_float: f32 = min_speed_float / 100.0;
     
-
     let max_speed = config.get("Haptic_Setup", "max_speed").unwrap();
     let max_speed_float: f32 = max_speed.parse().unwrap();
     let mut max_speed_float: f32 = max_speed_float / 100.0;
@@ -114,7 +103,7 @@ fn load_config() -> (String, String, f32, f32, f32, String) {
     // let proximity_parameter = config.get("OSC_Setup", "proximity_parameter").unwrap();
     // let max_speed_parameter = config.get("OSC_Setup", "max_speed_parameter").unwrap();
 
-    
+
     println!("");
     banner_txt();
     println!("");
@@ -148,16 +137,19 @@ fn load_config() -> (String, String, f32, f32, f32, String) {
     
 }
 
-fn create_address(parameter: &str) -> String {
 
-    let avatar_address = "/avatar/parameters/";
-    // Create a new vector containing the avatar address and the parameter
-    let address_parts = vec![avatar_address.to_string(), parameter.to_string()];
-    // Join the parts together with no separator
-    let address = address_parts.join("");
-    // Trim the address to remove any leading or trailing white space
-    address.trim().to_string()
-}
+// This is not used, as can not figure out how to change OSC addresses
+
+// fn create_address(parameter: &str) -> String {
+
+//     let avatar_address = "/avatar/parameters/";
+//     // Create a new vector containing the avatar address and the parameter
+//     let address_parts = vec![avatar_address.to_string(), parameter.to_string()];
+//     // Join the parts together with no separator
+//     let address = address_parts.join("");
+//     // Trim the address to remove any leading or trailing white space
+//     address.trim().to_string()
+// }
 
 fn create_socket_address(host: &str, port: &str) -> String {
     
@@ -205,11 +197,10 @@ async fn main() -> Result<()> {
     const TX_OSC_MOTOR_ADDRESS: &str = "/avatar/parameters/motor";
     const TX_OSC_LED_ADDRESS_2: &str = "/avatar/parameters/led";
     
-
     // Listen for incoming packets on the first socket.
     while let Some(packet) = rx_socket.next().await {
 
-        let (packet, peer_addr) = packet?;
+        let (packet, _peer_addr) = packet?;
         // Filter OSC Signals : Headpat Max & Headpat Prox 
         //let max_speed_address = create_address(&max_speed_parameter);
 
