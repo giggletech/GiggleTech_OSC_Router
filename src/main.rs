@@ -11,7 +11,11 @@ use std::collections::HashMap;
 fn proximity_graph(proximity_signal: f32) -> String {
     
     let num_dashes = (proximity_signal * 10.0) as i32; // Calculate number of dashes based on scale value
-    let graph = "-".repeat(num_dashes as usize); // Generate string with dashes
+    let mut graph = "-".repeat(num_dashes as usize); // Generate string with dashes
+    
+    if !graph.is_empty() {
+        graph.push('➤'); // Add arrow character to end of string
+    }
 
     graph // Return graph string
 }
@@ -33,14 +37,14 @@ fn process_pat(proximity_signal: f32, max_speed: f32, min_speed: f32, speed_scal
     let max_speed = format!("{:.2}", max_speed);
 
 
+    eprintln!("Prox: {:5} Motor Tx: {:3}  Max Speed: {:5} |{:12}|", proximity_signal, headpat_tx, max_speed, graph_str );
 
-
-    if headpat_tx > 99{
-        eprintln!("Prox: {} Motor Tx: {} Max Speed:{} {}", proximity_signal, headpat_tx, max_speed, graph_str );
-    }
-    else{
-        eprintln!("Prox: {} Motor Tx: {} Max Speed:{}  {}", proximity_signal, headpat_tx, max_speed, graph_str);
-    }
+    // if headpat_tx > 99{
+    //     eprintln!("Prox: {:4} Motor Tx: {:3} Max Speed:{} {}", proximity_signal, headpat_tx, max_speed, graph_str );
+    // }
+    // else{
+    //     eprintln!("Prox: {} Motor Tx: {} Max Speed:{}  {}", proximity_signal, headpat_tx, max_speed, graph_str);
+    // }
     
     
     headpat_tx
@@ -236,6 +240,7 @@ async fn main() -> Result<()> {
                     if proximity_reading == 0.0 {
                         // Send 5 Stop Packets to Device
                         println!("Stopping pats...");
+                        
         
                         for _ in 0..5 {
                             tx_socket
