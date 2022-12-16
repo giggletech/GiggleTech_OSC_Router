@@ -83,7 +83,7 @@ fn load_config() -> (String, String, f32, f32, f32, String) {
     let max_speed = config.get("Haptic_Setup", "max_speed").unwrap();
     let max_speed_float: f32 = max_speed.parse().unwrap();
     let mut max_speed_float: f32 = max_speed_float / 100.0;
-    const MAX_SPEED_LOW_LIMIT: f32 = 0.15;
+    const MAX_SPEED_LOW_LIMIT: f32 = 0.05; // in two places
     
     // Limit of Speed Limit
     if max_speed_float < MAX_SPEED_LOW_LIMIT {
@@ -210,7 +210,7 @@ async fn main() -> Result<()> {
                 (MAX_SPEED_ADDRESS, &[OscType::Float(max_speed_rx)]) => {
                     print_speed_limit(max_speed_rx); // print max speed limit
                     max_speed = max_speed_rx;
-                    const MAX_SPEED_LOW_LIMIT: f32 = 0.15;
+                    const MAX_SPEED_LOW_LIMIT: f32 = 0.05;  // this is in two places
                     if max_speed < MAX_SPEED_LOW_LIMIT {
                         max_speed = MAX_SPEED_LOW_LIMIT;
                     }
