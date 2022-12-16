@@ -11,14 +11,35 @@ use std::collections::HashMap;
 fn proximity_graph(proximity_signal: f32) -> String {
     
     let num_dashes = (proximity_signal * 10.0) as i32; // Calculate number of dashes based on scale value
-    let mut graph = "-".repeat(num_dashes as usize); // Generate string with dashes
-    
-    if !graph.is_empty() {
-        graph.push('➤'); // Add arrow character to end of string
-    }
+    let mut graph = "".to_string(); // Initialize empty string
+
+    graph.push_str("-".repeat(num_dashes as usize).as_str()); // Add dashes to string
+    graph.push('➤'); // Add arrow character to end of string
 
     graph // Return graph string
 }
+
+
+
+fn print_speed_limit(Headpat_max_rx: f32) {
+    let ch_1_max = (Headpat_max_rx * 255.0).round() as i32;
+    let Headpat_max = (Headpat_max_rx * 255.0).round() as i32;
+    let Headpat_max_rx_print = (Headpat_max_rx * 100.0).round();
+
+    let mut max_meter = "   ".to_string();
+    if Headpat_max_rx_print > 50.0 {
+        max_meter = "!  ".to_string();
+    }
+    if Headpat_max_rx_print > 75.0 {
+        max_meter = "!! ".to_string();
+    }
+    if Headpat_max_rx_print > 90.0 {
+        max_meter = "!!! SO MUCH !!!".to_string();
+    }
+
+    println!("Speed Limit: {}% {}", Headpat_max_rx_print, max_meter);
+}
+
 
 fn process_pat(proximity_signal: f32, max_speed: f32, min_speed: f32, speed_scale: f32) -> i32 {
     
@@ -110,13 +131,7 @@ fn load_config() -> (String, String, f32, f32, f32, String) {
     
     // let proximity_parameter = config.get("OSC_Setup", "proximity_parameter").unwrap();
     // let max_speed_parameter = config.get("OSC_Setup", "max_speed_parameter").unwrap();
-
-
-
-
-    
     println!("");
-   
     banner_txt();
     println!("");
     println!("Headpat Device: {}:{}", headpat_device_ip, headpat_device_port);
@@ -124,7 +139,7 @@ fn load_config() -> (String, String, f32, f32, f32, String) {
     println!("");
     println!("Vibration Configuration");
     println!("Min Speed: {}%", min_speed);
-    println!("Max Speed: {}%", max_speed_float*100.0);
+    println!("Max Speed: {:}%", max_speed_float*100.0);
     println!("Scale Factor: {}%", speed_scale);
     println!("");    
     //println!("OSC Configuration");
@@ -182,7 +197,6 @@ async fn main() -> Result<()> {
 
     ) = load_config();
 
-
     // // Setup Socket Address
     let rx_socket_address = create_socket_address("127.0.0.1", &port_rx);
 
@@ -193,10 +207,6 @@ async fn main() -> Result<()> {
     let mut rx_socket = OscSocket::bind(rx_socket_address).await?;
     let tx_socket = OscSocket::bind("0.0.0.0:0").await?;
     tx_socket.connect(tx_socket_address).await?; 
-
-
-    // Headpat Constants
-    
 
     // OSC Address Setup
 
@@ -213,8 +223,6 @@ async fn main() -> Result<()> {
     
 
     // Listen for incoming packets on the first socket.
-
-
     while let Some(packet) = rx_socket.next().await {
 
         let (packet, peer_addr) = packet?;
@@ -225,23 +233,18 @@ async fn main() -> Result<()> {
             OscPacket::Bundle(_) => {}
             OscPacket::Message(message) => match &message.as_tuple() {
                 (MAX_SPEED_ADDRESS, &[OscType::Float(max_speed_rx)]) => {
-                    
+                    print_speed_limit(max_speed_rx); // print max speed limit
                     max_speed = max_speed_rx;
                     const MAX_SPEED_LOW_LIMIT: f32 = 0.15;
                     if max_speed < MAX_SPEED_LOW_LIMIT {
                         max_speed = MAX_SPEED_LOW_LIMIT;
-                        //println!("Lower Limit of Speed Reached | ")
                     }
-                    let max_speed = format!("{:.2}", max_speed);
-                    
-                    eprintln!("Headpat Max Speed: {}", max_speed);
                 }
                 (PROXIMITY_ADDRESS, &[OscType::Float(proximity_reading)]) => {
                     if proximity_reading == 0.0 {
                         // Send 5 Stop Packets to Device
                         println!("Stopping pats...");
-                        
-        
+                    
                         for _ in 0..5 {
                             tx_socket
                                 .send((TX_OSC_MOTOR_ADDRESS, (0i32,)))
@@ -251,7 +254,6 @@ async fn main() -> Result<()> {
                         // Process Pat signal to send to Device   
                         let motor_speed_tx = process_pat(proximity_reading, max_speed, min_speed, speed_scale);
                         
-        
                         tx_socket
                             .send((TX_OSC_MOTOR_ADDRESS, (motor_speed_tx,)))
                             .await?;
@@ -260,28 +262,7 @@ async fn main() -> Result<()> {
                 _ => {}
             },
         }  
-        
-        
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-        
+   
     }
     Ok(())
 }
