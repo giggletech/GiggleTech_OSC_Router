@@ -19,26 +19,21 @@ fn proximity_graph(proximity_signal: f32) -> String {
     graph // Return graph string
 }
 
+fn print_speed_limit(headpat_max_rx: f32) {
 
+    let headpat_max_rx_print = (headpat_max_rx * 100.0).round();
 
-fn print_speed_limit(Headpat_max_rx: f32) {
-    let ch_1_max = (Headpat_max_rx * 255.0).round() as i32;
-    let Headpat_max = (Headpat_max_rx * 255.0).round() as i32;
-    let Headpat_max_rx_print = (Headpat_max_rx * 100.0).round();
+    let max_meter = match headpat_max_rx_print {
+        n if n > 90.0 => "!!! SO MUCH !!!",
+        n if n > 75.0 => "!! ",
+        n if n > 50.0 => "!  ",
+        _ => "   ",
+    };
 
-    let mut max_meter = "   ".to_string();
-    if Headpat_max_rx_print > 50.0 {
-        max_meter = "!  ".to_string();
-    }
-    if Headpat_max_rx_print > 75.0 {
-        max_meter = "!! ".to_string();
-    }
-    if Headpat_max_rx_print > 90.0 {
-        max_meter = "!!! SO MUCH !!!".to_string();
-    }
-
-    println!("Speed Limit: {}% {}", Headpat_max_rx_print, max_meter);
+    println!("Speed Limit: {}% {}", headpat_max_rx_print, max_meter);
 }
+
+
 
 
 fn process_pat(proximity_signal: f32, max_speed: f32, min_speed: f32, speed_scale: f32) -> i32 {
