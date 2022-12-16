@@ -35,33 +35,20 @@ fn print_speed_limit(headpat_max_rx: f32) {
 
 
 
-
 fn process_pat(proximity_signal: f32, max_speed: f32, min_speed: f32, speed_scale: f32) -> i32 {
-    
-    
+
+    const MOTOR_SPEED_SCALE: f32 = 0.66; // Motor is being powered off the 5v rail, rated for 3.3v, scaled arrcordingly
     let graph_str =  proximity_graph(proximity_signal); // collect graph 
-
-    // Process the proximetery signal to a motor speed signal
-    const MOTOR_SPEED_SCALE: f32 = 0.66; // Motor is being powered off the 5v rail, rated for 3.3v
-
     let headpat_delta:f32 = max_speed - min_speed; // Take the differance, so when at low proximetery values, the lowest value still buzzes the motor                      
-    let headpat_tx = headpat_delta * proximity_signal + min_speed;
     
+    let headpat_tx = headpat_delta * proximity_signal + min_speed;
     let headpat_tx = headpat_tx * MOTOR_SPEED_SCALE * speed_scale* 255.0;
+    
     let headpat_tx = headpat_tx as i32;
     let proximity_signal = format!("{:.2}", proximity_signal);
     let max_speed = format!("{:.2}", max_speed);
 
-
     eprintln!("Prox: {:5} Motor Tx: {:3}  Max Speed: {:5} |{:12}|", proximity_signal, headpat_tx, max_speed, graph_str );
-
-    // if headpat_tx > 99{
-    //     eprintln!("Prox: {:4} Motor Tx: {:3} Max Speed:{} {}", proximity_signal, headpat_tx, max_speed, graph_str );
-    // }
-    // else{
-    //     eprintln!("Prox: {} Motor Tx: {} Max Speed:{}  {}", proximity_signal, headpat_tx, max_speed, graph_str);
-    // }
-    
     
     headpat_tx
 }
@@ -91,10 +78,10 @@ fn load_config() -> (String, String, f32, f32, f32, String) {
         Ok(_) => {}
     }
 
-    // let map = match config.get_map() {
-    //     None => HashMap::new(),
-    //     Some(map) => map,
-    // };
+    let map = match config.get_map() {
+        None => HashMap::new(),
+        Some(map) => map,
+    };
 
     let headpat_device_ip = config.get("Device_Setup", "headpat_io_ip").unwrap();
     let headpat_device_port = config.get("Device_Setup", "headpat_io_port").unwrap();
@@ -108,9 +95,10 @@ fn load_config() -> (String, String, f32, f32, f32, String) {
     let max_speed_float: f32 = max_speed.parse().unwrap();
     let mut max_speed_float: f32 = max_speed_float / 100.0;
     const MAX_SPEED_LOW_LIMIT: f32 = 0.15;
+    
+    // Limit of Speed Limit
     if max_speed_float < MAX_SPEED_LOW_LIMIT {
-        // Update the value of max_speed_float by using the `mut` keyword
-        // and the assignment operator (=)
+
         max_speed_float = MAX_SPEED_LOW_LIMIT;
         //println!("Max Speed below allowed limit: setting to {}%", max_speed_float * 100.0);
     }
@@ -123,9 +111,10 @@ fn load_config() -> (String, String, f32, f32, f32, String) {
 
     let port_rx = config.get("OSC_Setup", "port_rx").unwrap();
     // No longer used, hard code 
-    
     // let proximity_parameter = config.get("OSC_Setup", "proximity_parameter").unwrap();
     // let max_speed_parameter = config.get("OSC_Setup", "max_speed_parameter").unwrap();
+
+    
     println!("");
     banner_txt();
     println!("");
