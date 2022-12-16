@@ -10,21 +10,23 @@ use std::collections::HashMap;
 
 fn proximity_graph(proximity_signal: f32){
     // Not quite working, need to loop it
-    let mut pat_meter = String::new();
+    // let mut pat_meter = String::new();
 
-    println!("prox {}", proximity_signal);
-    if proximity_signal < 0.1{
-        pat_meter = String::from("|          |");
-    }
+    // println!("prox {}", proximity_signal);
+    // if proximity_signal < 0.1{
+    //     pat_meter = String::from("|          |");
+    // }
 
-    println!("prox {}", proximity_signal);
-    if proximity_signal < 0.2{
-        pat_meter = String::from("|          |");
-    }
-    let proximity_signal =  proximity_signal * 10.0;
-    let proximity_signal = proximity_signal.round() as i32;
+    // // println!("prox {}", proximity_signal);
+    // // else if proximity_signal < 0.2{
+    // //     pat_meter = String::from("|          |");
+    // // }
+    // let proximity_signal =  proximity_signal * 10.0;
+    // let proximity_signal = proximity_signal.round() as i32;
 
-    println!("{}", proximity_signal);
+    // println!("{}", pat_meter);
+
+
 
 }
 
@@ -70,7 +72,7 @@ fn banner_txt(){
 }
 
 
-fn load_config() -> (String, String, f32, f32, f32, String, String, String, String, String) {
+fn load_config() -> (String, String, f32, f32, f32, String) {
     let mut config = Ini::new();
 
     match config.load("./config.ini") {
@@ -78,10 +80,10 @@ fn load_config() -> (String, String, f32, f32, f32, String, String, String, Stri
         Ok(_) => {}
     }
 
-    let map = match config.get_map() {
-        None => HashMap::new(),
-        Some(map) => map,
-    };
+    // let map = match config.get_map() {
+    //     None => HashMap::new(),
+    //     Some(map) => map,
+    // };
 
     let headpat_device_ip = config.get("Device_Setup", "headpat_io_ip").unwrap();
     let headpat_device_port = config.get("Device_Setup", "headpat_io_port").unwrap();
@@ -92,7 +94,7 @@ fn load_config() -> (String, String, f32, f32, f32, String, String, String, Stri
     
 
     let max_speed = config.get("Haptic_Setup", "max_speed").unwrap();
-    let mut max_speed_float: f32 = max_speed.parse().unwrap();
+    let max_speed_float: f32 = max_speed.parse().unwrap();
     let mut max_speed_float: f32 = max_speed_float / 100.0;
     const MAX_SPEED_LOW_LIMIT: f32 = 0.15;
     if max_speed_float < MAX_SPEED_LOW_LIMIT {
@@ -109,11 +111,12 @@ fn load_config() -> (String, String, f32, f32, f32, String, String, String, Stri
 
 
     let port_rx = config.get("OSC_Setup", "port_rx").unwrap();
-    let proximity_parameter = config.get("OSC_Setup", "proximity_parameter").unwrap();
-    let max_speed_parameter = config.get("OSC_Setup", "max_speed_parameter").unwrap();
+    // No longer used, hard code 
+    
+    // let proximity_parameter = config.get("OSC_Setup", "proximity_parameter").unwrap();
+    // let max_speed_parameter = config.get("OSC_Setup", "max_speed_parameter").unwrap();
 
-    let ch_1_address = config.get("OSC_Setup", "ch_1_address").unwrap();
-    let ch_2_address = config.get("OSC_Setup", "ch_2_address").unwrap();
+
 
 
     
@@ -122,17 +125,16 @@ fn load_config() -> (String, String, f32, f32, f32, String, String, String, Stri
     banner_txt();
     println!("");
     println!("Headpat Device: {}:{}", headpat_device_ip, headpat_device_port);
+    println!("Listening for OSC on port: {}", port_rx);
     println!("");
     println!("Vibration Configuration");
     println!("Min Speed: {}%", min_speed);
     println!("Max Speed: {}%", max_speed_float*100.0);
-    println!("Speed Scaling: {}%", speed_scale);
+    println!("Scale Factor: {}%", speed_scale);
     println!("");    
-    println!("OSC Configuration");
-    println!("Listening for OSC on port: {}", port_rx);
-    println!("Headpat proximity parameter name: {}", proximity_parameter); 
-    println!("Max Speed parameter name: {}", max_speed_parameter);
-    println!(""); 
+    //println!("OSC Configuration");
+    // println!("Headpat proximity parameter name: {}", proximity_parameter); 
+    // println!("Max Speed parameter name: {}", max_speed_parameter);
     //println!("Headpat Motor OSC address: {}", ch_1_address);
     //println!("Headpat LED OSC address: {}", ch_2_address);
     //println!("");
@@ -146,10 +148,7 @@ fn load_config() -> (String, String, f32, f32, f32, String, String, String, Stri
         max_speed_float,
         speed_scale_float,
         port_rx,
-        proximity_parameter,
-        max_speed_parameter,
-        ch_1_address,
-        ch_2_address,
+
     )
 
     
@@ -185,10 +184,7 @@ async fn main() -> Result<()> {
         mut max_speed,
         speed_scale,
         port_rx,
-        proximity_parameter,
-        max_speed_parameter,
-        ch_1_address,
-        ch_2_address
+
     ) = load_config();
 
 
@@ -209,20 +205,8 @@ async fn main() -> Result<()> {
 
     // OSC Address Setup
 
-    // Setup from config file not working
-
-    // let proximity_address = create_address( &proximity_parameter); 
-    // println!("prod add{}", proximity_address);
-    // let max_speed_address = create_address(&max_speed_parameter);
-    // println!("maxa speed{}", max_speed_address);
-    // Setup Tx OSC Address  NOT WORKING                                  
-    //let tx_osc_address_1 = ch_1_address.to_string();
-    //let tx_osc_address_2 = ch_2_address.to_string();
-    
-    // Address Setup Not working, exclude for now cuze its working - but I need to be able to change these
-    // these carnt be constants becuase the config will need to load new var
-    
     const PROXIMITY_ADDRESS: &str = "/avatar/parameters/Headpat_prox_1";
+    const MAX_SPEED_ADDRESS: &str = "/avatar/parameters/Headpat_max";
 
     // Old Device Addresses
     //const TX_OSC_ADDRESS_1: &str = "/avatar/parameters/Headpat_prox_0";
@@ -234,7 +218,7 @@ async fn main() -> Result<()> {
     
 
     // Listen for incoming packets on the first socket.
-    const MAX_SPEED_ADDRESS: &str = "/avatar/parameters/Headpat_max";
+
 
     while let Some(packet) = rx_socket.next().await {
 
@@ -254,6 +238,7 @@ async fn main() -> Result<()> {
                         //println!("Lower Limit of Speed Reached | ")
                     }
                     let max_speed = format!("{:.2}", max_speed);
+                    
                     eprintln!("Headpat Max Speed: {}", max_speed);
                 }
                 (PROXIMITY_ADDRESS, &[OscType::Float(proximity_reading)]) => {
