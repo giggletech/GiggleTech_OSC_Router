@@ -65,6 +65,18 @@ fn banner_txt(){
 
 }
 
+fn banner_txt_2(){
+    println!("");
+    println!(" ██████  ██  ██████   ██████  ██      ███████     ████████ ███████  ██████ ██   ██ ");
+    println!("██       ██ ██       ██       ██      ██             ██    ██      ██      ██   ██ ");
+    println!("██   ███ ██ ██   ███ ██   ███ ██      █████          ██    █████   ██      ███████ ");
+    println!("██    ██ ██ ██    ██ ██    ██ ██      ██             ██    ██      ██      ██   ██ ");
+    println!(" ██████  ██  ██████   ██████  ███████ ███████        ██    ███████  ██████ ██   ██ ");
+    println!("");
+    println!("█▀█ █▀ █▀▀   █▀█ █▀█ █ █ ▀█▀ █▀▀ █▀█");
+    println!("█▄█ ▄█ █▄▄   █▀▄ █▄█ █▄█  █  ██▄ █▀▄");
+                                                                                
+}
 
 
 fn load_config() -> (String, String, f32, f32, f32, String) {
@@ -107,7 +119,7 @@ fn load_config() -> (String, String, f32, f32, f32, String) {
 
 
     println!("");
-    banner_txt();
+    banner_txt_2();
     println!("");
     println!("Headpat Device: {}:{}", headpat_device_ip, headpat_device_port);
     println!("Listening for OSC on port: {}", port_rx);
