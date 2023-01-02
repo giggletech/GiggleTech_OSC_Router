@@ -186,8 +186,8 @@ async fn main() -> Result<()> {
 
     // OSC Address Setup
 
-    const PROXIMITY_ADDRESS: &str = "/avatar/parameters/Headpat_prox_1";
-    const MAX_SPEED_ADDRESS: &str = "/avatar/parameters/Headpat_max";
+    const PROXIMITY_ADDRESS: &str = "/avatar/parameters/proximity_01";
+    const MAX_SPEED_ADDRESS: &str = "/avatar/parameters/max_speed";
 
     // Old Device Addresses
     //const TX_OSC_ADDRESS_1: &str = "/avatar/parameters/Headpat_prox_0";
