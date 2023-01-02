@@ -65,6 +65,8 @@ fn banner_txt(){
 
 }
 
+
+
 fn load_config() -> (String, String, f32, f32, f32, String) {
     let mut config = Ini::new();
 
@@ -73,14 +75,14 @@ fn load_config() -> (String, String, f32, f32, f32, String) {
         Ok(_) => {}
     }
 
-    let headpat_device_ip = config.get("Device_Setup", "headpat_io_ip").unwrap();
-    let headpat_device_port = config.get("Device_Setup", "headpat_io_port").unwrap();
-
-    let min_speed = config.get("Haptic_Setup", "min_speed").unwrap();
+    let headpat_device_ip = config.get("Setup", "headpat_io_ip").unwrap();
+    //let headpat_device_port = config.get("Device_Setup", "headpat_io_port").unwrap(); // REMOVE ABILITY TO CHANGE PORT FROM CONFIG
+    let headpat_device_port = "8888".to_string();
+    let min_speed = config.get("Haptic_Config", "min_speed").unwrap();
     let min_speed_float: f32 = min_speed.parse().unwrap();
     let min_speed_float: f32 = min_speed_float / 100.0;
     
-    let max_speed = config.get("Haptic_Setup", "max_speed").unwrap();
+    let max_speed = config.get("Haptic_Config", "max_speed").unwrap();
     let max_speed_float: f32 = max_speed.parse().unwrap();
     let mut max_speed_float: f32 = max_speed_float / 100.0;
     const MAX_SPEED_LOW_LIMIT: f32 = 0.05; // in two places
@@ -93,12 +95,12 @@ fn load_config() -> (String, String, f32, f32, f32, String) {
     }
 
 
-    let speed_scale = config.get("Haptic_Setup", "max_speed_scale").unwrap();
+    let speed_scale = config.get("Haptic_Config", "max_speed_scale").unwrap();
     let speed_scale_float: f32 = speed_scale.parse().unwrap();
     let speed_scale_float: f32 = speed_scale_float / 100.0;    
 
 
-    let port_rx = config.get("OSC_Setup", "port_rx").unwrap();
+    let port_rx = config.get("Setup", "port_rx").unwrap();
     // No longer used, hard code 
     // let proximity_parameter = config.get("OSC_Setup", "proximity_parameter").unwrap();
     // let max_speed_parameter = config.get("OSC_Setup", "max_speed_parameter").unwrap();
