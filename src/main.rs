@@ -121,7 +121,7 @@ fn load_config() -> (String, String, f32, f32, f32, String) {
     //println!("Headpat Motor OSC address: {}", ch_1_address);
     //println!("Headpat LED OSC address: {}", ch_2_address);
     //println!("");
-    println!("Waiting for pats...");
+    println!(" Waiting for pats...");
     
     // Return Tuple
     (
