@@ -44,7 +44,7 @@ fn process_pat(proximity_signal: f32, max_speed: f32, min_speed: f32, speed_scal
     let proximity_signal = format!("{:.2}", proximity_signal);
     let max_speed = format!("{:.2}", max_speed);
 
-    eprintln!("Prox: {:5} Motor Tx: {:3}  Max Speed: {:5} |{:12}|", proximity_signal, headpat_tx, max_speed, graph_str );
+    eprintln!("Prox: {:5} Motor Tx: {:3}  Max Speed: {:5} |{:11}|", proximity_signal, headpat_tx, max_speed, graph_str );
     
     headpat_tx
 }
