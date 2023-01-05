@@ -73,7 +73,7 @@ fn load_config() -> (String, String, f32, f32, f32, String) {
         Ok(_) => {}
     }
 
-    let headpat_device_ip = config.get("Setup", "headpat_io_ip").unwrap();
+    let headpat_device_ip = config.get("Setup", "device_ip").unwrap();
     //let headpat_device_port = config.get("Device_Setup", "headpat_io_port").unwrap(); // REMOVE ABILITY TO CHANGE PORT FROM CONFIG
     let headpat_device_port = "8888".to_string();
     let min_speed = config.get("Haptic_Config", "min_speed").unwrap();
@@ -107,7 +107,7 @@ fn load_config() -> (String, String, f32, f32, f32, String) {
     println!("");
     banner_txt();
     println!("");
-    println!(" Headpat Device: {}:{}", headpat_device_ip, headpat_device_port);
+    println!(" Haptic Device: {}:{}", headpat_device_ip, headpat_device_port);
     println!(" Listening for OSC on port: {}", port_rx);
     println!("");
     println!(" Vibration Configuration");
