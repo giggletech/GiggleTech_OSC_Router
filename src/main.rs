@@ -140,18 +140,7 @@ fn load_config() -> (String, String, f32, f32, f32, String, String, String) {
 }
 
 
-// This is not used, as can not figure out how to change OSC addresses
 
-// fn create_address(parameter: &str) -> String {
-
-//     let avatar_address = "/avatar/parameters/";
-//     // Create a new vector containing the avatar address and the parameter
-//     let address_parts = vec![avatar_address.to_string(), parameter.to_string()];
-//     // Join the parts together with no separator
-//     let address = address_parts.join("");
-//     // Trim the address to remove any leading or trailing white space
-//     address.trim().to_string()
-// }
 
 fn create_socket_address(host: &str, port: &str) -> String {
     
@@ -193,10 +182,6 @@ async fn main() -> Result<()> {
     //const PROXIMITY_ADDRESS: &str = "/avatar/parameters/proximity_01";
     //const MAX_SPEED_ADDRESS: &str = "/avatar/parameters/max_speed";
 
-    // Old Device Addresses
-    //const TX_OSC_ADDRESS_1: &str = "/avatar/parameters/Headpat_prox_0";
-    //const TX_OSC_ADDRESS_2: &str = "/avatar/parameters/Headpat_prox_1";
-
     // New Device Addresses
     const TX_OSC_MOTOR_ADDRESS: &str = "/avatar/parameters/motor";
     const TX_OSC_LED_ADDRESS_2: &str = "/avatar/parameters/led";
@@ -221,7 +206,7 @@ async fn main() -> Result<()> {
                 };
 
                 if address == max_speed_parameter_address {
-                    //println!("{} {:?}", address, value);
+                    
                     print_speed_limit(value); // print max speed limit
                     max_speed = value;
                     const MAX_SPEED_LOW_LIMIT: f32 = 0.05;  // this is in two places
@@ -233,7 +218,6 @@ async fn main() -> Result<()> {
                 
                 
                 else if address == proximity_parameter_address  {
-                    //println!("{} {:?}", address, value);
 
                     if value == 0.0 {
                         // Send 5 Stop Packets to Device
@@ -260,44 +244,6 @@ async fn main() -> Result<()> {
 
             }
             
-            
-            
-            
-            /*{}match &message.as_tuple() {
-                (max_speed_parameter_address, &[OscType::Float(max_speed_rx)]) => {
-                    print_speed_limit(max_speed_rx); // print max speed limit
-                    max_speed = max_speed_rx;
-                    const MAX_SPEED_LOW_LIMIT: f32 = 0.05;  // this is in two places
-                    if max_speed < MAX_SPEED_LOW_LIMIT {
-                        max_speed = MAX_SPEED_LOW_LIMIT;
-                    }
-                }
-
-
-                (proximity_parameter_address, &[OscType::Float(proximity_reading)]) => {
-                    if proximity_reading == 0.0 {
-                        // Send 5 Stop Packets to Device
-                        println!("Stopping pats...");
-                    
-                        for _ in 0..5 {
-                            tx_socket
-                                .send((TX_OSC_MOTOR_ADDRESS, (0i32,)))
-                                .await?;
-                        }
-                    } else {
-                        // Process Pat signal to send to Device   
-                        let motor_speed_tx = process_pat(proximity_reading, max_speed, min_speed, speed_scale);
-                        
-                        tx_socket
-                            .send((TX_OSC_MOTOR_ADDRESS, (motor_speed_tx,)))
-                            .await?;
-                    }
-                }
-
-                
-                _ => {}
-            },
-            */
         }  
    
     }
