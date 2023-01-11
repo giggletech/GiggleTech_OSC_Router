@@ -63,7 +63,7 @@ fn deadzone(mut value: f32, deadzone_inner: f32, mut deadzone_outer: f32) -> f32
     }
     else{
         deadzone_delta = deadzone_inner - deadzone_outer;
-        println!("val:{}", value);
+        
         if value < deadzone_outer{
             value = 0.0;
         }
@@ -96,7 +96,7 @@ fn banner_txt(){
 }
 
 
-fn load_config() -> (String, String, f32, f32, f32, String, String, String) {
+fn load_config() -> (String, String, f32, f32, f32, String, String, String, f32, f32) {
     let mut config = Ini::new();
 
     match config.load("./config.ini") {
@@ -172,6 +172,8 @@ fn load_config() -> (String, String, f32, f32, f32, String, String, String) {
         port_rx,
         proximity_parameter_address,
         max_speed_parameter_address,
+        deadzone_inner,
+        deadzone_outer,
 
     )
 
@@ -202,8 +204,14 @@ async fn main() -> Result<()> {
         port_rx,
         proximity_parameter_address,
         max_speed_parameter_address,
+        deadzone_inner,
+        deadzone_outer,
+        
 
     ) = load_config();
+
+    println!("Deadzone_Outer: {}", deadzone_outer);
+    println!("Deadzone_Inner: {}", deadzone_inner);
 
     // // Setup Socket Address
     let rx_socket_address = create_socket_address("127.0.0.1", &port_rx);
@@ -227,8 +235,8 @@ async fn main() -> Result<()> {
 
 
     // Deadzone Setup
-    let deadzone_outer = 0.25;
-    let deadzone_inner = 0.75;
+    //let deadzone_outer = 0.25;
+    //let deadzone_inner = 0.75;
  
 
     
