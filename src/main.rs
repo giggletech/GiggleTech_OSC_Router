@@ -4,6 +4,7 @@
 use async_osc::{prelude::*, OscPacket, OscSocket, OscType, Result};
 use async_std::stream::StreamExt;
 use configparser::ini::Ini;
+use log::kv::value;
 
 fn proximity_graph(proximity_signal: f32) -> String {
     
@@ -40,13 +41,43 @@ fn process_pat(proximity_signal: f32, max_speed: f32, min_speed: f32, speed_scal
     let headpat_tx = headpat_delta * proximity_signal + min_speed;
     let headpat_tx = headpat_tx * MOTOR_SPEED_SCALE * speed_scale* 255.0;
     
-    let headpat_tx = headpat_tx as i32;
-    let proximity_signal = format!("{:.2}", proximity_signal);
+    let mut headpat_tx_int = headpat_tx as i32;
+    let proximity_signal_string = format!("{:.2}", proximity_signal);
     let max_speed = format!("{:.2}", max_speed);
 
-    eprintln!("Prox: {:5} Motor Tx: {:3}  Max Speed: {:5} |{:11}|", proximity_signal, headpat_tx, max_speed, graph_str );
+    // Added, as the deadzone would allow min speed to be passed through with motor stating on min speed
+    if proximity_signal == 0.0{
+        headpat_tx_int = 0;
+    }
+    eprintln!("Prox: {:5} Motor Tx: {:3}  Max Speed: {:5} |{:11}|", proximity_signal_string, headpat_tx_int, max_speed, graph_str );
+
+    headpat_tx_int
+}
+
+fn deadzone(mut value: f32, deadzone_inner: f32, mut deadzone_outer: f32) -> f32{
+
+    // Calculated Deadzone for optimal pat feel
+    let deadzone_delta;
+    if deadzone_inner <= deadzone_outer {
+        println!("Incorrect Deadzone Setup!");
+    }
+    else{
+        deadzone_delta = deadzone_inner - deadzone_outer;
+        println!("val:{}", value);
+        if value < deadzone_outer{
+            value = 0.0;
+        }
     
-    headpat_tx
+        else if value > deadzone_inner{
+            value = 1.0;
+        } 
+    
+        else{
+            value = (value - deadzone_outer)*(1.0/deadzone_delta);
+        }
+    }
+    value
+
 }
 
 
@@ -99,10 +130,18 @@ fn load_config() -> (String, String, f32, f32, f32, String, String, String) {
 
 
     let port_rx = config.get("Setup", "port_rx").unwrap();
-    // No longer used, hard code 
+    
     let proximity_parameter_address = config.get("Setup", "proximity_parameter").unwrap_or("/avatar/parameters/proximity_01".into());
     let max_speed_parameter_address = config.get("Setup", "max_speed_parameter").unwrap_or("/avatar/parameters/max_speed".into());
 
+    // DeadZone Setup
+    let deadzone_inner_string = config.get("Advanced_Haptic_Config", "dz_inner").unwrap();
+    let deadzone_inner: f32 = deadzone_inner_string.parse().unwrap();
+    println!("Deadzone_Inner: {}", deadzone_inner);
+
+    let deadzone_outer_string = config.get("Advanced_Haptic_Config", "dz_outer").unwrap();
+    let deadzone_outer: f32 = deadzone_outer_string.parse().unwrap();
+    println!("Deadzone_Outer: {}", deadzone_outer);
 
     println!("");
     banner_txt();
@@ -185,6 +224,13 @@ async fn main() -> Result<()> {
     // New Device Addresses
     const TX_OSC_MOTOR_ADDRESS: &str = "/avatar/parameters/motor";
     const TX_OSC_LED_ADDRESS_2: &str = "/avatar/parameters/led";
+
+
+    // Deadzone Setup
+    let deadzone_outer = 0.25;
+    let deadzone_inner = 0.75;
+ 
+
     
     // Listen for incoming packets on the first socket.
     while let Some(packet) = rx_socket.next().await {
@@ -229,7 +275,10 @@ async fn main() -> Result<()> {
                                 .await?;
                         }
                     } else {
-                        // Process Pat signal to send to Device   
+                        // Process Pat signal to send to Device
+                        //println!("b4:{}", value);
+                        let value = deadzone(value, deadzone_inner, deadzone_outer);
+                        //println!("After:{}", value);
                         let motor_speed_tx = process_pat(value, max_speed, min_speed, speed_scale);
                         
                         tx_socket
