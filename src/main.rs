@@ -205,8 +205,8 @@ async fn main() -> Result<()> {
         port_rx,
         proximity_parameter_address,
         max_speed_parameter_address,
-        deadzone_inner,
-        deadzone_outer,
+        mut deadzone_inner,
+        mut deadzone_outer,
         dz_outer_address,
         dz_inner_address,
         
@@ -299,6 +299,22 @@ async fn main() -> Result<()> {
                     }
 
                 }
+
+
+                else if address == dz_outer_address  {
+                    // Change DZ Outer Value
+                    deadzone_outer = value;
+                    println!("Outter Address {} Value {}", address, value);
+                }
+
+                else if address == dz_inner_address  {
+                    // Change DZ Outer Value
+                    deadzone_inner = value;
+                    println!("Outter Address {} Value {}", address, value);
+                }
+
+
+
                 else {
                     //eprintln!("Unknown Address") // Have a debug mode, print if debug mode
                 }
