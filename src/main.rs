@@ -96,7 +96,7 @@ fn banner_txt(){
 }
 
 
-fn load_config() -> (String, String, f32, f32, f32, String, String, String, f32, f32) {
+fn load_config() -> (String, String, f32, f32, f32, String, String, String, f32, f32, String, String) {
     let mut config = Ini::new();
 
     match config.load("./config.ini") {
@@ -143,6 +143,11 @@ fn load_config() -> (String, String, f32, f32, f32, String, String, String, f32,
     let deadzone_outer: f32 = deadzone_outer_string.parse().unwrap();
     println!("Deadzone_Outer: {}", deadzone_outer);
 
+    let dz_outer_address = config.get("dvanced_Haptic_Config", "dz_outer_address").unwrap_or("/avatar/parameters/deadzone_outer".into());
+    let dz_inner_address = config.get("dvanced_Haptic_Config", "dz_inner_address").unwrap_or("/avatar/parameters/deadzone_inner".into());
+
+    // Starting Banner
+
     println!("");
     banner_txt();
     println!("");
@@ -154,12 +159,6 @@ fn load_config() -> (String, String, f32, f32, f32, String, String, String, f32,
     println!(" Max Speed: {:?}%", max_speed_float*100.0);
     println!(" Scale Factor: {}%", speed_scale);
     println!("");    
-    //println!("OSC Configuration");
-    // println!("Headpat proximity parameter name: {}", proximity_parameter); 
-    // println!("Max Speed parameter name: {}", max_speed_parameter);
-    //println!("Headpat Motor OSC address: {}", ch_1_address);
-    //println!("Headpat LED OSC address: {}", ch_2_address);
-    //println!("");
     println!(" Waiting for pats...");
     
     // Return Tuple
@@ -174,6 +173,8 @@ fn load_config() -> (String, String, f32, f32, f32, String, String, String, f32,
         max_speed_parameter_address,
         deadzone_inner,
         deadzone_outer,
+        dz_outer_address,
+        dz_inner_address,
 
     )
 
@@ -206,13 +207,16 @@ async fn main() -> Result<()> {
         max_speed_parameter_address,
         deadzone_inner,
         deadzone_outer,
+        dz_outer_address,
+        dz_inner_address,
         
 
     ) = load_config();
 
     println!("Deadzone_Outer: {}", deadzone_outer);
     println!("Deadzone_Inner: {}", deadzone_inner);
-
+    println!("Deadzone_Outer Address: {}", dz_outer_address);
+    println!("Deadzone_Inner Address: {}", dz_inner_address);
     // // Setup Socket Address
     let rx_socket_address = create_socket_address("127.0.0.1", &port_rx);
 
