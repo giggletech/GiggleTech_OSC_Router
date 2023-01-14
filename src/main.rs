@@ -96,7 +96,7 @@ fn banner_txt(){
 }
 
 
-fn load_config() -> (String, String, f32, f32, f32, String, String, String, f32, f32, String, String) {
+fn load_config() -> (String, String, String, f32, f32, f32, String, String, String, String, f32, f32, String, String) {
     let mut config = Ini::new();
 
     match config.load("./config.ini") {
@@ -104,7 +104,9 @@ fn load_config() -> (String, String, f32, f32, f32, String, String, String, f32,
         Ok(_) => {}
     }
 
-    let headpat_device_ip = config.get("Setup", "device_ip").unwrap();
+    let headpat_device_ip = config.get("Setup", "device_1_ip").unwrap();
+    let device_2_ip = config.get("Setup", "device_2_ip").unwrap_or("0.0.0.0".into());
+    
     //let headpat_device_port = config.get("Device_Setup", "headpat_io_port").unwrap(); // REMOVE ABILITY TO CHANGE PORT FROM CONFIG
     let headpat_device_port = "8888".to_string();
     let min_speed = config.get("Haptic_Config", "min_speed").unwrap();
@@ -131,7 +133,8 @@ fn load_config() -> (String, String, f32, f32, f32, String, String, String, f32,
 
     let port_rx = config.get("Setup", "port_rx").unwrap();
     
-    let proximity_parameter_address = config.get("Setup", "proximity_parameter").unwrap_or("/avatar/parameters/proximity_01".into());
+    let proximity_parameter_address_1 = config.get("Setup", "proximity_parameter_1").unwrap_or("/avatar/parameters/proximity_01".into());
+    let proximity_parameter_address_2 = config.get("Setup", "proximity_parameter_2").unwrap_or("/avatar/parameters/proximity_02".into());
     let max_speed_parameter_address = config.get("Setup", "max_speed_parameter").unwrap_or("/avatar/parameters/max_speed".into());
 
     // DeadZone Setup
@@ -165,11 +168,13 @@ fn load_config() -> (String, String, f32, f32, f32, String, String, String, f32,
     (
         headpat_device_ip,
         headpat_device_port,
+        device_2_ip,
         min_speed_float,
         max_speed_float,
         speed_scale_float,
         port_rx,
-        proximity_parameter_address,
+        proximity_parameter_address_1,
+        proximity_parameter_address_2,
         max_speed_parameter_address,
         deadzone_inner,
         deadzone_outer,
@@ -199,11 +204,13 @@ async fn main() -> Result<()> {
     // Import Config 
     let (headpat_device_ip,
         headpat_device_port,
+        device_2_ip,
         min_speed,
         mut max_speed,
         speed_scale,
         port_rx,
-        proximity_parameter_address,
+        proximity_parameter_address_1,
+        proximity_parameter_address_2,
         max_speed_parameter_address,
         mut deadzone_inner,
         mut deadzone_outer,
@@ -217,7 +224,10 @@ async fn main() -> Result<()> {
     println!("Deadzone_Inner: {}", deadzone_inner);
     println!("Deadzone_Outer Address: {}", dz_outer_address);
     println!("Deadzone_Inner Address: {}", dz_inner_address);
-    // // Setup Socket Address
+    
+    // Device 1 Setup
+
+    // Setup Socket Address 
     let rx_socket_address = create_socket_address("127.0.0.1", &port_rx);
 
     // Use the function to create the Tx socket address
@@ -227,6 +237,14 @@ async fn main() -> Result<()> {
     let mut rx_socket = OscSocket::bind(rx_socket_address).await?;
     let tx_socket = OscSocket::bind("0.0.0.0:0").await?;
     tx_socket.connect(tx_socket_address).await?; 
+
+    // Device 1 Setup
+
+    let tx_socket_address_2 = create_socket_address(&device_2_ip, &headpat_device_port);
+    let tx_socket_2 = OscSocket::bind("0.0.0.0:0").await?;
+    tx_socket_2.connect(tx_socket_address_2).await?; 
+
+
 
     // OSC Address Setup
 
@@ -275,30 +293,48 @@ async fn main() -> Result<()> {
                 
                 
                 
-                else if address == proximity_parameter_address  {
+                else if address == proximity_parameter_address_1  {
 
                     if value == 0.0 {
                         // Send 5 Stop Packets to Device
                         println!("Stopping pats...");
-                    
                         for _ in 0..5 {
                             tx_socket
                                 .send((TX_OSC_MOTOR_ADDRESS, (0i32,)))
                                 .await?;
                         }
                     } else {
-                        // Process Pat signal to send to Device
-                        //println!("b4:{}", value);
                         let value = deadzone(value, deadzone_inner, deadzone_outer);
-                        //println!("After:{}", value);
-                        let motor_speed_tx = process_pat(value, max_speed, min_speed, speed_scale);
-                        
+                        let motor_speed_tx = process_pat(value, max_speed, min_speed, speed_scale);   
                         tx_socket
                             .send((TX_OSC_MOTOR_ADDRESS, (motor_speed_tx,)))
                             .await?;
                     }
 
                 }
+
+
+
+                else if address == proximity_parameter_address_2  {
+
+                    if value == 0.0 {
+                        // Send 5 Stop Packets to Device
+                        println!("Stopping pats...");
+                        for _ in 0..5 {
+                            tx_socket_2
+                                .send((TX_OSC_MOTOR_ADDRESS, (0i32,)))
+                                .await?;
+                        }
+                    } else {
+                        let value = deadzone(value, deadzone_inner, deadzone_outer);
+                        let motor_speed_tx = process_pat(value, 1.0, min_speed, speed_scale);   
+                        tx_socket_2
+                            .send((TX_OSC_MOTOR_ADDRESS, (motor_speed_tx,)))
+                            .await?;
+                    }
+
+                }
+
 
 
                 else if address == dz_outer_address  {
