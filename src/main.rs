@@ -7,11 +7,15 @@
 
 use async_osc::{prelude::*, OscPacket, OscSocket, OscType, Result};
 use async_std::{
+    channel::{self, Receiver, Sender},
     net::{SocketAddr, UdpSocket},
     stream::StreamExt,
     task::{self, JoinHandle},
-    //time::{sleep, Duration},
 };
+use std::sync::mpsc::channel;
+
+
+
 use configparser::ini::Ini;
 
 // TimeOut 
@@ -159,6 +163,22 @@ fn create_socket_address(host: &str, port: &str) -> String {
     address_parts.join(":")
 }
 
+
+async fn my_async_function(mut stop_receiver: Receiver<()>) {
+    println!("Async function started");
+    loop {
+        tokio::select! {
+            _ = stop_receiver.recv() => break,
+            _ = tokio::time::sleep(tokio::time::Duration::from_secs(1)) => {
+                println!("Async function running");
+            }
+        }
+    }
+    println!("Async function stopped");
+}
+
+
+
 #[async_std::main]
 async fn main() -> Result<()> {
      
@@ -260,10 +280,18 @@ async fn main() -> Result<()> {
                     if value == 0.0 {
                         // Send 5 Stop Packets to Device - need to update so it sends stop packets until a new prox signal is made
                         println!("Stopping pats...");
-
-
-
                         
+                        // Stop function
+                        //let (stop_sender, stop_receiver) = channel::<()>(); - i just commented this out
+
+
+                        //let (stop_sender, stop_receiver) = channel::<()>(1);
+                        
+                        let (stop_sender, stop_receiver): (Sender<()>, Receiver<()>) = channel::unbounded(); 
+
+                        let mut my_async_task = task::spawn(my_async_function(stop_receiver));
+                        
+
                     
                         for _ in 0..5 {
                             tx_socket
