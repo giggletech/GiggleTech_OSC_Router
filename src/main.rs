@@ -208,7 +208,7 @@ async fn main() -> Result<()> {
             //println!("Elapsed time since last signal: {:?}", elapsed_time);
             if elapsed_time >= Duration::from_secs(5) {
                 // Send stop packet
-                println!("Stopping Timeout...");
+                println!("Pat Timeout...");
                 tx_socket_clone.send((TX_OSC_MOTOR_ADDRESS, (0i32,))).await.ok();
                 
                 // Update Last Signal Time
@@ -260,6 +260,10 @@ async fn main() -> Result<()> {
                     if value == 0.0 {
                         // Send 5 Stop Packets to Device - need to update so it sends stop packets until a new prox signal is made
                         println!("Stopping pats...");
+
+
+
+                        
                     
                         for _ in 0..5 {
                             tx_socket
