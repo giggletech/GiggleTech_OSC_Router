@@ -93,7 +93,6 @@ fn load_config() -> (String, String, f32, f32, f32, String, String, String) {
     }
 
     let headpat_device_ip = config.get("Setup", "device_ip").unwrap();
-    //let headpat_device_port = config.get("Device_Setup", "headpat_io_port").unwrap(); // REMOVE ABILITY TO CHANGE PORT FROM CONFIG
     let headpat_device_port = "8888".to_string();
     let min_speed = config.get("Haptic_Config", "min_speed").unwrap();
     let min_speed_float: f32 = min_speed.parse().unwrap();
@@ -118,7 +117,6 @@ fn load_config() -> (String, String, f32, f32, f32, String, String, String) {
 
 
     let port_rx = config.get("Setup", "port_rx").unwrap();
-    // No longer used, hard code 
     let proximity_parameter_address = config.get("Setup", "proximity_parameter").unwrap_or("/avatar/parameters/proximity_01".into());
     let max_speed_parameter_address = config.get("Setup", "max_speed_parameter").unwrap_or("/avatar/parameters/max_speed".into());
 
@@ -134,13 +132,7 @@ fn load_config() -> (String, String, f32, f32, f32, String, String, String) {
     println!(" Max Speed: {:?}%", max_speed_float*100.0);
     println!(" Scale Factor: {}%", speed_scale);
     println!("");    
-    //println!("OSC Configuration");
-    // println!("Headpat proximity parameter name: {}", proximity_parameter); 
-    // println!("Max Speed parameter name: {}", max_speed_parameter);
-    //println!("Headpat Motor OSC address: {}", ch_1_address);
-    //println!("Headpat LED OSC address: {}", ch_2_address);
-    //println!("");
-    println!(" Waiting for pats...");
+    println!("Waiting for pats...");
     
     // Return Tuple
     (
@@ -157,9 +149,6 @@ fn load_config() -> (String, String, f32, f32, f32, String, String, String) {
 
     
 }
-
-
-
 
 fn create_socket_address(host: &str, port: &str) -> String {
     
@@ -206,58 +195,41 @@ async fn main() -> Result<()> {
     let proximity_parameter_address_clone = proximity_parameter_address.clone();
 
     // OSC Address Setup
-
-    //const PROXIMITY_ADDRESS: &str = "/avatar/parameters/proximity_01";
-    //const MAX_SPEED_ADDRESS: &str = "/avatar/parameters/max_speed";
-
-    // New Device Addresses
     const TX_OSC_MOTOR_ADDRESS: &str = "/avatar/parameters/motor";
     const TX_OSC_LED_ADDRESS_2: &str = "/avatar/parameters/led";
 
-    // Stop Packet Timer Setup
-    //let mut last_signal_time = Instant::now();
-
+    // ---[ Stop Packet Timer ] ---
+    //
     // Spawn a task to send stop packets when no signal is received for 5 seconds
     task::spawn(async move {
         loop {
             task::sleep(Duration::from_secs(1)).await;
-
             let elapsed_time = Instant::now().duration_since(*LAST_SIGNAL_TIME.lock().unwrap());
-
-            
-            println!("Elapsed time since last signal: {:?}", elapsed_time);
+            //println!("Elapsed time since last signal: {:?}", elapsed_time);
             if elapsed_time >= Duration::from_secs(5) {
                 // Send stop packet
                 println!("Stopping Timeout...");
                 tx_socket_clone.send((TX_OSC_MOTOR_ADDRESS, (0i32,))).await.ok();
                 
-                // Update Last Signal Time - do a dogey
+                // Update Last Signal Time
                 let mut last_signal_time = LAST_SIGNAL_TIME.lock().unwrap();
                 // Access the value
                 let elapsed_time = Instant::now().duration_since(*last_signal_time);
                 // Update the value
-                *last_signal_time = Instant::now();
-                
+                *last_signal_time = Instant::now();            
 
-                //last_signal_time = Instant::now(); not needed
             }
         }
     });
 
-
-
-    // Listen for incoming packets on the first socket.
+    // Listen for OSC Packets
     while let Some(packet) = rx_socket.next().await {
-        
-
         let (packet, _peer_addr) = packet?;
-        // Filter OSC Signals : Headpat Max & Headpat Prox 
-        //let max_speed_address = create_address(&max_speed_parameter);
 
+        // Filter OSC Signals : Headpat Max & Headpat Prox 
         match packet {
             OscPacket::Bundle(_) => {}
             OscPacket::Message(message) => {
-
 
                 let (address, osc_value) = message.as_tuple();
 
@@ -279,21 +251,14 @@ async fn main() -> Result<()> {
                 
                 
                 else if address == proximity_parameter_address  {
-
-                    let mut last_signal_time = LAST_SIGNAL_TIME.lock().unwrap();
-                    // Access the value
-                    let elapsed_time = Instant::now().duration_since(*last_signal_time);
-                    // Update the value
-                    *last_signal_time = Instant::now();
                     
-
-
-                    //last_signal_time = Instant::now();
-                    println!("Last signal time updated: {:?}", last_signal_time);
-                    //println!("Elapsed time since last signal: {:?}", elapsed_time);
+                    // Update Last Signal Time for timeout clock
+                    let mut last_signal_time = LAST_SIGNAL_TIME.lock().unwrap();
+                    let elapsed_time = Instant::now().duration_since(*last_signal_time);
+                    *last_signal_time = Instant::now();
 
                     if value == 0.0 {
-                        // Send 5 Stop Packets to Device
+                        // Send 5 Stop Packets to Device - need to update so it sends stop packets until a new prox signal is made
                         println!("Stopping pats...");
                     
                         for _ in 0..5 {
