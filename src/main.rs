@@ -176,6 +176,7 @@ fn create_socket_address(host: &str, port: &str) -> String {
 //};
 //use futures::{future::select, pin_mut};
 use tokio::select;
+use async_std::channel::unbounded;
 
 //use futures::future::select;
 async fn my_async_function(mut stop_receiver: Receiver<()>) {
@@ -185,6 +186,7 @@ async fn my_async_function(mut stop_receiver: Receiver<()>) {
             _ = stop_receiver.recv() => break,
             _ = task::sleep(std::time::Duration::from_secs(1)) => {
                 println!("Async function running");
+                println!("boop");
             }
         }
     }
@@ -302,9 +304,19 @@ async fn main() -> Result<()> {
 
                         //let (stop_sender, stop_receiver) = channel::<()>(1);
                         
-                        let (stop_sender, stop_receiver): (Sender<()>, Receiver<()>) = channel::unbounded(); 
+                        //let (stop_sender, stop_receiver): (Sender<()>, Receiver<()>) = channel::unbounded(); 
+                        
+                        //let (stop_sender, stop_receiver): (Sender<()>, Receiver<()>) = channel::bounded(1);
 
-                        let mut my_async_task = task::spawn(my_async_function(stop_receiver));
+                        //let mut my_async_task = task::spawn(my_async_function(stop_receiver));
+                        let (stop_sender, stop_receiver) = unbounded::<()>();
+                        let my_async_task = task::spawn(my_async_function(stop_receiver));
+                        task::sleep(Duration::from_secs(1)).await;
+                        stop_sender.send(()).await.unwrap();
+                    
+                        my_async_task.await;
+
+
                         
 
                     
