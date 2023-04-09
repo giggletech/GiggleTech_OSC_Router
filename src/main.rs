@@ -14,6 +14,12 @@ use async_std::{
 };
 use configparser::ini::Ini;
 
+// TimeOut 
+use lazy_static::lazy_static;
+use std::sync::Mutex;
+lazy_static! {
+    static ref LAST_SIGNAL_TIME: Mutex<Instant> = Mutex::new(Instant::now());
+}
 
 
 use std::time::{Duration, Instant};
@@ -209,18 +215,31 @@ async fn main() -> Result<()> {
     const TX_OSC_LED_ADDRESS_2: &str = "/avatar/parameters/led";
 
     // Stop Packet Timer Setup
-    let mut last_signal_time = Instant::now();
+    //let mut last_signal_time = Instant::now();
 
     // Spawn a task to send stop packets when no signal is received for 5 seconds
     task::spawn(async move {
         loop {
             task::sleep(Duration::from_secs(1)).await;
-            let elapsed_time = Instant::now().duration_since(last_signal_time);
+
+            let elapsed_time = Instant::now().duration_since(*LAST_SIGNAL_TIME.lock().unwrap());
+
+            
+            println!("Elapsed time since last signal: {:?}", elapsed_time);
             if elapsed_time >= Duration::from_secs(5) {
                 // Send stop packet
                 println!("Stopping Timeout...");
                 tx_socket_clone.send((TX_OSC_MOTOR_ADDRESS, (0i32,))).await.ok();
-                last_signal_time = Instant::now();
+                
+                // Update Last Signal Time - do a dogey
+                let mut last_signal_time = LAST_SIGNAL_TIME.lock().unwrap();
+                // Access the value
+                let elapsed_time = Instant::now().duration_since(*last_signal_time);
+                // Update the value
+                *last_signal_time = Instant::now();
+                
+
+                //last_signal_time = Instant::now(); not needed
             }
         }
     });
@@ -229,6 +248,7 @@ async fn main() -> Result<()> {
 
     // Listen for incoming packets on the first socket.
     while let Some(packet) = rx_socket.next().await {
+        
 
         let (packet, _peer_addr) = packet?;
         // Filter OSC Signals : Headpat Max & Headpat Prox 
@@ -259,7 +279,19 @@ async fn main() -> Result<()> {
                 
                 
                 else if address == proximity_parameter_address  {
-                    last_signal_time = Instant::now();
+
+                    let mut last_signal_time = LAST_SIGNAL_TIME.lock().unwrap();
+                    // Access the value
+                    let elapsed_time = Instant::now().duration_since(*last_signal_time);
+                    // Update the value
+                    *last_signal_time = Instant::now();
+                    
+
+
+                    //last_signal_time = Instant::now();
+                    println!("Last signal time updated: {:?}", last_signal_time);
+                    //println!("Elapsed time since last signal: {:?}", elapsed_time);
+
                     if value == 0.0 {
                         // Send 5 Stop Packets to Device
                         println!("Stopping pats...");
