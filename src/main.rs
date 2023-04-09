@@ -1,9 +1,22 @@
 // Headpat IO 
 // by Sideways / Jason Beattie
 
+//use async_osc::{prelude::*, OscPacket, OscSocket, OscType, Result};
+//use async_std::stream::StreamExt;
+//use configparser::ini::Ini;
+
 use async_osc::{prelude::*, OscPacket, OscSocket, OscType, Result};
-use async_std::stream::StreamExt;
+use async_std::{
+    net::{SocketAddr, UdpSocket},
+    stream::StreamExt,
+    task::{self, JoinHandle},
+    //time::{sleep, Duration},
+};
 use configparser::ini::Ini;
+
+
+
+use std::time::{Duration, Instant};
 
 fn proximity_graph(proximity_signal: f32) -> String {
     
@@ -175,7 +188,16 @@ async fn main() -> Result<()> {
     // Connect to Tx socket
     let mut rx_socket = OscSocket::bind(rx_socket_address).await?;
     let tx_socket = OscSocket::bind("0.0.0.0:0").await?;
+    let tx_socket_address_clone = tx_socket_address.clone(); // create a clone of tx_socket_address
     tx_socket.connect(tx_socket_address).await?; 
+
+
+    // Connect to Tx socket CLONE
+    let tx_socket_clone = OscSocket::bind("0.0.0.0:0").await?;
+    tx_socket_clone.connect(tx_socket_address_clone).await?;
+
+    //let tx_socket_clone = tx_socket.clone();
+    let proximity_parameter_address_clone = proximity_parameter_address.clone();
 
     // OSC Address Setup
 
@@ -185,7 +207,26 @@ async fn main() -> Result<()> {
     // New Device Addresses
     const TX_OSC_MOTOR_ADDRESS: &str = "/avatar/parameters/motor";
     const TX_OSC_LED_ADDRESS_2: &str = "/avatar/parameters/led";
-    
+
+    // Stop Packet Timer Setup
+    let mut last_signal_time = Instant::now();
+
+    // Spawn a task to send stop packets when no signal is received for 5 seconds
+    task::spawn(async move {
+        loop {
+            task::sleep(Duration::from_secs(1)).await;
+            let elapsed_time = Instant::now().duration_since(last_signal_time);
+            if elapsed_time >= Duration::from_secs(5) {
+                // Send stop packet
+                println!("Stopping Timeout...");
+                tx_socket_clone.send((TX_OSC_MOTOR_ADDRESS, (0i32,))).await.ok();
+                last_signal_time = Instant::now();
+            }
+        }
+    });
+
+
+
     // Listen for incoming packets on the first socket.
     while let Some(packet) = rx_socket.next().await {
 
@@ -218,7 +259,7 @@ async fn main() -> Result<()> {
                 
                 
                 else if address == proximity_parameter_address  {
-
+                    last_signal_time = Instant::now();
                     if value == 0.0 {
                         // Send 5 Stop Packets to Device
                         println!("Stopping pats...");
