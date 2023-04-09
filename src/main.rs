@@ -12,7 +12,7 @@ use async_std::{
     stream::StreamExt,
     task::{self, JoinHandle},
 };
-use std::sync::mpsc::channel;
+//use std::sync::mpsc::channel;
 
 
 
@@ -164,18 +164,33 @@ fn create_socket_address(host: &str, port: &str) -> String {
 }
 
 
+//use async_std::{
+//    channel::{self, Receiver, Sender},
+//    net::{SocketAddr, UdpSocket},
+//    task::{self, JoinHandle},
+//};
+
+//use async_std::{
+//    channel::{Receiver},
+//    task,
+//};
+//use futures::{future::select, pin_mut};
+use tokio::select;
+
+//use futures::future::select;
 async fn my_async_function(mut stop_receiver: Receiver<()>) {
     println!("Async function started");
     loop {
-        tokio::select! {
+        select! {
             _ = stop_receiver.recv() => break,
-            _ = tokio::time::sleep(tokio::time::Duration::from_secs(1)) => {
+            _ = task::sleep(std::time::Duration::from_secs(1)) => {
                 println!("Async function running");
             }
         }
     }
     println!("Async function stopped");
 }
+
 
 
 
