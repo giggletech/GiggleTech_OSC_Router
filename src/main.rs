@@ -29,7 +29,6 @@ fn banner_txt(){
                                                                                 
 }
 
-// Configuation Loader
 fn load_config() -> (
     String, // headpat_device_ip
     String, // headpat_device_port
@@ -112,27 +111,20 @@ fn print_speed_limit(headpat_max_rx: f32) {
 }
 
 // Pat Processor
-
 const MOTOR_SPEED_SCALE: f32 = 0.66; // Overclock Here, OEM config 0.66 going higher than this value will reduce your vibrator motor life
-
 fn process_pat(proximity_signal: f32, max_speed: f32, min_speed: f32, speed_scale: f32) -> i32 {
     let graph_str = proximity_graph(proximity_signal);
     let headpat_tx = (((max_speed - min_speed) * proximity_signal + min_speed) * MOTOR_SPEED_SCALE * speed_scale * 255.0).round() as i32;
     let proximity_signal = format!("{:.2}", proximity_signal);
     let max_speed = format!("{:.2}", max_speed);
-
     eprintln!("Prox: {:5} Motor Tx: {:3}  Max Speed: {:5} |{:11}|", proximity_signal, headpat_tx, max_speed, graph_str);
     
     headpat_tx
 }
 
 
-// REFACTOR BELOW ---------------
 
-
-
-
-// Stop function
+// Stop function needs refactor and make work
 use tokio::select;
 use async_std::channel::unbounded;
 
@@ -151,13 +143,18 @@ async fn my_async_function(stop_receiver: Receiver<()>) {
     println!("Async function stopped");
 }
 
-
 // Call stop function
 async fn stop_async_task(stop_sender: Sender<()>, mut my_async_task: JoinHandle<()>) {
     //task::sleep(Duration::from_secs(5)).await;
     stop_sender.send(()).await.unwrap();
     my_async_task.await;
 }
+
+
+
+
+
+
 
 
 // Tx & Rx Socket Setup
@@ -187,12 +184,12 @@ const TX_OSC_MOTOR_ADDRESS: &str = "/avatar/parameters/motor";
 
 
 // TimeOut 
-//If no new osc signal is Rx for 5s, will send stop packets
 lazy_static! {
     static ref LAST_SIGNAL_TIME: Mutex<Instant> = Mutex::new(Instant::now());
 }
 
 async fn OSC_Timeout(mut tx_socket: OscSocket) -> Result<()> {
+    // If no new osc signal is Rx for 5s, will send stop packets
     loop {
         task::sleep(Duration::from_secs(1)).await;
         let elapsed_time = Instant::now().duration_since(*LAST_SIGNAL_TIME.lock().unwrap());
@@ -240,6 +237,7 @@ async fn main() -> Result<()> {
     // Listen for OSC Packets
     while let Some(packet) = rx_socket.next().await {
         let (packet, _peer_addr) = packet?;
+        
         ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////// See below for stop function
         let (stop_sender, stop_receiver) = unbounded::<()>();
 
@@ -250,23 +248,18 @@ async fn main() -> Result<()> {
             OscPacket::Message(message) => {
 
                 let (address, osc_value) = message.as_tuple();
-
                 let value = match osc_value.first().unwrap_or(&OscType::Nil).clone().float(){
                     Some(v) => v, 
                     None => continue,
                 };
 
+                // Max Speed Setting
                 if address == max_speed_parameter_address {
-                    
-                    print_speed_limit(value); 
-                    max_speed = value;
-                    if max_speed < max_speed_low_limit {
-                        max_speed = max_speed_low_limit;
-                    }
+                    print_speed_limit(value);
+                    max_speed = value.max(max_speed_low_limit);
                 }
                 
-                
-                
+                // Prox Parmeter 
                 else if address == proximity_parameter_address  {
                     
                     // Update Last Signal Time for timeout clock
@@ -301,6 +294,7 @@ async fn main() -> Result<()> {
                                 .send((TX_OSC_MOTOR_ADDRESS, (0i32,)))
                                 .await?;
                         }
+
                     } else {
                         // Process Pat signal to send to Device   
                         let motor_speed_tx = process_pat(value, max_speed, min_speed, speed_scale);
@@ -309,16 +303,12 @@ async fn main() -> Result<()> {
                             .send((TX_OSC_MOTOR_ADDRESS, (motor_speed_tx,)))
                             .await?;
                     }
-
                 }
                 else {
                     //eprintln!("Unknown Address") // Have a debug mode, print if debug mode
                 }
-
-            }
-            
+            } 
         }  
-   
     }
     Ok(())
 }
