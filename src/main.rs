@@ -49,6 +49,7 @@ fn load_config() -> (
         Err(why) => panic!("{}", why),
         Ok(_) => {}
     }
+    const MAX_SPEED_LOW_LIMIT_CONST: f32 = 0.05;
 
     let headpat_device_ip = config.get("Setup", "device_ip").unwrap();
     let headpat_device_port = "8888".to_string();
@@ -58,15 +59,15 @@ fn load_config() -> (
 
     let max_speed = config.get("Haptic_Config", "max_speed").unwrap();
     let max_speed_float = max_speed.parse::<f32>().unwrap() / 100.0;
-    const MAX_SPEED_LOW_LIMIT_CONST: f32 = 0.05; //  ------------------------------------------------------------------------------<<<<<<<<<<<<<<<<<<<<
+    
     let max_speed_low_limit = MAX_SPEED_LOW_LIMIT_CONST;
-
     let max_speed_float = max_speed_float.max(max_speed_low_limit);
 
     let speed_scale = config.get("Haptic_Config", "max_speed_scale").unwrap();
     let speed_scale_float = speed_scale.parse::<f32>().unwrap() / 100.0;
 
     let port_rx = config.get("Setup", "port_rx").unwrap();
+
     let proximity_parameter_address = config
         .get("Setup", "proximity_parameter")
         .unwrap_or_else(|| "/avatar/parameters/proximity_01".into());
@@ -114,7 +115,7 @@ lazy_static! {
 
 
 
-
+/*
 fn proximity_graph(proximity_signal: f32) -> String {
     
     let num_dashes = (proximity_signal * 10.0) as i32; // Calculate number of dashes based on scale value
@@ -125,6 +126,15 @@ fn proximity_graph(proximity_signal: f32) -> String {
 
     graph // Return graph string
 }
+*/
+
+fn proximity_graph(proximity_signal: f32) -> String {
+    let num_dashes = (proximity_signal * 10.0) as usize;
+    let graph = "-".repeat(num_dashes) + ">";
+
+    graph
+}
+
 
 fn print_speed_limit(headpat_max_rx: f32) {
 
@@ -158,11 +168,6 @@ fn process_pat(proximity_signal: f32, max_speed: f32, min_speed: f32, speed_scal
     
     headpat_tx
 }
-
-
-
-
-
 
 // Stop function
 use tokio::select;
