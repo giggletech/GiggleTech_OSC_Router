@@ -102,11 +102,6 @@ fn load_config() -> (
     )
 }
 
-
-
-
-
-
 // TimeOut 
 
 lazy_static! {
@@ -114,20 +109,7 @@ lazy_static! {
 }
 
 
-
-/*
-fn proximity_graph(proximity_signal: f32) -> String {
-    
-    let num_dashes = (proximity_signal * 10.0) as i32; // Calculate number of dashes based on scale value
-    let mut graph = "".to_string(); // Initialize empty string
-
-    graph.push_str("-".repeat(num_dashes as usize).as_str()); // Add dashes to string
-    graph.push('>'); // Add arrow character to end of string
-
-    graph // Return graph string
-}
-*/
-
+// Make it easy to see prox when looking at router
 fn proximity_graph(proximity_signal: f32) -> String {
     let num_dashes = (proximity_signal * 10.0) as usize;
     let graph = "-".repeat(num_dashes) + ">";
@@ -135,36 +117,28 @@ fn proximity_graph(proximity_signal: f32) -> String {
     graph
 }
 
-
 fn print_speed_limit(headpat_max_rx: f32) {
-
-    let headpat_max_rx_print = (headpat_max_rx * 100.0).round();
-
+    let headpat_max_rx_print = (headpat_max_rx * 100.0).round() as i32;
     let max_meter = match headpat_max_rx_print {
-        n if n > 90.0 => "!!! SO MUCH !!!",
-        n if n > 75.0 => "!! ",
-        n if n > 50.0 => "!  ",
+        91..=i32::MAX => "!!! SO MUCH !!!",
+        76..=90 => "!! ",
+        51..=75 => "!  ",
         _ => "   ",
     };
-
     println!("Speed Limit: {}% {}", headpat_max_rx_print, max_meter);
 }
 
+// Pat Processor
+
+const MOTOR_SPEED_SCALE: f32 = 0.66;
 
 fn process_pat(proximity_signal: f32, max_speed: f32, min_speed: f32, speed_scale: f32) -> i32 {
-
-    const MOTOR_SPEED_SCALE: f32 = 0.66; // Motor is being powered off the 5v rail, rated for 3.3v, scaled arrcordingly
-    let graph_str =  proximity_graph(proximity_signal); // collect graph 
-    let headpat_delta:f32 = max_speed - min_speed; // Take the differance, so when at low proximetery values, the lowest value still buzzes the motor                      
-    
-    let headpat_tx = headpat_delta * proximity_signal + min_speed;
-    let headpat_tx = headpat_tx * MOTOR_SPEED_SCALE * speed_scale* 255.0;
-    
-    let headpat_tx = headpat_tx as i32;
+    let graph_str = proximity_graph(proximity_signal);
+    let headpat_tx = (((max_speed - min_speed) * proximity_signal + min_speed) * MOTOR_SPEED_SCALE * speed_scale * 255.0).round() as i32;
     let proximity_signal = format!("{:.2}", proximity_signal);
     let max_speed = format!("{:.2}", max_speed);
 
-    eprintln!("Prox: {:5} Motor Tx: {:3}  Max Speed: {:5} |{:11}|", proximity_signal, headpat_tx, max_speed, graph_str );
+    eprintln!("Prox: {:5} Motor Tx: {:3}  Max Speed: {:5} |{:11}|", proximity_signal, headpat_tx, max_speed, graph_str);
     
     headpat_tx
 }
