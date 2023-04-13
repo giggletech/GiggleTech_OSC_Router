@@ -1,6 +1,6 @@
-// GiggleTech.IO 
+// GiggleTech.io
 // OSC Router
-// by Sideways / Jason Beattie
+// by Sideways
 
 // External crates
 use async_osc::{prelude::*, OscPacket, OscSocket, OscType, Result};
@@ -49,27 +49,17 @@ fn load_config() -> (
     }
     const MAX_SPEED_LOW_LIMIT_CONST: f32 = 0.05;
 
-    let headpat_device_ip = config.get("Setup", "device_ip").unwrap();
-
+    let headpat_device_ip   = config.get("Setup", "device_ip").unwrap();
     let headpat_device_port = "8888".to_string();
-
-    let min_speed = config.get("Haptic_Config", "min_speed").unwrap();
-
-    let min_speed_float = min_speed.parse::<f32>().unwrap() / 100.0;
-
-    let max_speed = config.get("Haptic_Config", "max_speed").unwrap();
-
-    let max_speed_float = max_speed.parse::<f32>().unwrap() / 100.0;
-    
+    let min_speed           = config.get("Haptic_Config", "min_speed").unwrap();
+    let min_speed_float     = min_speed.parse::<f32>().unwrap() / 100.0;
+    let max_speed           = config.get("Haptic_Config", "max_speed").unwrap();
+    let max_speed_float     = max_speed.parse::<f32>().unwrap() / 100.0; 
     let max_speed_low_limit = MAX_SPEED_LOW_LIMIT_CONST;
-
-    let max_speed_float = max_speed_float.max(max_speed_low_limit);
-
-    let speed_scale = config.get("Haptic_Config", "max_speed_scale").unwrap();
-
-    let speed_scale_float = speed_scale.parse::<f32>().unwrap() / 100.0;
-
-    let port_rx = config.get("Setup", "port_rx").unwrap();
+    let max_speed_float     = max_speed_float.max(max_speed_low_limit);
+    let speed_scale         = config.get("Haptic_Config", "max_speed_scale").unwrap();
+    let speed_scale_float   = speed_scale.parse::<f32>().unwrap() / 100.0;
+    let port_rx             = config.get("Setup", "port_rx").unwrap();
 
     let proximity_parameter_address = config
         .get("Setup", "proximity_parameter")
@@ -81,10 +71,7 @@ fn load_config() -> (
     println!("\n");
     banner_txt();
     println!("\n");
-    println!(
-        " Haptic Device: {}:{}",
-        headpat_device_ip, headpat_device_port
-    );
+    println!(" Haptic Device: {}:{}", headpat_device_ip, headpat_device_port);
     println!(" Listening for OSC on port: {}", port_rx);
     println!("\n Vibration Configuration");
     println!(" Min Speed: {}%", min_speed);
@@ -104,13 +91,6 @@ fn load_config() -> (
         max_speed_low_limit,
     )
 }
-
-// TimeOut 
-
-lazy_static! {
-    static ref LAST_SIGNAL_TIME: Mutex<Instant> = Mutex::new(Instant::now());
-}
-
 
 // Make it easy to see prox when looking at router
 fn proximity_graph(proximity_signal: f32) -> String {
@@ -133,7 +113,7 @@ fn print_speed_limit(headpat_max_rx: f32) {
 
 // Pat Processor
 
-const MOTOR_SPEED_SCALE: f32 = 0.66;
+const MOTOR_SPEED_SCALE: f32 = 0.66; // Overclock Here, OEM config 0.66 going higher than this value will reduce your vibrator motor life
 
 fn process_pat(proximity_signal: f32, max_speed: f32, min_speed: f32, speed_scale: f32) -> i32 {
     let graph_str = proximity_graph(proximity_signal);
@@ -145,6 +125,16 @@ fn process_pat(proximity_signal: f32, max_speed: f32, min_speed: f32, speed_scal
     
     headpat_tx
 }
+
+
+// REFACTOR BELOW ---------------
+
+// TimeOut 
+
+lazy_static! {
+    static ref LAST_SIGNAL_TIME: Mutex<Instant> = Mutex::new(Instant::now());
+}
+
 
 // Stop function
 use tokio::select;
@@ -172,6 +162,23 @@ async fn stop_async_task(stop_sender: Sender<()>, mut my_async_task: JoinHandle<
     stop_sender.send(()).await.unwrap();
     my_async_task.await;
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 // Create Socket Function
@@ -202,12 +209,13 @@ async fn main() -> Result<()> {
     
     // Setup Tx 
     let tx_socket_address = create_socket_address(&headpat_device_ip, &headpat_device_port);
-    let tx_socket_address_clone = tx_socket_address.clone(); // create a clone of tx_socket_address
+    let tx_socket_address_clone = tx_socket_address.clone(); 
 
     // Connect to socket
     let tx_socket = OscSocket::bind("0.0.0.0:0").await?;
-    let tx_socket_clone = OscSocket::bind("0.0.0.0:0").await?;
     tx_socket.connect(tx_socket_address).await?; 
+    
+    let tx_socket_clone = OscSocket::bind("0.0.0.0:0").await?;
     tx_socket_clone.connect(tx_socket_address_clone).await?;
 
     // OSC Address Setup
