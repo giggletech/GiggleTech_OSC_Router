@@ -170,6 +170,22 @@ fn create_socket_address(host: &str, port: &str) -> String {
     address_parts.join(":")
 }
 
+
+
+async fn setup_rx_socket(port: std::string::String) -> Result<OscSocket> {
+    let rx_socket_address = create_socket_address("127.0.0.1", &port.to_string());
+    let rx_socket = OscSocket::bind(rx_socket_address).await?;
+    Ok(rx_socket)
+}
+use std::net::SocketAddr;
+async fn setup_tx_socket(address: std::string::String) -> Result<OscSocket> {
+    let tx_socket = OscSocket::bind("0.0.0.0:0").await?;
+    tx_socket.connect(address).await?;
+    Ok(tx_socket)
+}
+
+
+
 #[async_std::main]
 async fn main() -> Result<()> {
      
@@ -186,6 +202,16 @@ async fn main() -> Result<()> {
 
     ) = load_config();
 
+
+    let mut rx_socket = setup_rx_socket(port_rx).await?;
+
+    let tx_socket_address = create_socket_address(&headpat_device_ip, &headpat_device_port);
+    let tx_socket = setup_tx_socket(tx_socket_address.clone()).await?;
+    let tx_socket_clone = setup_tx_socket(tx_socket_address).await?;
+
+
+
+    /* 
     // Setup Rx Socket 
     let rx_socket_address = create_socket_address("127.0.0.1", &port_rx);
     let mut rx_socket = OscSocket::bind(rx_socket_address).await?;
@@ -200,7 +226,7 @@ async fn main() -> Result<()> {
     
     let tx_socket_clone = OscSocket::bind("0.0.0.0:0").await?;
     tx_socket_clone.connect(tx_socket_address_clone).await?;
-
+    */
     // OSC Address Setup
     const TX_OSC_MOTOR_ADDRESS: &str = "/avatar/parameters/motor";
     const TX_OSC_LED_ADDRESS_2: &str = "/avatar/parameters/led";
