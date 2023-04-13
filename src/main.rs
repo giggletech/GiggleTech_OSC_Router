@@ -147,7 +147,7 @@ async fn my_async_function(stop_receiver: Receiver<()>) {
         select! {
             _ = stop_receiver.recv() => break,
             _ = futures::future::pending() => {
-                println!("Async function running");
+                println!("Async function running"); // ----------------- WHEN NOT RX OSC SIGNAL BLINK THE LED to indicate osc router connection
                 println!("boop");
             }
         }
@@ -162,23 +162,6 @@ async fn stop_async_task(stop_sender: Sender<()>, mut my_async_task: JoinHandle<
     stop_sender.send(()).await.unwrap();
     my_async_task.await;
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 // Create Socket Function
