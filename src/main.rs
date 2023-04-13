@@ -12,7 +12,7 @@ use async_std::{
 use configparser::ini::Ini;
 use lazy_static::lazy_static;
 use std::{sync::Mutex, time::{Duration, Instant}};
-
+use std::net::SocketAddr;
 
 // Banner
 fn banner_txt(){
@@ -129,11 +129,7 @@ fn process_pat(proximity_signal: f32, max_speed: f32, min_speed: f32, speed_scal
 
 // REFACTOR BELOW ---------------
 
-// TimeOut 
 
-lazy_static! {
-    static ref LAST_SIGNAL_TIME: Mutex<Instant> = Mutex::new(Instant::now());
-}
 
 
 // Stop function
@@ -164,26 +160,65 @@ async fn stop_async_task(stop_sender: Sender<()>, mut my_async_task: JoinHandle<
 }
 
 
-// Create Socket Function
+// Tx & Rx Socket Setup
+
 fn create_socket_address(host: &str, port: &str) -> String {
     let address_parts = vec![host, port];
     address_parts.join(":")
 }
-
-
 
 async fn setup_rx_socket(port: std::string::String) -> Result<OscSocket> {
     let rx_socket_address = create_socket_address("127.0.0.1", &port.to_string());
     let rx_socket = OscSocket::bind(rx_socket_address).await?;
     Ok(rx_socket)
 }
-use std::net::SocketAddr;
+
 async fn setup_tx_socket(address: std::string::String) -> Result<OscSocket> {
     let tx_socket = OscSocket::bind("0.0.0.0:0").await?;
     tx_socket.connect(address).await?;
     Ok(tx_socket)
 }
 
+// OSC Address Setup
+const TX_OSC_MOTOR_ADDRESS: &str = "/avatar/parameters/motor";
+//const TX_OSC_LED_ADDRESS_2: &str = "/avatar/parameters/led";
+
+
+
+
+// TimeOut 
+/* 
+lazy_static! {
+    static ref LAST_SIGNAL_TIME: Mutex<Instant> = Mutex::new(Instant::now());
+}
+*/
+lazy_static! {
+    static ref LAST_SIGNAL_TIME: Mutex<Instant> = Mutex::new(Instant::now());
+}
+
+use async_std::sync::Arc;
+use async_std::net::UdpSocket;
+/* 
+async fn pat_timeout_task(last_signal_time: Arc<Mutex<Instant>>, tx_socket_clone: UdpSocket) {
+    loop {
+        task::sleep(Duration::from_secs(1)).await;
+        let elapsed_time = Instant::now().duration_since(*last_signal_time.lock().unwrap());
+        
+        if elapsed_time >= Duration::from_secs(5) {
+            // Send stop packet
+            println!("Pat Timeout...");
+            tx_socket_clone.send((TX_OSC_MOTOR_ADDRESS, (0i32,))).await.ok();
+            
+
+            let mut last_signal_time = last_signal_time.lock().unwrap();
+
+            *last_signal_time = Instant::now();            
+
+        }
+    }
+}
+
+*/
 
 
 #[async_std::main]
@@ -211,29 +246,29 @@ async fn main() -> Result<()> {
 
 
 
-    /* 
-    // Setup Rx Socket 
-    let rx_socket_address = create_socket_address("127.0.0.1", &port_rx);
-    let mut rx_socket = OscSocket::bind(rx_socket_address).await?;
-    
-    // Setup Tx 
-    let tx_socket_address = create_socket_address(&headpat_device_ip, &headpat_device_port);
-    let tx_socket_address_clone = tx_socket_address.clone(); 
-
-    // Connect to socket
-    let tx_socket = OscSocket::bind("0.0.0.0:0").await?;
-    tx_socket.connect(tx_socket_address).await?; 
-    
-    let tx_socket_clone = OscSocket::bind("0.0.0.0:0").await?;
-    tx_socket_clone.connect(tx_socket_address_clone).await?;
-    */
-    // OSC Address Setup
-    const TX_OSC_MOTOR_ADDRESS: &str = "/avatar/parameters/motor";
-    const TX_OSC_LED_ADDRESS_2: &str = "/avatar/parameters/led";
     
     // ---[ Stop Packet Timer ] ---
     //
     // Spawn a task to send stop packets when no signal is received for 5 seconds
+
+    // New code
+    //task::spawn(pat_timeout_task(LAST_SIGNAL_TIME.clone(), tx_socket_clone)); // DOUBLE CHECK STILL WORKS
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+/* 
     task::spawn(async move {
         loop {
             task::sleep(Duration::from_secs(1)).await;
@@ -252,6 +287,21 @@ async fn main() -> Result<()> {
             }
         }
     });
+*/
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
     // Listen for OSC Packets
     while let Some(packet) = rx_socket.next().await {
@@ -312,6 +362,7 @@ async fn main() -> Result<()> {
 
                     
                         for _ in 0..5 {
+                            println!("Send Stop...");
                             tx_socket
                                 .send((TX_OSC_MOTOR_ADDRESS, (0i32,)))
                                 .await?;
