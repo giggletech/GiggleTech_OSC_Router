@@ -2,18 +2,17 @@
 // OSC Router
 // by Sideways / Jason Beattie
 
-// Imports
+// External crates
 use async_osc::{prelude::*, OscPacket, OscSocket, OscType, Result};
 use async_std::{
     channel::{Receiver, Sender},
-    //net::{SocketAddr, UdpSocket},
     stream::StreamExt,
     task::{self, JoinHandle},
 };
 use configparser::ini::Ini;
 use lazy_static::lazy_static;
-use std::sync::Mutex;
-use std::time::{Duration, Instant};
+use std::{sync::Mutex, time::{Duration, Instant}};
+
 
 // Banner
 fn banner_txt(){
@@ -31,7 +30,6 @@ fn banner_txt(){
 }
 
 // Configuation Loader
-
 fn load_config() -> (
     String, // headpat_device_ip
     String, // headpat_device_port
@@ -42,7 +40,7 @@ fn load_config() -> (
     String, // proximity_parameter_address
     String, // max_speed_parameter_address
     f32,    // Max Speed Low Limit
-) {
+    ) {
     let mut config = Ini::new();
 
     match config.load("./config.ini") {
@@ -52,18 +50,23 @@ fn load_config() -> (
     const MAX_SPEED_LOW_LIMIT_CONST: f32 = 0.05;
 
     let headpat_device_ip = config.get("Setup", "device_ip").unwrap();
+
     let headpat_device_port = "8888".to_string();
 
     let min_speed = config.get("Haptic_Config", "min_speed").unwrap();
+
     let min_speed_float = min_speed.parse::<f32>().unwrap() / 100.0;
 
     let max_speed = config.get("Haptic_Config", "max_speed").unwrap();
+
     let max_speed_float = max_speed.parse::<f32>().unwrap() / 100.0;
     
     let max_speed_low_limit = MAX_SPEED_LOW_LIMIT_CONST;
+
     let max_speed_float = max_speed_float.max(max_speed_low_limit);
 
     let speed_scale = config.get("Haptic_Config", "max_speed_scale").unwrap();
+
     let speed_scale_float = speed_scale.parse::<f32>().unwrap() / 100.0;
 
     let port_rx = config.get("Setup", "port_rx").unwrap();
