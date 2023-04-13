@@ -2,15 +2,20 @@
 // OSC Router
 // by Sideways / Jason Beattie
 
+// Imports
 use async_osc::{prelude::*, OscPacket, OscSocket, OscType, Result};
 use async_std::{
-    channel::{self, Receiver, Sender},
-    net::{SocketAddr, UdpSocket},
+    channel::{Receiver, Sender},
+    //net::{SocketAddr, UdpSocket},
     stream::StreamExt,
     task::{self, JoinHandle},
 };
+use configparser::ini::Ini;
+use lazy_static::lazy_static;
+use std::sync::Mutex;
+use std::time::{Duration, Instant};
 
-
+// Banner
 fn banner_txt(){
     // https://fsymbols.com/generators/carty/
     println!("");
@@ -26,8 +31,7 @@ fn banner_txt(){
 }
 
 // Configuation Loader
-
-use configparser::ini::Ini;
+/*
 fn load_config() -> (String, String, f32, f32, f32, String, String, String) {
     let mut config = Ini::new();
 
@@ -49,11 +53,8 @@ fn load_config() -> (String, String, f32, f32, f32, String, String, String) {
     
     // Limit of Speed Limit
     if max_speed_float < MAX_SPEED_LOW_LIMIT {
-
         max_speed_float = MAX_SPEED_LOW_LIMIT;
-        //println!("Max Speed below allowed limit: setting to {}%", max_speed_float * 100.0);
     }
-
 
     let speed_scale = config.get("Haptic_Config", "max_speed_scale").unwrap();
     let speed_scale_float: f32 = speed_scale.parse().unwrap();
@@ -78,7 +79,6 @@ fn load_config() -> (String, String, f32, f32, f32, String, String, String) {
     println!("");    
     println!("Waiting for pats...");
     
-    // Return Tuple
     (
         headpat_device_ip,
         headpat_device_port,
@@ -94,15 +94,89 @@ fn load_config() -> (String, String, f32, f32, f32, String, String, String) {
     
 }
 
+*/
+
+use std::panic;
+
+fn load_config() -> (
+    String, // headpat_device_ip
+    String, // headpat_device_port
+    f32,    // min_speed_float
+    f32,    // max_speed_float
+    f32,    // speed_scale_float
+    String, // port_rx
+    String, // proximity_parameter_address
+    String, // max_speed_parameter_address
+) {
+    let mut config = Ini::new();
+
+    match config.load("./config.ini") {
+        Err(why) => panic!("{}", why),
+        Ok(_) => {}
+    }
+
+    let headpat_device_ip = config.get("Setup", "device_ip").unwrap();
+    let headpat_device_port = "8888".to_string();
+
+    let min_speed = config.get("Haptic_Config", "min_speed").unwrap();
+    let min_speed_float = min_speed.parse::<f32>().unwrap() / 100.0;
+
+    let max_speed = config.get("Haptic_Config", "max_speed").unwrap();
+    let max_speed_float = max_speed.parse::<f32>().unwrap() / 100.0;
+    const MAX_SPEED_LOW_LIMIT: f32 = 0.05;
+
+    let max_speed_float = max_speed_float.max(MAX_SPEED_LOW_LIMIT);
+
+    let speed_scale = config.get("Haptic_Config", "max_speed_scale").unwrap();
+    let speed_scale_float = speed_scale.parse::<f32>().unwrap() / 100.0;
+
+    let port_rx = config.get("Setup", "port_rx").unwrap();
+    let proximity_parameter_address = config
+        .get("Setup", "proximity_parameter")
+        .unwrap_or_else(|| "/avatar/parameters/proximity_01".into());
+    let max_speed_parameter_address = config
+        .get("Setup", "max_speed_parameter")
+        .unwrap_or_else(|| "/avatar/parameters/max_speed".into());
+
+    println!("\n");
+    banner_txt();
+    println!("\n");
+    println!(
+        " Haptic Device: {}:{}",
+        headpat_device_ip, headpat_device_port
+    );
+    println!(" Listening for OSC on port: {}", port_rx);
+    println!("\n Vibration Configuration");
+    println!(" Min Speed: {}%", min_speed);
+    println!(" Max Speed: {:?}%", max_speed_float * 100.0);
+    println!(" Scale Factor: {}%", speed_scale);
+    println!("\nWaiting for pats...");
+
+    (
+        headpat_device_ip,
+        headpat_device_port,
+        min_speed_float,
+        max_speed_float,
+        speed_scale_float,
+        port_rx,
+        proximity_parameter_address,
+        max_speed_parameter_address,
+    )
+}
+
+
+
+
+
+
 // TimeOut 
-use lazy_static::lazy_static;
-use std::sync::Mutex;
+
 lazy_static! {
     static ref LAST_SIGNAL_TIME: Mutex<Instant> = Mutex::new(Instant::now());
 }
 
 
-use std::time::{Duration, Instant};
+
 
 fn proximity_graph(proximity_signal: f32) -> String {
     
@@ -151,14 +225,6 @@ fn process_pat(proximity_signal: f32, max_speed: f32, min_speed: f32, speed_scal
 
 
 
-fn create_socket_address(host: &str, port: &str) -> String {
-    
-    // Define a function to create a socket address from a host and port
-    // Create a new vector containing the host and port
-    let address_parts = vec![host, port];
-    // Join the parts together with a colon separator
-    address_parts.join(":")
-}
 
 
 // Stop function
@@ -166,7 +232,7 @@ use tokio::select;
 use async_std::channel::unbounded;
 
 //use futures::future::select;
-async fn my_async_function(mut stop_receiver: Receiver<()>) {
+async fn my_async_function(stop_receiver: Receiver<()>) {
     println!("Async function started");
     loop {
         select! {
@@ -189,6 +255,12 @@ async fn stop_async_task(stop_sender: Sender<()>, mut my_async_task: JoinHandle<
 }
 
 
+// Create Socket Function
+fn create_socket_address(host: &str, port: &str) -> String {
+    let address_parts = vec![host, port];
+    address_parts.join(":")
+}
+
 #[async_std::main]
 async fn main() -> Result<()> {
      
@@ -204,30 +276,24 @@ async fn main() -> Result<()> {
 
     ) = load_config();
 
-    // // Setup Socket Address
+    // Setup Rx Socket 
     let rx_socket_address = create_socket_address("127.0.0.1", &port_rx);
-
-    // Use the function to create the Tx socket address
-    let tx_socket_address = create_socket_address(&headpat_device_ip, &headpat_device_port);
-    
-    // Connect to Tx socket
     let mut rx_socket = OscSocket::bind(rx_socket_address).await?;
-    let tx_socket = OscSocket::bind("0.0.0.0:0").await?;
+    
+    // Setup Tx 
+    let tx_socket_address = create_socket_address(&headpat_device_ip, &headpat_device_port);
     let tx_socket_address_clone = tx_socket_address.clone(); // create a clone of tx_socket_address
-    tx_socket.connect(tx_socket_address).await?; 
 
-
-    // Connect to Tx socket CLONE
+    // Connect to socket
+    let tx_socket = OscSocket::bind("0.0.0.0:0").await?;
     let tx_socket_clone = OscSocket::bind("0.0.0.0:0").await?;
+    tx_socket.connect(tx_socket_address).await?; 
     tx_socket_clone.connect(tx_socket_address_clone).await?;
-
-    //let tx_socket_clone = tx_socket.clone();
-    let proximity_parameter_address_clone = proximity_parameter_address.clone();
 
     // OSC Address Setup
     const TX_OSC_MOTOR_ADDRESS: &str = "/avatar/parameters/motor";
     const TX_OSC_LED_ADDRESS_2: &str = "/avatar/parameters/led";
-
+    
     // ---[ Stop Packet Timer ] ---
     //
     // Spawn a task to send stop packets when no signal is received for 5 seconds
@@ -235,17 +301,15 @@ async fn main() -> Result<()> {
         loop {
             task::sleep(Duration::from_secs(1)).await;
             let elapsed_time = Instant::now().duration_since(*LAST_SIGNAL_TIME.lock().unwrap());
-            //println!("Elapsed time since last signal: {:?}", elapsed_time);
+            
             if elapsed_time >= Duration::from_secs(5) {
                 // Send stop packet
                 println!("Pat Timeout...");
                 tx_socket_clone.send((TX_OSC_MOTOR_ADDRESS, (0i32,))).await.ok();
                 
-                // Update Last Signal Time
+
                 let mut last_signal_time = LAST_SIGNAL_TIME.lock().unwrap();
-                // Access the value
-                let elapsed_time = Instant::now().duration_since(*last_signal_time);
-                // Update the value
+
                 *last_signal_time = Instant::now();            
 
             }
