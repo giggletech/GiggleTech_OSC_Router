@@ -31,72 +31,6 @@ fn banner_txt(){
 }
 
 // Configuation Loader
-/*
-fn load_config() -> (String, String, f32, f32, f32, String, String, String) {
-    let mut config = Ini::new();
-
-    match config.load("./config.ini") {
-        Err(why) => panic!("{}", why),
-        Ok(_) => {}
-    }
-
-    let headpat_device_ip = config.get("Setup", "device_ip").unwrap();
-    let headpat_device_port = "8888".to_string();
-    let min_speed = config.get("Haptic_Config", "min_speed").unwrap();
-    let min_speed_float: f32 = min_speed.parse().unwrap();
-    let min_speed_float: f32 = min_speed_float / 100.0;
-    
-    let max_speed = config.get("Haptic_Config", "max_speed").unwrap();
-    let max_speed_float: f32 = max_speed.parse().unwrap();
-    let mut max_speed_float: f32 = max_speed_float / 100.0;
-    const MAX_SPEED_LOW_LIMIT: f32 = 0.05; // in two places
-    
-    // Limit of Speed Limit
-    if max_speed_float < MAX_SPEED_LOW_LIMIT {
-        max_speed_float = MAX_SPEED_LOW_LIMIT;
-    }
-
-    let speed_scale = config.get("Haptic_Config", "max_speed_scale").unwrap();
-    let speed_scale_float: f32 = speed_scale.parse().unwrap();
-    let speed_scale_float: f32 = speed_scale_float / 100.0;    
-
-
-    let port_rx = config.get("Setup", "port_rx").unwrap();
-    let proximity_parameter_address = config.get("Setup", "proximity_parameter").unwrap_or("/avatar/parameters/proximity_01".into());
-    let max_speed_parameter_address = config.get("Setup", "max_speed_parameter").unwrap_or("/avatar/parameters/max_speed".into());
-
-
-    println!("");
-    banner_txt();
-    println!("");
-    println!(" Haptic Device: {}:{}", headpat_device_ip, headpat_device_port);
-    println!(" Listening for OSC on port: {}", port_rx);
-    println!("");
-    println!(" Vibration Configuration");
-    println!(" Min Speed: {}%", min_speed);
-    println!(" Max Speed: {:?}%", max_speed_float*100.0);
-    println!(" Scale Factor: {}%", speed_scale);
-    println!("");    
-    println!("Waiting for pats...");
-    
-    (
-        headpat_device_ip,
-        headpat_device_port,
-        min_speed_float,
-        max_speed_float,
-        speed_scale_float,
-        port_rx,
-        proximity_parameter_address,
-        max_speed_parameter_address,
-
-    )
-
-    
-}
-
-*/
-
-use std::panic;
 
 fn load_config() -> (
     String, // headpat_device_ip
@@ -107,6 +41,7 @@ fn load_config() -> (
     String, // port_rx
     String, // proximity_parameter_address
     String, // max_speed_parameter_address
+    f32,    // Max Speed Low Limit
 ) {
     let mut config = Ini::new();
 
@@ -123,9 +58,10 @@ fn load_config() -> (
 
     let max_speed = config.get("Haptic_Config", "max_speed").unwrap();
     let max_speed_float = max_speed.parse::<f32>().unwrap() / 100.0;
-    const MAX_SPEED_LOW_LIMIT: f32 = 0.05;
+    const MAX_SPEED_LOW_LIMIT_CONST: f32 = 0.05; //  ------------------------------------------------------------------------------<<<<<<<<<<<<<<<<<<<<
+    let max_speed_low_limit = MAX_SPEED_LOW_LIMIT_CONST;
 
-    let max_speed_float = max_speed_float.max(MAX_SPEED_LOW_LIMIT);
+    let max_speed_float = max_speed_float.max(max_speed_low_limit);
 
     let speed_scale = config.get("Haptic_Config", "max_speed_scale").unwrap();
     let speed_scale_float = speed_scale.parse::<f32>().unwrap() / 100.0;
@@ -161,6 +97,7 @@ fn load_config() -> (
         port_rx,
         proximity_parameter_address,
         max_speed_parameter_address,
+        max_speed_low_limit,
     )
 }
 
@@ -273,6 +210,7 @@ async fn main() -> Result<()> {
         port_rx,
         proximity_parameter_address,
         max_speed_parameter_address,
+        max_speed_low_limit,
 
     ) = load_config();
 
@@ -337,11 +275,10 @@ async fn main() -> Result<()> {
 
                 if address == max_speed_parameter_address {
                     
-                    print_speed_limit(value); // print max speed limit
+                    print_speed_limit(value); 
                     max_speed = value;
-                    const MAX_SPEED_LOW_LIMIT: f32 = 0.05;  // this is in two places
-                    if max_speed < MAX_SPEED_LOW_LIMIT {
-                        max_speed = MAX_SPEED_LOW_LIMIT;
+                    if max_speed < max_speed_low_limit {
+                        max_speed = max_speed_low_limit;
                     }
                 }
                 
