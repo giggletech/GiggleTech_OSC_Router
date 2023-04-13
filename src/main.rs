@@ -187,17 +187,12 @@ const TX_OSC_MOTOR_ADDRESS: &str = "/avatar/parameters/motor";
 
 
 // TimeOut 
-/* 
-lazy_static! {
-    static ref LAST_SIGNAL_TIME: Mutex<Instant> = Mutex::new(Instant::now());
-}
-*/
+//If no new osc signal is Rx for 5s, will send stop packets
 lazy_static! {
     static ref LAST_SIGNAL_TIME: Mutex<Instant> = Mutex::new(Instant::now());
 }
 
-
-async fn stop_packet_timer(mut tx_socket: OscSocket) -> Result<()> {
+async fn OSC_Timeout(mut tx_socket: OscSocket) -> Result<()> {
     loop {
         task::sleep(Duration::from_secs(1)).await;
         let elapsed_time = Instant::now().duration_since(*LAST_SIGNAL_TIME.lock().unwrap());
@@ -231,59 +226,15 @@ async fn main() -> Result<()> {
     ) = load_config();
 
 
-
+    // Rx/Tx Socket Setup
     let mut rx_socket = setup_rx_socket(port_rx).await?;
-
     let tx_socket_address = create_socket_address(&headpat_device_ip, &headpat_device_port);
     let tx_socket = setup_tx_socket(tx_socket_address.clone()).await?;
     let tx_socket_clone = setup_tx_socket(tx_socket_address).await?;
 
-/*  Facny code that dosnt work
-    let mut rx_socket = setup_rx_socket(port_rx).await?;
-    let tx_socket_address = create_socket_address(&headpat_device_ip, &headpat_device_port);
-    let (tx_socket, tx_socket_clone) = setup_tx_socket(tx_socket_address.clone()).await?;
-*/
-    //println!("The type of tx_socket_clone is: {}", std::any::type_name::<typeof(tx_socket_clone)>());
-
-
-    task::spawn(stop_packet_timer(tx_socket_clone));
+    // Timeout
+    task::spawn(OSC_Timeout(tx_socket_clone));
     
-    // ---[ Stop Packet Timer ] ---
-    //
-    // Spawn a task to send stop packets when no signal is received for 5 seconds
-/* 
-    task::spawn(async move {
-        loop {
-            task::sleep(Duration::from_secs(1)).await;
-            let elapsed_time = Instant::now().duration_since(*LAST_SIGNAL_TIME.lock().unwrap());
-            
-            if elapsed_time >= Duration::from_secs(5) {
-                // Send stop packet
-                println!("Pat Timeout...");
-                tx_socket_clone.send((TX_OSC_MOTOR_ADDRESS, (0i32,))).await.ok();
-                
-
-                let mut last_signal_time = LAST_SIGNAL_TIME.lock().unwrap();
-
-                *last_signal_time = Instant::now();            
-
-            }
-        }
-    });
- */
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
     // Listen for OSC Packets
