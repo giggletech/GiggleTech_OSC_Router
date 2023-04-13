@@ -1,9 +1,6 @@
-// Headpat IO 
+// GiggleTech.IO 
+// OSC Router
 // by Sideways / Jason Beattie
-
-//use async_osc::{prelude::*, OscPacket, OscSocket, OscType, Result};
-//use async_std::stream::StreamExt;
-//use configparser::ini::Ini;
 
 use async_osc::{prelude::*, OscPacket, OscSocket, OscType, Result};
 use async_std::{
@@ -12,65 +9,6 @@ use async_std::{
     stream::StreamExt,
     task::{self, JoinHandle},
 };
-//use std::sync::mpsc::channel;
-
-
-
-use configparser::ini::Ini;
-
-// TimeOut 
-use lazy_static::lazy_static;
-use std::sync::Mutex;
-lazy_static! {
-    static ref LAST_SIGNAL_TIME: Mutex<Instant> = Mutex::new(Instant::now());
-}
-
-
-use std::time::{Duration, Instant};
-
-fn proximity_graph(proximity_signal: f32) -> String {
-    
-    let num_dashes = (proximity_signal * 10.0) as i32; // Calculate number of dashes based on scale value
-    let mut graph = "".to_string(); // Initialize empty string
-
-    graph.push_str("-".repeat(num_dashes as usize).as_str()); // Add dashes to string
-    graph.push('>'); // Add arrow character to end of string
-
-    graph // Return graph string
-}
-
-fn print_speed_limit(headpat_max_rx: f32) {
-
-    let headpat_max_rx_print = (headpat_max_rx * 100.0).round();
-
-    let max_meter = match headpat_max_rx_print {
-        n if n > 90.0 => "!!! SO MUCH !!!",
-        n if n > 75.0 => "!! ",
-        n if n > 50.0 => "!  ",
-        _ => "   ",
-    };
-
-    println!("Speed Limit: {}% {}", headpat_max_rx_print, max_meter);
-}
-
-
-fn process_pat(proximity_signal: f32, max_speed: f32, min_speed: f32, speed_scale: f32) -> i32 {
-
-    const MOTOR_SPEED_SCALE: f32 = 0.66; // Motor is being powered off the 5v rail, rated for 3.3v, scaled arrcordingly
-    let graph_str =  proximity_graph(proximity_signal); // collect graph 
-    let headpat_delta:f32 = max_speed - min_speed; // Take the differance, so when at low proximetery values, the lowest value still buzzes the motor                      
-    
-    let headpat_tx = headpat_delta * proximity_signal + min_speed;
-    let headpat_tx = headpat_tx * MOTOR_SPEED_SCALE * speed_scale* 255.0;
-    
-    let headpat_tx = headpat_tx as i32;
-    let proximity_signal = format!("{:.2}", proximity_signal);
-    let max_speed = format!("{:.2}", max_speed);
-
-    eprintln!("Prox: {:5} Motor Tx: {:3}  Max Speed: {:5} |{:11}|", proximity_signal, headpat_tx, max_speed, graph_str );
-    
-    headpat_tx
-}
 
 
 fn banner_txt(){
@@ -87,7 +25,9 @@ fn banner_txt(){
                                                                                 
 }
 
+// Configuation Loader
 
+use configparser::ini::Ini;
 fn load_config() -> (String, String, f32, f32, f32, String, String, String) {
     let mut config = Ini::new();
 
@@ -154,6 +94,63 @@ fn load_config() -> (String, String, f32, f32, f32, String, String, String) {
     
 }
 
+// TimeOut 
+use lazy_static::lazy_static;
+use std::sync::Mutex;
+lazy_static! {
+    static ref LAST_SIGNAL_TIME: Mutex<Instant> = Mutex::new(Instant::now());
+}
+
+
+use std::time::{Duration, Instant};
+
+fn proximity_graph(proximity_signal: f32) -> String {
+    
+    let num_dashes = (proximity_signal * 10.0) as i32; // Calculate number of dashes based on scale value
+    let mut graph = "".to_string(); // Initialize empty string
+
+    graph.push_str("-".repeat(num_dashes as usize).as_str()); // Add dashes to string
+    graph.push('>'); // Add arrow character to end of string
+
+    graph // Return graph string
+}
+
+fn print_speed_limit(headpat_max_rx: f32) {
+
+    let headpat_max_rx_print = (headpat_max_rx * 100.0).round();
+
+    let max_meter = match headpat_max_rx_print {
+        n if n > 90.0 => "!!! SO MUCH !!!",
+        n if n > 75.0 => "!! ",
+        n if n > 50.0 => "!  ",
+        _ => "   ",
+    };
+
+    println!("Speed Limit: {}% {}", headpat_max_rx_print, max_meter);
+}
+
+
+fn process_pat(proximity_signal: f32, max_speed: f32, min_speed: f32, speed_scale: f32) -> i32 {
+
+    const MOTOR_SPEED_SCALE: f32 = 0.66; // Motor is being powered off the 5v rail, rated for 3.3v, scaled arrcordingly
+    let graph_str =  proximity_graph(proximity_signal); // collect graph 
+    let headpat_delta:f32 = max_speed - min_speed; // Take the differance, so when at low proximetery values, the lowest value still buzzes the motor                      
+    
+    let headpat_tx = headpat_delta * proximity_signal + min_speed;
+    let headpat_tx = headpat_tx * MOTOR_SPEED_SCALE * speed_scale* 255.0;
+    
+    let headpat_tx = headpat_tx as i32;
+    let proximity_signal = format!("{:.2}", proximity_signal);
+    let max_speed = format!("{:.2}", max_speed);
+
+    eprintln!("Prox: {:5} Motor Tx: {:3}  Max Speed: {:5} |{:11}|", proximity_signal, headpat_tx, max_speed, graph_str );
+    
+    headpat_tx
+}
+
+
+
+
 fn create_socket_address(host: &str, port: &str) -> String {
     
     // Define a function to create a socket address from a host and port
@@ -174,7 +171,7 @@ async fn my_async_function(mut stop_receiver: Receiver<()>) {
     loop {
         select! {
             _ = stop_receiver.recv() => break,
-            _ = task::sleep(std::time::Duration::from_secs(0)) => {
+            _ = futures::future::pending() => {
                 println!("Async function running");
                 println!("boop");
             }
@@ -182,6 +179,7 @@ async fn my_async_function(mut stop_receiver: Receiver<()>) {
     }
     println!("Async function stopped");
 }
+
 
 // Call stop function
 async fn stop_async_task(stop_sender: Sender<()>, mut my_async_task: JoinHandle<()>) {
@@ -306,8 +304,8 @@ async fn main() -> Result<()> {
 
                         /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
                         //task::sleep(Duration::from_secs(0)).await;
-                        stop_sender.send(()).await.unwrap();
-                        my_async_task.await;
+                        //stop_sender.send(()).await.unwrap();
+                        //my_async_task.await;
 
 
                         
