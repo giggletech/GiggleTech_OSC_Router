@@ -164,17 +164,7 @@ fn create_socket_address(host: &str, port: &str) -> String {
 }
 
 
-//use async_std::{
-//    channel::{self, Receiver, Sender},
-//    net::{SocketAddr, UdpSocket},
-//    task::{self, JoinHandle},
-//};
-
-//use async_std::{
-//    channel::{Receiver},
-//    task,
-//};
-//use futures::{future::select, pin_mut};
+// Stop function
 use tokio::select;
 use async_std::channel::unbounded;
 
@@ -184,7 +174,7 @@ async fn my_async_function(mut stop_receiver: Receiver<()>) {
     loop {
         select! {
             _ = stop_receiver.recv() => break,
-            _ = task::sleep(std::time::Duration::from_secs(1)) => {
+            _ = task::sleep(std::time::Duration::from_secs(0)) => {
                 println!("Async function running");
                 println!("boop");
             }
@@ -193,7 +183,12 @@ async fn my_async_function(mut stop_receiver: Receiver<()>) {
     println!("Async function stopped");
 }
 
-
+// Call stop function
+async fn stop_async_task(stop_sender: Sender<()>, mut my_async_task: JoinHandle<()>) {
+    //task::sleep(Duration::from_secs(5)).await;
+    stop_sender.send(()).await.unwrap();
+    my_async_task.await;
+}
 
 
 #[async_std::main]
@@ -262,6 +257,9 @@ async fn main() -> Result<()> {
     // Listen for OSC Packets
     while let Some(packet) = rx_socket.next().await {
         let (packet, _peer_addr) = packet?;
+        ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////// See below for stop function
+        let (stop_sender, stop_receiver) = unbounded::<()>();
+
 
         // Filter OSC Signals : Headpat Max & Headpat Prox 
         match packet {
@@ -293,27 +291,22 @@ async fn main() -> Result<()> {
                     let mut last_signal_time = LAST_SIGNAL_TIME.lock().unwrap();
                     let elapsed_time = Instant::now().duration_since(*last_signal_time);
                     *last_signal_time = Instant::now();
+                    
+                    println!("{}", value);
 
+                    
                     if value == 0.0 {
                         // Send 5 Stop Packets to Device - need to update so it sends stop packets until a new prox signal is made
                         println!("Stopping pats...");
                         
                         // Stop function
-                        //let (stop_sender, stop_receiver) = channel::<()>(); - i just commented this out
 
-
-                        //let (stop_sender, stop_receiver) = channel::<()>(1);
-                        
-                        //let (stop_sender, stop_receiver): (Sender<()>, Receiver<()>) = channel::unbounded(); 
-                        
-                        //let (stop_sender, stop_receiver): (Sender<()>, Receiver<()>) = channel::bounded(1);
-
-                        //let mut my_async_task = task::spawn(my_async_function(stop_receiver));
-                        let (stop_sender, stop_receiver) = unbounded::<()>();
+                        //let (stop_sender, stop_receiver) = unbounded::<()>();
                         let my_async_task = task::spawn(my_async_function(stop_receiver));
-                        task::sleep(Duration::from_secs(1)).await;
+
+                        /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+                        //task::sleep(Duration::from_secs(0)).await;
                         stop_sender.send(()).await.unwrap();
-                    
                         my_async_task.await;
 
 
