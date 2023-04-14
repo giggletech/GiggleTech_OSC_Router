@@ -13,6 +13,8 @@ use configparser::ini::Ini;
 use lazy_static::lazy_static;
 use std::{sync::Mutex, time::{Duration, Instant}};
 use std::net::SocketAddr;
+use async_std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 // Banner
 fn banner_txt(){
@@ -124,32 +126,6 @@ fn process_pat(proximity_signal: f32, max_speed: f32, min_speed: f32, speed_scal
 
 
 
-// Stop function needs refactor and make work
-use tokio::select;
-use async_std::channel::unbounded;
-
-//use futures::future::select;
-async fn my_async_function(stop_receiver: Receiver<()>) {
-    println!("Async function started");
-    loop {
-        select! {
-            _ = stop_receiver.recv() => break,
-            _ = futures::future::pending() => {
-                println!("Async function running"); // ----------------- WHEN NOT RX OSC SIGNAL BLINK THE LED to indicate osc router connection
-                println!("boop");
-            }
-        }
-    }
-    println!("Async function stopped");
-}
-
-// Call stop function
-async fn stop_async_task(stop_sender: Sender<()>, mut my_async_task: JoinHandle<()>) {
-    //task::sleep(Duration::from_secs(5)).await;
-    stop_sender.send(()).await.unwrap();
-    my_async_task.await;
-}
-
 
 
 
@@ -188,7 +164,7 @@ lazy_static! {
     static ref LAST_SIGNAL_TIME: Mutex<Instant> = Mutex::new(Instant::now());
 }
 
-async fn OSC_Timeout(mut tx_socket: OscSocket) -> Result<()> {
+async fn osc_timeout(mut tx_socket: OscSocket) -> Result<()> {
     // If no new osc signal is Rx for 5s, will send stop packets
     loop {
         task::sleep(Duration::from_secs(1)).await;
@@ -206,6 +182,19 @@ async fn OSC_Timeout(mut tx_socket: OscSocket) -> Result<()> {
 }
 
 
+async fn infinite_loop(stop_flag: Arc<AtomicBool>) {
+    while !stop_flag.load(Ordering::Relaxed) {
+        // Do something
+        
+
+        //task::sleep(Duration::from_secs(1)).await;
+        
+        println!("Looping...");
+    }
+}
+
+
+use async_std::io::prelude::BufReadExt;
 #[async_std::main]
 async fn main() -> Result<()> {
      
@@ -230,17 +219,36 @@ async fn main() -> Result<()> {
     let tx_socket_clone = setup_tx_socket(tx_socket_address).await?;
 
     // Timeout
-    task::spawn(OSC_Timeout(tx_socket_clone));
+    task::spawn(osc_timeout(tx_socket_clone));
     
+  
+    let stop_flag = Arc::new(AtomicBool::new(false));
+    let stop_flag_clone = stop_flag.clone();
+
+    // Spawn a task to run the infinite loop
+    task::spawn(async move {
+        infinite_loop(stop_flag).await;
+    });
+
+
+    // Stop the Loop
+    //stop_flag_clone.store(true, Ordering::Relaxed);
+
+    //Start the Loop
+    //stop_flag_clone.store(false, Ordering::Relaxed);
+
+
+
+
+
+
+
 
 
     // Listen for OSC Packets
     while let Some(packet) = rx_socket.next().await {
         let (packet, _peer_addr) = packet?;
         
-        ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////// See below for stop function
-        let (stop_sender, stop_receiver) = unbounded::<()>();
-
 
         // Filter OSC Signals : Headpat Max & Headpat Prox 
         match packet {
@@ -269,25 +277,24 @@ async fn main() -> Result<()> {
                     
                     println!("{}", value);
 
-                    
+                    // Stop Function
                     if value == 0.0 {
                         // Send 5 Stop Packets to Device - need to update so it sends stop packets until a new prox signal is made
+                        
+                        
+                        //Start the Loop
+                        // Set stop flag to fale 
+                        stop_flag_clone.store(false, Ordering::Relaxed);
+                        
+                        println!("Starting Loop...");
+                        let stop_flag_clone = stop_flag.clone();
+                        task::spawn(async move {
+                            infinite_loop(stop_flag_clone).await;
+                        });
+                        
+                        
+                        
                         println!("Stopping pats...");
-                        
-                        // Stop function
-
-                        //let (stop_sender, stop_receiver) = unbounded::<()>();
-                        let my_async_task = task::spawn(my_async_function(stop_receiver));
-
-                        /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-                        //task::sleep(Duration::from_secs(0)).await;
-                        //stop_sender.send(()).await.unwrap();
-                        //my_async_task.await;
-
-
-                        
-
-                    
                         for _ in 0..5 {
                             println!("Send Stop...");
                             tx_socket
@@ -296,7 +303,11 @@ async fn main() -> Result<()> {
                         }
 
                     } else {
-                        // Process Pat signal to send to Device   
+                        // Process Pat signal to send to Device 
+                        // Stop the Loop
+                        println!("Stopping Loop...");
+                        stop_flag_clone.store(true, Ordering::Relaxed);  
+
                         let motor_speed_tx = process_pat(value, max_speed, min_speed, speed_scale);
                         
                         tx_socket
