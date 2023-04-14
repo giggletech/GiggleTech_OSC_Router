@@ -113,7 +113,7 @@ fn print_speed_limit(headpat_max_rx: f32) {
 }
 
 // Pat Processor
-const MOTOR_SPEED_SCALE: f32 = 0.66; // Overclock Here, OEM config 0.66 going higher than this value will reduce your vibrator motor life
+const MOTOR_SPEED_SCALE: f32 = 0.66; // Overvolt   Here, OEM config 0.66 going higher than this value will reduce your vibrator motor life
 fn process_pat(proximity_signal: f32, max_speed: f32, min_speed: f32, speed_scale: f32) -> i32 {
     let graph_str = proximity_graph(proximity_signal);
     let headpat_tx = (((max_speed - min_speed) * proximity_signal + min_speed) * MOTOR_SPEED_SCALE * speed_scale * 255.0).round() as i32;
@@ -143,6 +143,10 @@ async fn setup_tx_socket(address: std::string::String) -> Result<OscSocket> {
     tx_socket.connect(address).await?;
     Ok(tx_socket)
 }
+
+
+
+
 
 // OSC Address Setup
 const TX_OSC_MOTOR_ADDRESS: &str = "/avatar/parameters/motor";
@@ -244,9 +248,14 @@ async fn main() -> Result<()> {
 
     // Rx/Tx Socket Setup
     let mut rx_socket = setup_rx_socket(port_rx).await?;
+
+    // Make external functiion that can send values to a specifed IP, Address, and value, which is called when needed
     let tx_socket_address = create_socket_address(&headpat_device_ip, &headpat_device_port);
     let tx_socket = setup_tx_socket(tx_socket_address.clone()).await?;
     let tx_socket_clone = setup_tx_socket(tx_socket_address).await?;
+    
+
+
 
     // Timeout
     task::spawn(osc_timeout(tx_socket_clone));
