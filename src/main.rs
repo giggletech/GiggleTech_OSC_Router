@@ -3,18 +3,19 @@
 // by Sideways
 
 // External crates
+
 use async_osc::{prelude::*, OscPacket, OscSocket, OscType, Result};
 use async_std::{
-    channel::{Receiver, Sender},
     stream::StreamExt,
-    task::{self, JoinHandle},
+    task::{self},
+    sync::Arc,
+
 };
 use configparser::ini::Ini;
 use lazy_static::lazy_static;
 use std::{sync::Mutex, time::{Duration, Instant}};
-use std::net::SocketAddr;
-use async_std::{sync::Arc, io};
 use std::sync::atomic::{AtomicBool, Ordering};
+
 
 // Banner
 fn banner_txt(){
@@ -160,7 +161,7 @@ lazy_static! {
     static ref LAST_SIGNAL_TIME: Mutex<Instant> = Mutex::new(Instant::now());
 }
 
-async fn osc_timeout(mut tx_socket: OscSocket) -> Result<()> {
+async fn osc_timeout(tx_socket: OscSocket) -> Result<()> {
     // If no new osc signal is Rx for 5s, will send stop packets
     loop {
         task::sleep(Duration::from_secs(1)).await;
@@ -208,7 +209,7 @@ async fn worker(running: Arc<AtomicBool>) -> Result<()> {
         // Do some work here
         println!("Worker is running");
         // ADD STOP COMMANDS HERE
-        task::sleep(Duration::from_secs(1)).await;
+        //task::sleep(Duration::from_secs(1)).await;
     }
     println!("Worker stopped");
     Ok(())
@@ -227,8 +228,6 @@ async fn stop(
 }
 
 
-
-use async_std::io::prelude::BufReadExt;
 #[async_std::main]
 async fn main() -> Result<()> {
      
@@ -245,7 +244,6 @@ async fn main() -> Result<()> {
 
     ) = load_config();
 
-
     // Rx/Tx Socket Setup
     let mut rx_socket = setup_rx_socket(port_rx).await?;
 
@@ -253,26 +251,18 @@ async fn main() -> Result<()> {
     let tx_socket_address = create_socket_address(&headpat_device_ip, &headpat_device_port);
     let tx_socket = setup_tx_socket(tx_socket_address.clone()).await?;
     let tx_socket_clone = setup_tx_socket(tx_socket_address).await?;
-    
-
-
-
+ 
     // Timeout
     task::spawn(osc_timeout(tx_socket_clone));
-    
-  
+
     // Start/ Stop Function Setup
     let running = Arc::new(AtomicBool::new(false));
     let running_mutex = Arc::new(Mutex::new(()));
-    
-
-
 
     // Listen for OSC Packets
     while let Some(packet) = rx_socket.next().await {
         let (packet, _peer_addr) = packet?;
         
-
         // Filter OSC Signals : Headpat Max & Headpat Prox 
         match packet {
             OscPacket::Bundle(_) => {}
@@ -296,10 +286,7 @@ async fn main() -> Result<()> {
                     stop(running.clone(), running_mutex.clone()).await?;
                     // Update Last Signal Time for timeout clock
                     let mut last_signal_time = LAST_SIGNAL_TIME.lock().unwrap();
-                    let elapsed_time = Instant::now().duration_since(*last_signal_time);
                     *last_signal_time = Instant::now();
-                    
-                    println!("{}", value);
 
                     // Stop Function
                     if value == 0.0 {
@@ -309,7 +296,6 @@ async fn main() -> Result<()> {
                         start(running.clone(), running_mutex.clone()).await?;
 
                         for _ in 0..5 {
-                            //println!("Send Stop...");
                             tx_socket
                                 .send((TX_OSC_MOTOR_ADDRESS, (0i32,)))
                                 .await?;
@@ -325,7 +311,7 @@ async fn main() -> Result<()> {
                     }
                 }
                 else {
-                    //eprintln!("Unknown Address") // Have a debug mode, print if debug mode
+                    eprintln!("Unknown Address") // Have a debug mode, print if debug mode
                 }
             } 
         }  
