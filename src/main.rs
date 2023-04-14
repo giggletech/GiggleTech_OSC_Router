@@ -13,7 +13,7 @@ use configparser::ini::Ini;
 use lazy_static::lazy_static;
 use std::{sync::Mutex, time::{Duration, Instant}};
 use std::net::SocketAddr;
-use async_std::sync::Arc;
+use async_std::{sync::Arc, io};
 use std::sync::atomic::{AtomicBool, Ordering};
 
 // Banner
@@ -182,16 +182,59 @@ async fn osc_timeout(mut tx_socket: OscSocket) -> Result<()> {
 }
 
 
-async fn infinite_loop(stop_flag: Arc<AtomicBool>) {
-    while !stop_flag.load(Ordering::Relaxed) {
-        // Do something
-        
 
-        //task::sleep(Duration::from_secs(1)).await;
-        
-        println!("Looping...");
+
+
+async fn start(
+    running: Arc<AtomicBool>,
+    running_mutex: Arc<Mutex<()>>,
+) -> Result<()> {
+    let _lock = running_mutex.lock();
+    if running.load(Ordering::SeqCst) {
+        //return Err(async_osc::Error::from("Worker is already running".to_string()));
+
     }
+    running.store(true, Ordering::SeqCst);
+    task::spawn(worker(running.clone()));
+    Ok(())
 }
+
+async fn worker(running: Arc<AtomicBool>) -> Result<()> {
+    while running.load(Ordering::SeqCst) {
+        // Do some work here
+        println!("Worker is running");
+        task::sleep(Duration::from_secs(1)).await;
+    }
+    println!("Worker stopped");
+    Ok(())
+}
+
+
+
+async fn stop(
+    running: Arc<AtomicBool>,
+    running_mutex: Arc<Mutex<()>>,
+) -> Result<()> {
+    let _lock = running_mutex.lock();
+    if !running.load(Ordering::SeqCst) {
+        //return Err("Worker is not running".into());
+    }
+    running.store(false, Ordering::SeqCst);
+    Ok(())
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 use async_std::io::prelude::BufReadExt;
@@ -222,26 +265,13 @@ async fn main() -> Result<()> {
     task::spawn(osc_timeout(tx_socket_clone));
     
   
-    let stop_flag = Arc::new(AtomicBool::new(false));
-    let stop_flag_clone = stop_flag.clone();
 
-    // Spawn a task to run the infinite loop
-    task::spawn(async move {
-        infinite_loop(stop_flag).await;
-    });
+    let running = Arc::new(AtomicBool::new(false));
+    let running_mutex = Arc::new(Mutex::new(()));
 
-
-    // Stop the Loop
-    //stop_flag_clone.store(true, Ordering::Relaxed);
-
-    //Start the Loop
-    //stop_flag_clone.store(false, Ordering::Relaxed);
-
-
-
-
-
-
+    //start(running.clone(), running_mutex.clone()).await?;
+    //task::sleep(Duration::from_secs(5)).await; // Wait for 5 seconds
+    //stop(running.clone(), running_mutex.clone()).await?;
 
 
 
@@ -269,7 +299,7 @@ async fn main() -> Result<()> {
                 
                 // Prox Parmeter 
                 else if address == proximity_parameter_address  {
-                    
+                    stop(running.clone(), running_mutex.clone()).await?;
                     // Update Last Signal Time for timeout clock
                     let mut last_signal_time = LAST_SIGNAL_TIME.lock().unwrap();
                     let elapsed_time = Instant::now().duration_since(*last_signal_time);
@@ -282,19 +312,13 @@ async fn main() -> Result<()> {
                         // Send 5 Stop Packets to Device - need to update so it sends stop packets until a new prox signal is made
                         
                         
-                        //Start the Loop
-                        // Set stop flag to fale 
-                        stop_flag_clone.store(false, Ordering::Relaxed);
-                        
-                        println!("Starting Loop...");
-                        let stop_flag_clone = stop_flag.clone();
-                        task::spawn(async move {
-                            infinite_loop(stop_flag_clone).await;
-                        });
+
                         
                         
                         
                         println!("Stopping pats...");
+                        start(running.clone(), running_mutex.clone()).await?;
+
                         for _ in 0..5 {
                             println!("Send Stop...");
                             tx_socket
@@ -304,9 +328,8 @@ async fn main() -> Result<()> {
 
                     } else {
                         // Process Pat signal to send to Device 
-                        // Stop the Loop
-                        println!("Stopping Loop...");
-                        stop_flag_clone.store(true, Ordering::Relaxed);  
+
+
 
                         let motor_speed_tx = process_pat(value, max_speed, min_speed, speed_scale);
                         
