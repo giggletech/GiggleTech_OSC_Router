@@ -125,14 +125,6 @@ fn process_pat(proximity_signal: f32, max_speed: f32, min_speed: f32, speed_scal
 }
 
 
-
-
-
-
-
-
-
-
 // Tx & Rx Socket Setup
 
 fn create_socket_address(host: &str, port: &str) -> String {
@@ -185,6 +177,14 @@ async fn osc_timeout(mut tx_socket: OscSocket) -> Result<()> {
 
 
 
+/*
+0 Signal Sender
+
+To Start: start(running.clone(), running_mutex.clone()).await?;
+to Stop : stop(running.clone(), running_mutex.clone()).await?;
+ */
+
+
 async fn start(
     running: Arc<AtomicBool>,
     running_mutex: Arc<Mutex<()>>,
@@ -203,13 +203,12 @@ async fn worker(running: Arc<AtomicBool>) -> Result<()> {
     while running.load(Ordering::SeqCst) {
         // Do some work here
         println!("Worker is running");
+        // ADD STOP COMMANDS HERE
         task::sleep(Duration::from_secs(1)).await;
     }
     println!("Worker stopped");
     Ok(())
 }
-
-
 
 async fn stop(
     running: Arc<AtomicBool>,
@@ -222,18 +221,6 @@ async fn stop(
     running.store(false, Ordering::SeqCst);
     Ok(())
 }
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 
@@ -265,13 +252,10 @@ async fn main() -> Result<()> {
     task::spawn(osc_timeout(tx_socket_clone));
     
   
-
+    // Start/ Stop Function Setup
     let running = Arc::new(AtomicBool::new(false));
     let running_mutex = Arc::new(Mutex::new(()));
-
-    //start(running.clone(), running_mutex.clone()).await?;
-    //task::sleep(Duration::from_secs(5)).await; // Wait for 5 seconds
-    //stop(running.clone(), running_mutex.clone()).await?;
+    
 
 
 
@@ -299,6 +283,7 @@ async fn main() -> Result<()> {
                 
                 // Prox Parmeter 
                 else if address == proximity_parameter_address  {
+                    
                     stop(running.clone(), running_mutex.clone()).await?;
                     // Update Last Signal Time for timeout clock
                     let mut last_signal_time = LAST_SIGNAL_TIME.lock().unwrap();
@@ -310,17 +295,12 @@ async fn main() -> Result<()> {
                     // Stop Function
                     if value == 0.0 {
                         // Send 5 Stop Packets to Device - need to update so it sends stop packets until a new prox signal is made
-                        
-                        
 
-                        
-                        
-                        
                         println!("Stopping pats...");
                         start(running.clone(), running_mutex.clone()).await?;
 
                         for _ in 0..5 {
-                            println!("Send Stop...");
+                            //println!("Send Stop...");
                             tx_socket
                                 .send((TX_OSC_MOTOR_ADDRESS, (0i32,)))
                                 .await?;
@@ -328,9 +308,6 @@ async fn main() -> Result<()> {
 
                     } else {
                         // Process Pat signal to send to Device 
-
-
-
                         let motor_speed_tx = process_pat(value, max_speed, min_speed, speed_scale);
                         
                         tx_socket
