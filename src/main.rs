@@ -4,6 +4,7 @@
 
 // External crates
 
+use regex::Regex;
 use async_osc::{prelude::*, OscPacket, OscSocket, OscType, Result};
 use async_std::{
     stream::StreamExt,
@@ -29,12 +30,12 @@ fn banner_txt(){
     println!("");
     println!(" █▀█ █▀ █▀▀   █▀█ █▀█ █ █ ▀█▀ █▀▀ █▀█");
     println!(" █▄█ ▄█ █▄▄   █▀▄ █▄█ █▄█  █  ██▄ █▀▄");
-                                                                                
+
 }
 
 fn load_config() -> (
     String, // headpat_device_ip
-    String, // headpat_device_port
+    String, // headpat_device_default_port
     f32,    // min_speed_float
     f32,    // max_speed_float
     f32,    // speed_scale_float
@@ -51,12 +52,14 @@ fn load_config() -> (
     }
     const MAX_SPEED_LOW_LIMIT_CONST: f32 = 0.05;
 
-    let headpat_device_ip   = config.get("Setup", "device_ip").unwrap();
-    let headpat_device_port = "8888".to_string();
+    let device_uri_sep = Regex::new(r"\s+").expect("Invalid regex")
+    let headpat_device_uris = config.get("Setup", "device_uris").unwrap()
+        .split_whitespace();
+    let headpat_device_default_port = "8888".to_string();
     let min_speed           = config.get("Haptic_Config", "min_speed").unwrap();
     let min_speed_float     = min_speed.parse::<f32>().unwrap() / 100.0;
     let max_speed           = config.get("Haptic_Config", "max_speed").unwrap();
-    let max_speed_float     = max_speed.parse::<f32>().unwrap() / 100.0; 
+    let max_speed_float     = max_speed.parse::<f32>().unwrap() / 100.0;
     let max_speed_low_limit = MAX_SPEED_LOW_LIMIT_CONST;
     let max_speed_float     = max_speed_float.max(max_speed_low_limit);
     let speed_scale         = config.get("Haptic_Config", "max_speed_scale").unwrap();
@@ -66,6 +69,7 @@ fn load_config() -> (
     let proximity_parameter_address = config
         .get("Setup", "proximity_parameter")
         .unwrap_or_else(|| "/avatar/parameters/proximity_01".into());
+
     let max_speed_parameter_address = config
         .get("Setup", "max_speed_parameter")
         .unwrap_or_else(|| "/avatar/parameters/max_speed".into());
@@ -73,7 +77,7 @@ fn load_config() -> (
     println!("\n");
     banner_txt();
     println!("\n");
-    println!(" Haptic Device: {}:{}", headpat_device_ip, headpat_device_port);
+    println!(" Haptic Device: {}:{}", headpat_device_ip, headpat_device_default_port);
     println!(" Listening for OSC on port: {}", port_rx);
     println!("\n Vibration Configuration");
     println!(" Min Speed: {}%", min_speed);
@@ -82,8 +86,8 @@ fn load_config() -> (
     println!("\nWaiting for pats...");
 
     (
-        headpat_device_ip,
-        headpat_device_port,
+        headpat_device_uris,
+        headpat_device_default_port,
         min_speed_float,
         max_speed_float,
         speed_scale_float,
@@ -121,7 +125,7 @@ fn process_pat(proximity_signal: f32, max_speed: f32, min_speed: f32, speed_scal
     let proximity_signal = format!("{:.2}", proximity_signal);
     let max_speed = format!("{:.2}", max_speed);
     eprintln!("Prox: {:5} Motor Tx: {:3}  Max Speed: {:5} |{:11}|", proximity_signal, headpat_tx, max_speed, graph_str);
-    
+
     headpat_tx
 }
 
@@ -149,14 +153,10 @@ async fn setup_tx_socket(address: std::string::String) -> Result<OscSocket> {
 
 
 
-// OSC Address Setup
-const TX_OSC_MOTOR_ADDRESS: &str = "/avatar/parameters/motor";
-//const TX_OSC_LED_ADDRESS_2: &str = "/avatar/parameters/led";
 
 
 
-
-// TimeOut 
+// TimeOut
 lazy_static! {
     static ref LAST_SIGNAL_TIME: Mutex<Instant> = Mutex::new(Instant::now());
 }
@@ -230,10 +230,10 @@ async fn stop(
 
 #[async_std::main]
 async fn main() -> Result<()> {
-     
-    // Import Config 
-    let (headpat_device_ip,
-        headpat_device_port,
+
+    // Import Config
+    let (headpat_device_uris,
+        headpat_device_default_port,
         min_speed,
         mut max_speed,
         speed_scale,
@@ -247,13 +247,28 @@ async fn main() -> Result<()> {
     // Rx/Tx Socket Setup
     let mut rx_socket = setup_rx_socket(port_rx).await?;
 
-    // Make external functiion that can send values to a specifed IP, Address, and value, which is called when needed
-    let tx_socket_address = create_socket_address(&headpat_device_ip, &headpat_device_port);
-    let tx_socket = setup_tx_socket(tx_socket_address.clone()).await?;
-    let tx_socket_clone = setup_tx_socket(tx_socket_address).await?;
- 
-    // Timeout
-    task::spawn(osc_timeout(tx_socket_clone));
+    // Bind to remote hardware UDP sockets
+    // can send values to a specifed IP, Address, and value, which is called when needed
+    let tx_sockets = headpat_device_uris
+      .map(|device_uri| {
+        let device_parts = Regex::new(r":").unwrap().split(device_uri)
+        let tx_socket_address = create_socket_address(device_parts.get(0).unwrap(), &device_parts.get(1).unwrap_or_else(headpat_device_default_port));
+
+        println!(format!("Connecting to harware device: {:?}", tx_socket_address));
+
+        // :TODO: Probably there's a better way to spawn all of these concurrently; this probably waits
+        //        for each socket before continuing iteration through the `map` (above).
+        //        In an ideal world this might mean removing the `await` to stop the toplevel script waiting but IDK, unsure about `await` syntax...
+        let tx_socket = setup_tx_socket(tx_socket_address).await?
+
+        // schedule background thread for timeout to send disconnection notification packets to remote device
+        task::spawn(osc_timeout(tx_socket));
+
+        tx_socket
+      })
+      .collect();
+
+    println!("All hardware connections established.");
 
     // Start/ Stop Function Setup
     let running = Arc::new(AtomicBool::new(false));
@@ -262,15 +277,15 @@ async fn main() -> Result<()> {
     // Listen for OSC Packets
     while let Some(packet) = rx_socket.next().await {
         let (packet, _peer_addr) = packet?;
-        
-        // Filter OSC Signals : Headpat Max & Headpat Prox 
+
+        // Filter OSC Signals : Headpat Max & Headpat Prox
         match packet {
             OscPacket::Bundle(_) => {}
             OscPacket::Message(message) => {
 
                 let (address, osc_value) = message.as_tuple();
                 let value = match osc_value.first().unwrap_or(&OscType::Nil).clone().float(){
-                    Some(v) => v, 
+                    Some(v) => v,
                     None => continue,
                 };
 
@@ -296,25 +311,28 @@ async fn main() -> Result<()> {
                         start(running.clone(), running_mutex.clone()).await?;
 
                         for _ in 0..5 {
-                            tx_socket
-                                .send((TX_OSC_MOTOR_ADDRESS, (0i32,)))
-                                .await?;
+//                             proximity_parameter_output_address
+                            tx_sockets.iter().for_each(|socket| {
+                                socket.send((TX_OSC_MOTOR_ADDRESS, (0i32,)))
+                                  .await?
+                            })
                         }
 
                     } else {
-                        // Process Pat signal to send to Device 
+                        // Process Pat signal to send to Device
                         let motor_speed_tx = process_pat(value, max_speed, min_speed, speed_scale);
-                        
-                        tx_socket
-                            .send((TX_OSC_MOTOR_ADDRESS, (motor_speed_tx,)))
+
+                        tx_sockets.iter().for_each(|socket| {
+                            socket.send((TX_OSC_MOTOR_ADDRESS, (motor_speed_tx,)))
                             .await?;
+                        })
                     }
                 }
                 else {
                     eprintln!("Unknown Address") // Have a debug mode, print if debug mode
                 }
-            } 
-        }  
+            }
+        }
     }
     Ok(())
 }
