@@ -265,7 +265,10 @@ async fn main() -> Result<()> {
     // Bind to remote hardware UDP sockets
     // can send values to a specifed IP, Address, and value, which is called when needed
     
-    let tx_sockets = headpat_device_uris.iter()
+
+
+/* 
+    let tx_sockets: Vec<_> = headpat_device_uris.iter()
       .map(|device_uri| {
         //let device_parts = Regex::new(r":").unwrap().split(device_uri);
         let device_parts: Vec<_> = Regex::new(r":").unwrap().split(device_uri).collect();
@@ -283,7 +286,8 @@ async fn main() -> Result<()> {
         let tx_socket = setup_tx_socket(tx_socket_address);
 
         // schedule background thread for timeout to send disconnection notification packets to remote device
-        task::spawn(osc_timeout(tx_socket));
+        // Remove to get it working
+        //task::spawn(osc_timeout(tx_socket));
 
 
         tx_socket
@@ -292,6 +296,33 @@ async fn main() -> Result<()> {
 
 
       .collect();
+*/
+
+// This fixed the problems but spawm more :S Now same as code block above
+
+    let tx_sockets = headpat_device_uris.iter()
+        .map(|device_uri| async move {
+            let device_parts: Vec<_> = Regex::new(r":").unwrap().split(device_uri).collect();
+
+            let tx_socket_address = create_socket_address(
+                device_parts.get(0).unwrap(),
+                &device_parts.get(1).map(|s| *s).unwrap_or_else(|| &headpat_device_default_port)
+            );
+
+            println!("Connecting to harware device: {:?}", tx_socket_address);
+
+            let tx_socket = setup_tx_socket(tx_socket_address).await?;
+            task::spawn(osc_timeout(tx_socket)).await;
+
+            Ok(tx_socket)
+        })
+        .collect::<Vec<_>>();
+
+    let mut joined_sockets = futures::future::join_all(tx_sockets).await;
+
+
+
+
 
 
     future::join_all(tx_sockets).await;
