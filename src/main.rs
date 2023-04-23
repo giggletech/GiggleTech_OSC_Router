@@ -268,8 +268,8 @@ async fn main() -> Result<()> {
     let tx_sockets = headpat_device_uris.iter()
       .map(|device_uri| {
         //let device_parts = Regex::new(r":").unwrap().split(device_uri);
-        //let tx_socket_address = create_socket_address(device_parts.get(0).unwrap(), &device_parts.get(1).unwrap_or_else(headpat_device_default_port));
         let device_parts: Vec<_> = Regex::new(r":").unwrap().split(device_uri).collect();
+
         //let tx_socket_address = create_socket_address(device_parts[0], &device_parts.get(1).unwrap_or_else(|| headpat_device_default_port));
         let tx_socket_address = create_socket_address(
             device_parts.get(0).unwrap(),
@@ -285,6 +285,7 @@ async fn main() -> Result<()> {
         // schedule background thread for timeout to send disconnection notification packets to remote device
         task::spawn(osc_timeout(tx_socket));
 
+
         tx_socket
       })
 
@@ -293,7 +294,7 @@ async fn main() -> Result<()> {
       .collect();
 
 
-    future::join_all(tx_sockets).await?;
+    future::join_all(tx_sockets).await;
     println!("All hardware connections established.");
 
     // Start/ Stop Function Setup
