@@ -16,6 +16,7 @@ use configparser::ini::Ini;
 use lazy_static::lazy_static;
 use std::{sync::Mutex, time::{Duration, Instant}};
 use std::sync::atomic::{AtomicBool, Ordering};
+use futures::future;
 
 
 // Banner
@@ -34,7 +35,7 @@ fn banner_txt(){
 }
 
 fn load_config() -> (
-    String, // headpat_device_ip
+    Vec<String>, // headpat_device_ip
     String, // headpat_device_default_port
     f32,    // min_speed_float
     f32,    // max_speed_float
@@ -52,9 +53,20 @@ fn load_config() -> (
     }
     const MAX_SPEED_LOW_LIMIT_CONST: f32 = 0.05;
 
-    let device_uri_sep = Regex::new(r"\s+").expect("Invalid regex")
-    let headpat_device_uris = config.get("Setup", "device_uris").unwrap()
-        .split_whitespace();
+    let device_uri_sep = Regex::new(r"\s+").expect("Invalid regex");
+
+
+    //let headpat_device_uris: Vec<String> = config.get("Setup", "device_uris").unwrap()
+    //    .split_whitespace().collect();
+
+
+    let headpat_device_uris: Vec<String> = config.get("Setup", "device_uris").unwrap()
+    .split_whitespace()
+    .map(|s| s.to_string()) // convert &str to String
+    .collect();
+
+
+
     let headpat_device_default_port = "8888".to_string();
     let min_speed           = config.get("Haptic_Config", "min_speed").unwrap();
     let min_speed_float     = min_speed.parse::<f32>().unwrap() / 100.0;
@@ -77,7 +89,7 @@ fn load_config() -> (
     println!("\n");
     banner_txt();
     println!("\n");
-    println!(" Haptic Device: {}:{}", headpat_device_ip, headpat_device_default_port);
+    println!(" Haptic Device: {:?}:{:?}", headpat_device_uris, headpat_device_default_port);
     println!(" Listening for OSC on port: {}", port_rx);
     println!("\n Vibration Configuration");
     println!(" Min Speed: {}%", min_speed);
@@ -153,6 +165,9 @@ async fn setup_tx_socket(address: std::string::String) -> Result<OscSocket> {
 
 
 
+// OSC Address Setup
+const TX_OSC_MOTOR_ADDRESS: &str = "/avatar/parameters/motor";
+//const TX_OSC_LED_ADDRESS_2: &str = "/avatar/parameters/led";
 
 
 
@@ -249,25 +264,36 @@ async fn main() -> Result<()> {
 
     // Bind to remote hardware UDP sockets
     // can send values to a specifed IP, Address, and value, which is called when needed
-    let tx_sockets = headpat_device_uris
+    
+    let tx_sockets = headpat_device_uris.iter()
       .map(|device_uri| {
-        let device_parts = Regex::new(r":").unwrap().split(device_uri)
-        let tx_socket_address = create_socket_address(device_parts.get(0).unwrap(), &device_parts.get(1).unwrap_or_else(headpat_device_default_port));
+        //let device_parts = Regex::new(r":").unwrap().split(device_uri);
+        //let tx_socket_address = create_socket_address(device_parts.get(0).unwrap(), &device_parts.get(1).unwrap_or_else(headpat_device_default_port));
+        let device_parts: Vec<_> = Regex::new(r":").unwrap().split(device_uri).collect();
+        //let tx_socket_address = create_socket_address(device_parts[0], &device_parts.get(1).unwrap_or_else(|| headpat_device_default_port));
+        let tx_socket_address = create_socket_address(
+            device_parts.get(0).unwrap(),
+            &device_parts.get(1).map(|s| *s).unwrap_or_else(|| &headpat_device_default_port)
+        );
+        
+        
 
-        println!(format!("Connecting to harware device: {:?}", tx_socket_address));
+        println!("Connecting to harware device: {:?}", tx_socket_address);
 
-        // :TODO: Probably there's a better way to spawn all of these concurrently; this probably waits
-        //        for each socket before continuing iteration through the `map` (above).
-        //        In an ideal world this might mean removing the `await` to stop the toplevel script waiting but IDK, unsure about `await` syntax...
-        let tx_socket = setup_tx_socket(tx_socket_address).await?
+        let tx_socket = setup_tx_socket(tx_socket_address);
 
         // schedule background thread for timeout to send disconnection notification packets to remote device
         task::spawn(osc_timeout(tx_socket));
 
         tx_socket
       })
+
+
+
       .collect();
 
+
+    future::join_all(tx_sockets).await?;
     println!("All hardware connections established.");
 
     // Start/ Stop Function Setup
@@ -313,8 +339,7 @@ async fn main() -> Result<()> {
                         for _ in 0..5 {
 //                             proximity_parameter_output_address
                             tx_sockets.iter().for_each(|socket| {
-                                socket.send((TX_OSC_MOTOR_ADDRESS, (0i32,)))
-                                  .await?
+                                socket.send((TX_OSC_MOTOR_ADDRESS, (0i32,)));
                             })
                         }
 
@@ -323,8 +348,7 @@ async fn main() -> Result<()> {
                         let motor_speed_tx = process_pat(value, max_speed, min_speed, speed_scale);
 
                         tx_sockets.iter().for_each(|socket| {
-                            socket.send((TX_OSC_MOTOR_ADDRESS, (motor_speed_tx,)))
-                            .await?;
+                            socket.send((TX_OSC_MOTOR_ADDRESS, (motor_speed_tx,)));
                         })
                     }
                 }
