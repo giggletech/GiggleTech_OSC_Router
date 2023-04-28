@@ -134,25 +134,6 @@ lazy_static! {
     static ref LAST_SIGNAL_TIME: Mutex<Instant> = Mutex::new(Instant::now());
 }
 
-/* 
-Old Function
-async fn osc_timeout(tx_socket: OscSocket) -> Result<()> {
-    // If no new osc signal is Rx for 5s, will send stop packets
-    loop {
-        task::sleep(Duration::from_secs(1)).await;
-        let elapsed_time = Instant::now().duration_since(*LAST_SIGNAL_TIME.lock().unwrap());
-
-        if elapsed_time >= Duration::from_secs(5) {
-            // Send stop packet
-            println!("Pat Timeout...");
-            tx_socket.send((TX_OSC_MOTOR_ADDRESS, (0i32,))).await?;
-
-            let mut last_signal_time = LAST_SIGNAL_TIME.lock().unwrap();
-            *last_signal_time = Instant::now();
-        }
-    }
-}
-*/
 async fn osc_timeout(device_ip: &str) -> Result<()> {
     let tx_socket_address = create_socket_address(device_ip, "8888");
     let mut tx_socket = setup_tx_socket(tx_socket_address).await?;
@@ -184,33 +165,22 @@ to Stop : stop(running.clone(), running_mutex.clone()).await?;
  */
 
 
-async fn start(
-    running: Arc<AtomicBool>,
-    running_mutex: Arc<Mutex<()>>,
-) -> Result<()> {
+async fn start(running: Arc<AtomicBool>, running_mutex: Arc<Mutex<()>>) -> Result<()> {
+
     let _lock = running_mutex.lock();
     if running.load(Ordering::SeqCst) {
         //return Err(async_osc::Error::from("Worker is already running".to_string()));
-
     }
     running.store(true, Ordering::SeqCst);
-    task::spawn(worker(running.clone(),"192.168.1.157" ));
+    task::spawn(worker(running.clone(),"192.168.1.157" )); // ----------------------------------------------- FIX
+    
     Ok(())
 }
 
 
-/*
-async fn worker(running: Arc<AtomicBool>) -> Result<()> {
-    while running.load(Ordering::SeqCst) {
-        // Do some work here
-        println!("Worker is running");
-        // ADD STOP COMMANDS HERE
-        //task::sleep(Duration::from_secs(1)).await;
-    }
-    println!("Worker stopped");
-    Ok(())
-}
-*/
+
+
+
 
 async fn worker(running: Arc<AtomicBool>, device_ip: &str) -> Result<()> {
     while running.load(Ordering::SeqCst) {
@@ -268,7 +238,7 @@ const TX_OSC_MOTOR_ADDRESS: &str = "/avatar/parameters/motor";
 
 async fn send_data(device_ip: &str, address: &str, value: i32) -> Result<()> {
     println!("Sending Value:{} to IP: {}", value, device_ip);
-    let tx_socket_address = create_socket_address(device_ip, "8888"); // use port 57120 for OSC
+    let tx_socket_address = create_socket_address(device_ip, "8888"); // -------------------------------------------------- FIX
     let mut tx_socket = setup_tx_socket(tx_socket_address.clone()).await?;
     tx_socket.connect(tx_socket_address).await?;
     tx_socket.send((address, (value,))).await?;
@@ -298,9 +268,12 @@ async fn main() -> Result<()> {
 
  
     // Timeout
-    task::spawn(osc_timeout("192.168.1.157"));
-
-
+    println!("IP: {}",headpat_device_ip);
+    // I dont know why it needs to clone
+    let headpat_device_ip_clone = headpat_device_ip.clone(); 
+    task::spawn(async move {
+        osc_timeout(&headpat_device_ip_clone).await;
+    });
 
     // Start/ Stop Function Setup
     let running = Arc::new(AtomicBool::new(false));
