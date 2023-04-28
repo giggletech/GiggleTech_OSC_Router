@@ -1,4 +1,5 @@
 use configparser::ini::Ini;
+use std::net::IpAddr;
 
 // Banner
 fn banner_txt(){
@@ -33,11 +34,27 @@ pub(crate) fn load_config() -> (
     }
     const MAX_SPEED_LOW_LIMIT_CONST: f32 = 0.05;
 
-    // ----------------------------------------------------------------------------------------------------------- TODO error if incorrect format
-    let headpat_device_uris: Vec<String> = config.get("Setup", "device_uris").unwrap()
-    .split_whitespace()
-    .map(|s| s.to_string()) // convert &str to String
-    .collect();
+
+
+    // Check the format of the URIs
+    let headpat_device_uris: Vec<String> = config.get("Setup", "device_uris")
+        .unwrap()
+        .split_whitespace()
+        .map(|s| s.to_string()) // convert &str to String
+        .filter_map(|s| {
+            match s.parse::<IpAddr>() {
+                Ok(_) => Some(s),
+                Err(_) => {
+                    println!("Invalid IP address format: {}", s);
+                    None
+                }
+            }
+        })
+        .collect();
+    if headpat_device_uris.is_empty() {
+        eprintln!("Error: no device URIs specified in config file");
+        // handle error here, e.g. return early from the function or exit the program
+    }
 
     println!("Device URIs: {:?}", headpat_device_uris);
 
