@@ -56,25 +56,29 @@ to Stop : stop(running.clone(), running_mutex.clone()).await?;
  */
 
 
-async fn start(running: Arc<AtomicBool>) -> Result<()> {
+ async fn start(running: Arc<AtomicBool>, device_ip: &Arc<String>) -> Result<()> {
     if running.load(Ordering::SeqCst) {
         //return Err("Worker is already running".into());
     }
+    let worker_running = running.clone();
+    let worker_device_ip = device_ip.clone();
+    task::spawn(async move {
+        worker(worker_running, worker_device_ip).await.unwrap();
+    });
     running.store(true, Ordering::SeqCst);
-    task::spawn(worker(running.clone(),"192.168.1.157" )); // ----------------------------------- FIX
     Ok(())
 }
 
-
-async fn worker(running: Arc<AtomicBool>, device_ip: &str) -> Result<()> {
-    while running.load(Ordering::SeqCst) {
+async fn worker(running: Arc<AtomicBool>, device_ip: Arc<String>) -> Result<()> {
+    while running.load(Ordering::Relaxed) {
         println!("Worker is running");
-        giggletech_osc::send_data(device_ip, TX_OSC_MOTOR_ADDRESS, 0i32).await?;
+        giggletech_osc::send_data(&device_ip, TX_OSC_MOTOR_ADDRESS, 0i32).await?;
         task::sleep(Duration::from_secs(1)).await;
     }
     println!("Worker stopped");
     Ok(())
 }
+
 
 async fn stop(running: Arc<AtomicBool>) -> Result<()> {
     if !running.load(Ordering::SeqCst) {
@@ -116,7 +120,7 @@ async fn main() -> Result<()> {
 
     // Start/ Stop Function Setup
     let running = Arc::new(AtomicBool::new(false));
-    let running_mutex = Arc::new(Mutex::new(()));
+    let headpat_device_ip_arc = Arc::new(headpat_device_ip);
 
     // Listen for OSC Packets
     while let Some(packet) = rx_socket.next().await {
@@ -151,14 +155,16 @@ async fn main() -> Result<()> {
                     if value == 0.0 {
                         // Send 5 Stop Packets to Device 
                         println!("Stopping pats...");
-                        start(running.clone()).await?;
+                        start(running.clone(), &headpat_device_ip_arc).await?;
+
+
 
                         for _ in 0..5 {
-                            giggletech_osc::send_data(&headpat_device_ip, TX_OSC_MOTOR_ADDRESS, 0i32).await?;  
+                            giggletech_osc::send_data(&headpat_device_ip_arc, TX_OSC_MOTOR_ADDRESS, 0i32).await?;  
                         }
 
                     } else {
-                        giggletech_osc::send_data(&headpat_device_ip,
+                        giggletech_osc::send_data(&headpat_device_ip_arc,
                             TX_OSC_MOTOR_ADDRESS,
                             data_processing::process_pat(value, max_speed, min_speed, speed_scale)).await?;
                     }
