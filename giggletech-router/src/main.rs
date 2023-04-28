@@ -28,6 +28,7 @@ async fn main() -> Result<()> {
         speed_scale,
         port_rx,
         proximity_parameter_address,
+        proximity_parameters_multi,
         max_speed_parameter_address,
         max_speed_low_limit,
 

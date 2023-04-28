@@ -24,6 +24,7 @@ pub(crate) fn load_config() -> (
     f32,    // speed_scale_float
     String, // port_rx
     String, // proximity_parameter_address
+    Vec<String>, // proximity_parameters_multi
     String, // max_speed_parameter_address
     f32,    // Max Speed Low Limit
     ) {
@@ -37,7 +38,7 @@ pub(crate) fn load_config() -> (
 
 
 
-    // Check the format of the URIs
+    // Check the format of the IP URIs
     let headpat_device_uris: Vec<String> = config.get("Setup", "device_uris")
         .unwrap()
         .split_whitespace()
@@ -58,6 +59,34 @@ pub(crate) fn load_config() -> (
     }
 
     println!("Device URIs: {:?}", headpat_device_uris);
+
+    // Multi Device
+
+
+    let proximity_parameters_multi: Vec<String> = config.get("Setup", "proximity_parameters_multi")
+    .unwrap()
+    .split_whitespace()
+    .map(|s| format!("/avatar/parameters/{}", s)) // add "/avatar/parameters/" prefix to each string
+    .collect();
+
+    println!("Device URIs: {:?}", proximity_parameters_multi);
+
+    
+    if headpat_device_uris.len() != proximity_parameters_multi.len() {
+        eprintln!("Error: number of device URIs does not match number of proximity parameters");
+        // handle error here, e.g. return early from the function or exit the program
+    }
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -99,6 +128,7 @@ pub(crate) fn load_config() -> (
         speed_scale_float,
         port_rx,
         proximity_parameter_address,
+        proximity_parameters_multi,
         max_speed_parameter_address,
         max_speed_low_limit,
     )
