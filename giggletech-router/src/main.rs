@@ -22,6 +22,7 @@ async fn main() -> Result<()> {
     // Import Config 
     // Todo: Refactor
     let (headpat_device_ip,
+        headpat_device_uris,
         min_speed,
         mut max_speed,
         speed_scale,
@@ -45,6 +46,13 @@ async fn main() -> Result<()> {
     // Start/ Stop Function Setup
     let running = Arc::new(AtomicBool::new(false));
     let headpat_device_ip_arc = Arc::new(headpat_device_ip);
+
+
+
+
+
+
+    
 
     // Listen for OSC Packets
     while let Some(packet) = rx_socket.next().await {
