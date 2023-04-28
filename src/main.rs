@@ -56,39 +56,27 @@ to Stop : stop(running.clone(), running_mutex.clone()).await?;
  */
 
 
-async fn start(running: Arc<AtomicBool>, running_mutex: Arc<Mutex<()>>) -> Result<()> {
-
-    let _lock = running_mutex.lock();
+async fn start(running: Arc<AtomicBool>) -> Result<()> {
     if running.load(Ordering::SeqCst) {
-        //return Err(async_osc::Error::from("Worker is already running".to_string()));
+        //return Err("Worker is already running".into());
     }
     running.store(true, Ordering::SeqCst);
-    task::spawn(worker(running.clone(),"192.168.1.157" )); // ----------------------------------------------- FIX
-    
+    task::spawn(worker(running.clone(),"192.168.1.157" )); // ----------------------------------- FIX
     Ok(())
 }
 
 
 async fn worker(running: Arc<AtomicBool>, device_ip: &str) -> Result<()> {
     while running.load(Ordering::SeqCst) {
-        // Do some work here
         println!("Worker is running");
-
-        // Send stop command
         giggletech_osc::send_data(device_ip, TX_OSC_MOTOR_ADDRESS, 0i32).await?;
-
         task::sleep(Duration::from_secs(1)).await;
     }
     println!("Worker stopped");
     Ok(())
 }
 
-
-async fn stop(
-    running: Arc<AtomicBool>,
-    running_mutex: Arc<Mutex<()>>,
-) -> Result<()> {
-    let _lock = running_mutex.lock();
+async fn stop(running: Arc<AtomicBool>) -> Result<()> {
     if !running.load(Ordering::SeqCst) {
         //return Err("Worker is not running".into());
     }
@@ -154,7 +142,7 @@ async fn main() -> Result<()> {
                 // Prox Parmeter 
                 else if address == proximity_parameter_address  {
                     
-                    stop(running.clone(), running_mutex.clone()).await?;
+                    stop(running.clone()).await?;
                     // Update Last Signal Time for timeout clock
                     let mut last_signal_time = LAST_SIGNAL_TIME.lock().unwrap();
                     *last_signal_time = Instant::now();
@@ -163,7 +151,7 @@ async fn main() -> Result<()> {
                     if value == 0.0 {
                         // Send 5 Stop Packets to Device 
                         println!("Stopping pats...");
-                        start(running.clone(), running_mutex.clone()).await?;
+                        start(running.clone()).await?;
 
                         for _ in 0..5 {
                             giggletech_osc::send_data(&headpat_device_ip, TX_OSC_MOTOR_ADDRESS, 0i32).await?;  
