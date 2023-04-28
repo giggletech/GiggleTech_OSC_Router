@@ -1,21 +1,15 @@
 // GiggleTech.io
 // OSC Router
 // by Sideways
+// Based off OSC Async https://github.com/Frando/async-osc
 
-// External crates
 
 use async_osc::{prelude::*, OscPacket, OscType, Result};
-use async_std::{
-    stream::StreamExt,
-    task::{self},
-    sync::Arc,
-
-};
+use async_std::{stream::StreamExt, task::{self}, sync::Arc,};
 use lazy_static::lazy_static;
 use std::{sync::Mutex, time::{Duration, Instant}};
 use std::sync::atomic::{AtomicBool};
 
-// Modules
 mod data_processing;
 mod config;
 mod giggletech_osc;
@@ -23,13 +17,12 @@ mod terminator;
 
 
 // TimeOut
-
-
 lazy_static! {
     static ref LAST_SIGNAL_TIME: Mutex<Instant> = Mutex::new(Instant::now());
 }
 
 async fn osc_timeout(device_ip: &str) -> Result<()> {
+    // Todo: Need to pull into module
     // If no new osc signal is Rx for 5s, will send stop packets
     // This loop can be used to implement Kays 'Soft Pat'
     loop {
@@ -38,7 +31,7 @@ async fn osc_timeout(device_ip: &str) -> Result<()> {
 
         if elapsed_time >= Duration::from_secs(5) {
             // Send stop packet
-            println!("Pat Timeout...");
+            //println!("Pat Timeout...");
             giggletech_osc::send_data(device_ip, 0i32).await?;
 
             let mut last_signal_time = LAST_SIGNAL_TIME.lock().unwrap();
@@ -51,8 +44,8 @@ async fn osc_timeout(device_ip: &str) -> Result<()> {
 async fn main() -> Result<()> {
      
     // Import Config 
+    // Todo: Refactor
     let (headpat_device_ip,
-        headpat_device_port,
         min_speed,
         mut max_speed,
         speed_scale,
@@ -68,8 +61,6 @@ async fn main() -> Result<()> {
 
  
     // Timeout
-    println!("IP: {}",headpat_device_ip);
-    // I dont know why it needs to clone
     let headpat_device_ip_clone = headpat_device_ip.clone(); 
     task::spawn(async move {
         osc_timeout(&headpat_device_ip_clone).await.unwrap();
@@ -110,7 +101,6 @@ async fn main() -> Result<()> {
 
                     // Stop Function
                     if value == 0.0 {
-                        // Send 5 Stop Packets to Device 
                         println!("Stopping pats...");
                         terminator::start(running.clone(), &headpat_device_ip_arc).await?;
 

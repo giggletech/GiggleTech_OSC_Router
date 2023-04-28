@@ -1,11 +1,10 @@
 // GiggleTech OSC Module
 // Data Sender, Tx & Rx Socket Setup
-// External crates
 
 use async_osc::{ OscSocket, Result};
 
 // OSC Address Setup
-const TX_OSC_MOTOR_ADDRESS: &str = "/avatar/parameters/motor"; // Hard coded
+const TX_OSC_MOTOR_ADDRESS: &str = "/avatar/parameters/motor"; 
 //const TX_OSC_LED_ADDRESS_2: &str = "/avatar/parameters/led";
 
 pub(crate) fn create_socket_address(host: &str, port: &str) -> String {

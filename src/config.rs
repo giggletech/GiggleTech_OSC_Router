@@ -17,7 +17,6 @@ fn banner_txt(){
 
 pub(crate) fn load_config() -> (
     String, // headpat_device_ip
-    String, // headpat_device_port
     f32,    // min_speed_float
     f32,    // max_speed_float
     f32,    // speed_scale_float
@@ -66,7 +65,6 @@ pub(crate) fn load_config() -> (
 
     (
         headpat_device_ip,
-        headpat_device_port,
         min_speed_float,
         max_speed_float,
         speed_scale_float,

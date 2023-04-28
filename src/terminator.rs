@@ -1,19 +1,8 @@
-/*
-Signal Sender
-To Start: start(running.clone(), running_mutex.clone()).await?;
-to Stop : stop(running.clone(), running_mutex.clone()).await?;
- */
+
 use async_osc::{Result};
-use async_std::{
-    
-    task::{self},
-    sync::Arc,
-
-};
-
+use async_std::{task::{self},sync::Arc,};
 use std::{ time::{Duration, }};
 use std::sync::atomic::{AtomicBool, Ordering};
-
 use crate::giggletech_osc;
 
 
@@ -39,7 +28,6 @@ async fn worker(running: Arc<AtomicBool>, device_ip: Arc<String>) -> Result<()> 
     //println!("Worker stopped");
     Ok(())
 }
-
 
 pub(crate) async fn stop(running: Arc<AtomicBool>) -> Result<()> {
     if !running.load(Ordering::SeqCst) {

@@ -18,6 +18,7 @@ pub fn print_speed_limit(headpat_max_rx: f32) {
 
 // Pat Processor
 const MOTOR_SPEED_SCALE: f32 = 0.66; // Overvolt   Here, OEM config 0.66 going higher than this value will reduce your vibrator motor life
+
 pub fn process_pat(proximity_signal: f32, max_speed: f32, min_speed: f32, speed_scale: f32) -> i32 {
     let graph_str = proximity_graph(proximity_signal);
     let headpat_tx = (((max_speed - min_speed) * proximity_signal + min_speed) * MOTOR_SPEED_SCALE * speed_scale * 255.0).round() as i32;

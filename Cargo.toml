@@ -1,11 +1,11 @@
 [package]
 name = "async-osc"
-version = "0.2.0"
+version = "1.0.0"
 description = "Heavy Modded Async "
 readme = "README.md"
 edition = "2018"
-keywords = ["osc", "audio", "async-std"]
-authors = ["Jason Beattie <jason.beattie@protonmail.com>"
+keywords = ["osc", "vrchat", "async-std"]
+authors = ["Giggle Tech <hello@giggletech.io>"
 ]
 
 [features]
