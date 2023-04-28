@@ -194,10 +194,12 @@ async fn start(
 
     }
     running.store(true, Ordering::SeqCst);
-    task::spawn(worker(running.clone()));
+    task::spawn(worker(running.clone(),"192.168.1.157" ));
     Ok(())
 }
 
+
+/*
 async fn worker(running: Arc<AtomicBool>) -> Result<()> {
     while running.load(Ordering::SeqCst) {
         // Do some work here
@@ -208,6 +210,23 @@ async fn worker(running: Arc<AtomicBool>) -> Result<()> {
     println!("Worker stopped");
     Ok(())
 }
+*/
+
+async fn worker(running: Arc<AtomicBool>, device_ip: &str) -> Result<()> {
+    while running.load(Ordering::SeqCst) {
+        // Do some work here
+        println!("Worker is running");
+
+        // Send stop command
+        send_data(device_ip, TX_OSC_MOTOR_ADDRESS, 0i32).await?;
+
+        task::sleep(Duration::from_secs(1)).await;
+    }
+    println!("Worker stopped");
+    Ok(())
+}
+
+
 
 async fn stop(
     running: Arc<AtomicBool>,
@@ -248,7 +267,7 @@ const TX_OSC_MOTOR_ADDRESS: &str = "/avatar/parameters/motor";
 
 
 async fn send_data(device_ip: &str, address: &str, value: i32) -> Result<()> {
-    println!("Sending to IP: {}%", device_ip);
+    println!("Sending Value:{} to IP: {}", value, device_ip);
     let tx_socket_address = create_socket_address(device_ip, "8888"); // use port 57120 for OSC
     let mut tx_socket = setup_tx_socket(tx_socket_address.clone()).await?;
     tx_socket.connect(tx_socket_address).await?;
@@ -277,15 +296,8 @@ async fn main() -> Result<()> {
     // Rx/Tx Socket Setup
     let mut rx_socket = setup_rx_socket(port_rx).await?;
 
-    // Make external functiion that can send values to a specifed IP, Address, and value, which is called when needed
-    let tx_socket_address = create_socket_address(&headpat_device_ip, &headpat_device_port);
-    let tx_socket = setup_tx_socket(tx_socket_address.clone()).await?;
-    let tx_socket_clone = setup_tx_socket(tx_socket_address).await?;
  
     // Timeout
-    //task::spawn(osc_timeout(tx_socket_clone)); Old FunctionS
-// Clone `headpat_device_ip` and call `osc_timeout()` with the clone
-    //let headpat_device_ip_clone = headpat_device_ip.clone();
     task::spawn(osc_timeout("192.168.1.157"));
 
 
