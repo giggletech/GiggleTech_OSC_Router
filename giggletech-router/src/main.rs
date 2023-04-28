@@ -6,39 +6,15 @@
 
 use async_osc::{prelude::*, OscPacket, OscType, Result};
 use async_std::{stream::StreamExt, task::{self}, sync::Arc,};
-use lazy_static::lazy_static;
-use std::{sync::Mutex, time::{Duration, Instant}};
+use std::{time::{Instant}};
 use std::sync::atomic::{AtomicBool};
 
+use crate::osc_timeout::osc_timeout;
 mod data_processing;
 mod config;
 mod giggletech_osc;
 mod terminator;
-
-
-// TimeOut
-lazy_static! {
-    static ref LAST_SIGNAL_TIME: Mutex<Instant> = Mutex::new(Instant::now());
-}
-
-async fn osc_timeout(device_ip: &str) -> Result<()> {
-    // Todo: Need to pull into module
-    // If no new osc signal is Rx for 5s, will send stop packets
-    // This loop can be used to implement Kays 'Soft Pat'
-    loop {
-        task::sleep(Duration::from_secs(1)).await;
-        let elapsed_time = Instant::now().duration_since(*LAST_SIGNAL_TIME.lock().unwrap());
-
-        if elapsed_time >= Duration::from_secs(5) {
-            // Send stop packet
-            //println!("Pat Timeout...");
-            giggletech_osc::send_data(device_ip, 0i32).await?;
-
-            let mut last_signal_time = LAST_SIGNAL_TIME.lock().unwrap();
-            *last_signal_time = Instant::now();
-        }
-    }
-}
+mod osc_timeout;
 
 #[async_std::main]
 async fn main() -> Result<()> {
@@ -96,7 +72,7 @@ async fn main() -> Result<()> {
                     
                     terminator::stop(running.clone()).await?;
                     // Update Last Signal Time for timeout clock
-                    let mut last_signal_time = LAST_SIGNAL_TIME.lock().unwrap();
+                    let mut last_signal_time = osc_timeout::LAST_SIGNAL_TIME.lock().unwrap();
                     *last_signal_time = Instant::now();
 
                     // Stop Function
