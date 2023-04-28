@@ -16,7 +16,6 @@ use std::sync::atomic::{AtomicBool, Ordering};
 
 use crate::giggletech_osc;
 
-const TX_OSC_MOTOR_ADDRESS: &str = "/avatar/parameters/motor";
 
  pub(crate) async fn start(running: Arc<AtomicBool>, device_ip: &Arc<String>) -> Result<()> {
     if running.load(Ordering::SeqCst) {
@@ -34,7 +33,7 @@ const TX_OSC_MOTOR_ADDRESS: &str = "/avatar/parameters/motor";
 async fn worker(running: Arc<AtomicBool>, device_ip: Arc<String>) -> Result<()> {
     while running.load(Ordering::Relaxed) {
         println!("Worker is running");
-        giggletech_osc::send_data(&device_ip, TX_OSC_MOTOR_ADDRESS, 0i32).await?;
+        giggletech_osc::send_data(&device_ip, 0i32).await?;
         task::sleep(Duration::from_secs(1)).await;
     }
     println!("Worker stopped");

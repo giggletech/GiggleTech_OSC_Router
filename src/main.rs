@@ -21,10 +21,6 @@ mod config;
 mod giggletech_osc;
 mod terminator;
 
-// OSC Address Setup
-const TX_OSC_MOTOR_ADDRESS: &str = "/avatar/parameters/motor";
-//const TX_OSC_LED_ADDRESS_2: &str = "/avatar/parameters/led";
-
 // TimeOut 
 lazy_static! {
     static ref LAST_SIGNAL_TIME: Mutex<Instant> = Mutex::new(Instant::now());
@@ -40,7 +36,7 @@ async fn osc_timeout(device_ip: &str) -> Result<()> {
         if elapsed_time >= Duration::from_secs(5) {
             // Send stop packet
             println!("Pat Timeout...");
-            giggletech_osc::send_data(device_ip, TX_OSC_MOTOR_ADDRESS, 0i32).await?;
+            giggletech_osc::send_data(device_ip, 0i32).await?;
 
             let mut last_signal_time = LAST_SIGNAL_TIME.lock().unwrap();
             *last_signal_time = Instant::now();
@@ -120,12 +116,11 @@ async fn main() -> Result<()> {
 
 
                         for _ in 0..5 {
-                            giggletech_osc::send_data(&headpat_device_ip_arc, TX_OSC_MOTOR_ADDRESS, 0i32).await?;  
+                            giggletech_osc::send_data(&headpat_device_ip_arc, 0i32).await?;  
                         }
 
                     } else {
                         giggletech_osc::send_data(&headpat_device_ip_arc,
-                            TX_OSC_MOTOR_ADDRESS,
                             data_processing::process_pat(value, max_speed, min_speed, speed_scale)).await?;
                     }
                 }
