@@ -3,3 +3,5 @@ tmp/
 Cargo.lock
 .DS_Store
 SANDBOX
+.vscode
+*.exe
