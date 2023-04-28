@@ -32,11 +32,11 @@ use crate::giggletech_osc;
 
 async fn worker(running: Arc<AtomicBool>, device_ip: Arc<String>) -> Result<()> {
     while running.load(Ordering::Relaxed) {
-        println!("Worker is running");
+        //println!("Worker is running");
         giggletech_osc::send_data(&device_ip, 0i32).await?;
         task::sleep(Duration::from_secs(1)).await;
     }
-    println!("Worker stopped");
+    //println!("Worker stopped");
     Ok(())
 }
 

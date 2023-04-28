@@ -21,7 +21,10 @@ mod config;
 mod giggletech_osc;
 mod terminator;
 
-// TimeOut 
+
+// TimeOut
+
+
 lazy_static! {
     static ref LAST_SIGNAL_TIME: Mutex<Instant> = Mutex::new(Instant::now());
 }
@@ -44,14 +47,12 @@ async fn osc_timeout(device_ip: &str) -> Result<()> {
     }
 }
 
-
-
 #[async_std::main]
 async fn main() -> Result<()> {
      
     // Import Config 
     let (headpat_device_ip,
-        _headpat_device_port,
+        headpat_device_port,
         min_speed,
         mut max_speed,
         speed_scale,
@@ -112,8 +113,6 @@ async fn main() -> Result<()> {
                         // Send 5 Stop Packets to Device 
                         println!("Stopping pats...");
                         terminator::start(running.clone(), &headpat_device_ip_arc).await?;
-
-
 
                         for _ in 0..5 {
                             giggletech_osc::send_data(&headpat_device_ip_arc, 0i32).await?;  
