@@ -18,9 +18,12 @@ use std::sync::atomic::{AtomicBool, Ordering};
 // Modules
 mod data_processing;
 mod config;
-mod socket_setup;
+mod giggletech_osc;
 
 
+// OSC Address Setup
+const TX_OSC_MOTOR_ADDRESS: &str = "/avatar/parameters/motor";
+//const TX_OSC_LED_ADDRESS_2: &str = "/avatar/parameters/led";
 
 // TimeOut 
 lazy_static! {
@@ -37,7 +40,7 @@ async fn osc_timeout(device_ip: &str) -> Result<()> {
         if elapsed_time >= Duration::from_secs(5) {
             // Send stop packet
             println!("Pat Timeout...");
-            send_data(device_ip, TX_OSC_MOTOR_ADDRESS, 0i32).await?;
+            giggletech_osc::send_data(device_ip, TX_OSC_MOTOR_ADDRESS, 0i32).await?;
 
             let mut last_signal_time = LAST_SIGNAL_TIME.lock().unwrap();
             *last_signal_time = Instant::now();
@@ -47,8 +50,7 @@ async fn osc_timeout(device_ip: &str) -> Result<()> {
 
 
 /*
-0 Signal Sender
-
+Signal Sender
 To Start: start(running.clone(), running_mutex.clone()).await?;
 to Stop : stop(running.clone(), running_mutex.clone()).await?;
  */
@@ -73,14 +75,13 @@ async fn worker(running: Arc<AtomicBool>, device_ip: &str) -> Result<()> {
         println!("Worker is running");
 
         // Send stop command
-        send_data(device_ip, TX_OSC_MOTOR_ADDRESS, 0i32).await?;
+        giggletech_osc::send_data(device_ip, TX_OSC_MOTOR_ADDRESS, 0i32).await?;
 
         task::sleep(Duration::from_secs(1)).await;
     }
     println!("Worker stopped");
     Ok(())
 }
-
 
 
 async fn stop(
@@ -92,24 +93,6 @@ async fn stop(
         //return Err("Worker is not running".into());
     }
     running.store(false, Ordering::SeqCst);
-    Ok(())
-}
-
-
-
-
-
-// OSC Address Setup
-const TX_OSC_MOTOR_ADDRESS: &str = "/avatar/parameters/motor";
-//const TX_OSC_LED_ADDRESS_2: &str = "/avatar/parameters/led";
-
-
-async fn send_data(device_ip: &str, address: &str, value: i32) -> Result<()> {
-    println!("Sending Value:{} to IP: {}", value, device_ip);
-    let tx_socket_address = socket_setup::create_socket_address(device_ip, "8888"); // ------------------- Port to Send OSC Data Too
-    let tx_socket = socket_setup::setup_tx_socket(tx_socket_address.clone()).await?;
-    tx_socket.connect(tx_socket_address).await?;
-    tx_socket.send((address, (value,))).await?;
     Ok(())
 }
 
@@ -132,7 +115,7 @@ async fn main() -> Result<()> {
     ) = config::load_config();
 
     // Rx/Tx Socket Setup
-    let mut rx_socket = socket_setup::setup_rx_socket(port_rx).await?;
+    let mut rx_socket = giggletech_osc::setup_rx_socket(port_rx).await?;
 
  
     // Timeout
@@ -140,7 +123,7 @@ async fn main() -> Result<()> {
     // I dont know why it needs to clone
     let headpat_device_ip_clone = headpat_device_ip.clone(); 
     task::spawn(async move {
-        osc_timeout(&headpat_device_ip_clone).await;
+        osc_timeout(&headpat_device_ip_clone).await.unwrap();
     });
 
     // Start/ Stop Function Setup
@@ -178,28 +161,22 @@ async fn main() -> Result<()> {
 
                     // Stop Function
                     if value == 0.0 {
-                        // Send 5 Stop Packets to Device - need to update so it sends stop packets until a new prox signal is made
-
+                        // Send 5 Stop Packets to Device 
                         println!("Stopping pats...");
                         start(running.clone(), running_mutex.clone()).await?;
 
                         for _ in 0..5 {
-                            send_data(&headpat_device_ip, TX_OSC_MOTOR_ADDRESS, 0i32).await?;
-                            
+                            giggletech_osc::send_data(&headpat_device_ip, TX_OSC_MOTOR_ADDRESS, 0i32).await?;  
                         }
 
                     } else {
-
-                        //let motor_speed_tx = data_processing::process_pat(value, max_speed, min_speed, speed_scale);
-                        send_data(&headpat_device_ip,
+                        giggletech_osc::send_data(&headpat_device_ip,
                             TX_OSC_MOTOR_ADDRESS,
                             data_processing::process_pat(value, max_speed, min_speed, speed_scale)).await?;
-                        
-
                     }
                 }
                 else {
-                    eprintln!("Unknown Address") // Have a debug mode, print if debug mode
+                    //eprintln!("Unknown Address") // Have a debug mode, print if debug mode
                 }
             } 
         }  
