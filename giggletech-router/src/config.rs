@@ -33,6 +33,16 @@ pub(crate) fn load_config() -> (
     }
     const MAX_SPEED_LOW_LIMIT_CONST: f32 = 0.05;
 
+    // ----------------------------------------------------------------------------------------------------------- TODO error if incorrect format
+    let headpat_device_uris: Vec<String> = config.get("Setup", "device_uris").unwrap()
+    .split_whitespace()
+    .map(|s| s.to_string()) // convert &str to String
+    .collect();
+
+    println!("Device URIs: {:?}", headpat_device_uris);
+
+
+
     let headpat_device_ip   = config.get("Setup", "device_ip").unwrap();
     let headpat_device_port = "8888".to_string();
     let min_speed           = config.get("Haptic_Config", "min_speed").unwrap();
