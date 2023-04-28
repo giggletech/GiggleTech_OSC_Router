@@ -13,13 +13,13 @@ use async_std::{
 };
 use lazy_static::lazy_static;
 use std::{sync::Mutex, time::{Duration, Instant}};
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool};
 
 // Modules
 mod data_processing;
 mod config;
 mod giggletech_osc;
-
+mod terminator;
 
 // OSC Address Setup
 const TX_OSC_MOTOR_ADDRESS: &str = "/avatar/parameters/motor";
@@ -46,46 +46,6 @@ async fn osc_timeout(device_ip: &str) -> Result<()> {
             *last_signal_time = Instant::now();
         }
     }
-}
-
-
-/*
-Signal Sender
-To Start: start(running.clone(), running_mutex.clone()).await?;
-to Stop : stop(running.clone(), running_mutex.clone()).await?;
- */
-
-
- async fn start(running: Arc<AtomicBool>, device_ip: &Arc<String>) -> Result<()> {
-    if running.load(Ordering::SeqCst) {
-        //return Err("Worker is already running".into());
-    }
-    let worker_running = running.clone();
-    let worker_device_ip = device_ip.clone();
-    task::spawn(async move {
-        worker(worker_running, worker_device_ip).await.unwrap();
-    });
-    running.store(true, Ordering::SeqCst);
-    Ok(())
-}
-
-async fn worker(running: Arc<AtomicBool>, device_ip: Arc<String>) -> Result<()> {
-    while running.load(Ordering::Relaxed) {
-        println!("Worker is running");
-        giggletech_osc::send_data(&device_ip, TX_OSC_MOTOR_ADDRESS, 0i32).await?;
-        task::sleep(Duration::from_secs(1)).await;
-    }
-    println!("Worker stopped");
-    Ok(())
-}
-
-
-async fn stop(running: Arc<AtomicBool>) -> Result<()> {
-    if !running.load(Ordering::SeqCst) {
-        //return Err("Worker is not running".into());
-    }
-    running.store(false, Ordering::SeqCst);
-    Ok(())
 }
 
 
@@ -146,7 +106,7 @@ async fn main() -> Result<()> {
                 // Prox Parmeter 
                 else if address == proximity_parameter_address  {
                     
-                    stop(running.clone()).await?;
+                    terminator::stop(running.clone()).await?;
                     // Update Last Signal Time for timeout clock
                     let mut last_signal_time = LAST_SIGNAL_TIME.lock().unwrap();
                     *last_signal_time = Instant::now();
@@ -155,7 +115,7 @@ async fn main() -> Result<()> {
                     if value == 0.0 {
                         // Send 5 Stop Packets to Device 
                         println!("Stopping pats...");
-                        start(running.clone(), &headpat_device_ip_arc).await?;
+                        terminator::start(running.clone(), &headpat_device_ip_arc).await?;
 
 
 
