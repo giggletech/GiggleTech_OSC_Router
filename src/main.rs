@@ -126,33 +126,6 @@ fn process_pat(proximity_signal: f32, max_speed: f32, min_speed: f32, speed_scal
 }
 
 
-// Tx & Rx Socket Setup
-
-fn create_socket_address(host: &str, port: &str) -> String {
-    let address_parts = vec![host, port];
-    address_parts.join(":")
-}
-
-async fn setup_rx_socket(port: std::string::String) -> Result<OscSocket> {
-    let rx_socket_address = create_socket_address("127.0.0.1", &port.to_string());
-    let rx_socket = OscSocket::bind(rx_socket_address).await?;
-    Ok(rx_socket)
-}
-
-async fn setup_tx_socket(address: std::string::String) -> Result<OscSocket> {
-    let tx_socket = OscSocket::bind("0.0.0.0:0").await?;
-    tx_socket.connect(address).await?;
-    Ok(tx_socket)
-}
-
-
-
-
-
-// OSC Address Setup
-const TX_OSC_MOTOR_ADDRESS: &str = "/avatar/parameters/motor";
-//const TX_OSC_LED_ADDRESS_2: &str = "/avatar/parameters/led";
-
 
 
 
@@ -161,6 +134,8 @@ lazy_static! {
     static ref LAST_SIGNAL_TIME: Mutex<Instant> = Mutex::new(Instant::now());
 }
 
+/* 
+Old Function
 async fn osc_timeout(tx_socket: OscSocket) -> Result<()> {
     // If no new osc signal is Rx for 5s, will send stop packets
     loop {
@@ -177,7 +152,26 @@ async fn osc_timeout(tx_socket: OscSocket) -> Result<()> {
         }
     }
 }
+*/
+async fn osc_timeout(device_ip: &str) -> Result<()> {
+    let tx_socket_address = create_socket_address(device_ip, "8888");
+    let mut tx_socket = setup_tx_socket(tx_socket_address).await?;
 
+    // If no new osc signal is Rx for 5s, will send stop packets
+    loop {
+        task::sleep(Duration::from_secs(1)).await;
+        let elapsed_time = Instant::now().duration_since(*LAST_SIGNAL_TIME.lock().unwrap());
+
+        if elapsed_time >= Duration::from_secs(5) {
+            // Send stop packet
+            println!("Pat Timeout...");
+            send_data(device_ip, TX_OSC_MOTOR_ADDRESS, 0i32).await?;
+
+            let mut last_signal_time = LAST_SIGNAL_TIME.lock().unwrap();
+            *last_signal_time = Instant::now();
+        }
+    }
+}
 
 
 
@@ -228,6 +222,42 @@ async fn stop(
 }
 
 
+// Tx & Rx Socket Setup
+
+fn create_socket_address(host: &str, port: &str) -> String {
+    let address_parts = vec![host, port];
+    address_parts.join(":")
+}
+
+async fn setup_rx_socket(port: std::string::String) -> Result<OscSocket> {
+    let rx_socket_address = create_socket_address("127.0.0.1", &port.to_string());
+    let rx_socket = OscSocket::bind(rx_socket_address).await?;
+    Ok(rx_socket)
+}
+
+async fn setup_tx_socket(address: std::string::String) -> Result<OscSocket> {
+    let tx_socket = OscSocket::bind("0.0.0.0:0").await?;
+    tx_socket.connect(address).await?;
+    Ok(tx_socket)
+}
+
+
+// OSC Address Setup
+const TX_OSC_MOTOR_ADDRESS: &str = "/avatar/parameters/motor";
+//const TX_OSC_LED_ADDRESS_2: &str = "/avatar/parameters/led";
+
+
+async fn send_data(device_ip: &str, address: &str, value: i32) -> Result<()> {
+    println!("Sending to IP: {}%", device_ip);
+    let tx_socket_address = create_socket_address(device_ip, "8888"); // use port 57120 for OSC
+    let mut tx_socket = setup_tx_socket(tx_socket_address.clone()).await?;
+    tx_socket.connect(tx_socket_address).await?;
+    tx_socket.send((address, (value,))).await?;
+    Ok(())
+}
+
+
+
 #[async_std::main]
 async fn main() -> Result<()> {
      
@@ -253,7 +283,12 @@ async fn main() -> Result<()> {
     let tx_socket_clone = setup_tx_socket(tx_socket_address).await?;
  
     // Timeout
-    task::spawn(osc_timeout(tx_socket_clone));
+    //task::spawn(osc_timeout(tx_socket_clone)); Old FunctionS
+// Clone `headpat_device_ip` and call `osc_timeout()` with the clone
+    //let headpat_device_ip_clone = headpat_device_ip.clone();
+    task::spawn(osc_timeout("192.168.1.157"));
+
+
 
     // Start/ Stop Function Setup
     let running = Arc::new(AtomicBool::new(false));
@@ -296,18 +331,16 @@ async fn main() -> Result<()> {
                         start(running.clone(), running_mutex.clone()).await?;
 
                         for _ in 0..5 {
-                            tx_socket
-                                .send((TX_OSC_MOTOR_ADDRESS, (0i32,)))
-                                .await?;
+                            send_data(&headpat_device_ip, TX_OSC_MOTOR_ADDRESS, 0i32).await?;
+                            
                         }
 
                     } else {
                         // Process Pat signal to send to Device 
                         let motor_speed_tx = process_pat(value, max_speed, min_speed, speed_scale);
+                        send_data(&headpat_device_ip, TX_OSC_MOTOR_ADDRESS, motor_speed_tx).await?;
                         
-                        tx_socket
-                            .send((TX_OSC_MOTOR_ADDRESS, (motor_speed_tx,)))
-                            .await?;
+
                     }
                 }
                 else {
