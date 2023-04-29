@@ -16,6 +16,12 @@ mod giggletech_osc;
 mod terminator;
 mod osc_timeout;
 
+
+
+
+
+
+ 
 #[async_std::main]
 async fn main() -> Result<()> {
      
@@ -34,6 +40,10 @@ async fn main() -> Result<()> {
 
     ) = config::load_config();
 
+    let headpat_device_ip_arc_2_orig = Arc::new("192.168.1.153".to_string());
+    let headpat_device_ip_arc_2 = &Arc::clone(&headpat_device_ip_arc_2_orig);
+
+    let proximity_parameter_address_2 = "/avatar/parameters/proximity_02";
     // Rx/Tx Socket Setup
     let mut rx_socket = giggletech_osc::setup_rx_socket(port_rx).await?;
 
@@ -44,16 +54,11 @@ async fn main() -> Result<()> {
         osc_timeout(&headpat_device_ip_clone).await.unwrap();
     });
 
+
+
     // Start/ Stop Function Setup
     let running = Arc::new(AtomicBool::new(false));
     let headpat_device_ip_arc = Arc::new(headpat_device_ip);
-
-
-
-
-
-
-    
 
     // Listen for OSC Packets
     while let Some(packet) = rx_socket.next().await {
@@ -76,7 +81,7 @@ async fn main() -> Result<()> {
                     max_speed = value.max(max_speed_low_limit);
                 }
                 
-                // Prox Parmeter 
+                // Prox Parmeter 1
                 else if address == proximity_parameter_address  {
                     
                     terminator::stop(running.clone()).await?;
@@ -98,6 +103,42 @@ async fn main() -> Result<()> {
                             data_processing::process_pat(value, max_speed, min_speed, speed_scale)).await?;
                     }
                 }
+
+               // Prox Parmeter 2
+               else if address == proximity_parameter_address_2  {
+               //else if address == proximity_parameter_address  {
+                    
+                terminator::stop(running.clone()).await?;
+                // Update Last Signal Time for timeout clock
+                let mut last_signal_time = osc_timeout::LAST_SIGNAL_TIME.lock().unwrap();
+                *last_signal_time = Instant::now();
+
+                // Stop Function
+                if value == 0.0 {
+                    println!("Stopping pats...");
+                    terminator::start(running.clone(), &headpat_device_ip_arc_2).await?;
+
+                    for _ in 0..5 {
+                        giggletech_osc::send_data(&headpat_device_ip_arc_2, 0i32).await?;  
+                    }
+
+                } else {
+                    giggletech_osc::send_data(&headpat_device_ip_arc_2,
+                        data_processing::process_pat(value, max_speed, min_speed, speed_scale)).await?;
+                }
+            }
+
+
+
+
+
+
+
+
+
+
+
+
                 else {
                     //eprintln!("Unknown Address") // Have a debug mode, print if debug mode
                 }
