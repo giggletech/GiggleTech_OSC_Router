@@ -142,7 +142,7 @@ async fn main() -> Result<()> {
 
 async fn handle_proximity_parameter(
     running: Arc<AtomicBool>,
-    headpat_device_ip_arc: &Arc<String>,
+    device_ip: &Arc<String>,
     value: f32,
     max_speed: f32,
     min_speed: f32,
@@ -158,13 +158,13 @@ async fn handle_proximity_parameter(
     // Stop Function
     if value == 0.0 {
         println!("Stopping pats...");
-        terminator::start(running.clone(), &headpat_device_ip_arc).await?;
+        terminator::start(running.clone(), &device_ip).await?;
 
         for _ in 0..5 {
-            giggletech_osc::send_data(&headpat_device_ip_arc, 0i32).await?;  
+            giggletech_osc::send_data(&device_ip, 0i32).await?;  
         }
     } else {
-        giggletech_osc::send_data(&headpat_device_ip_arc,
+        giggletech_osc::send_data(&device_ip,
             data_processing::process_pat(value, max_speed, min_speed, speed_scale)).await?;
     }
     Ok(())
@@ -189,17 +189,17 @@ async fn main() -> Result<()> {
         max_speed_low_limit,
     ) = config::load_config();
 
-    let headpat_device_ip_arc = Arc::new(headpat_device_ip);
+    //let headpat_device_ip_arc = Arc::new(headpat_device_ip);
     let running = Arc::new(AtomicBool::new(false));
 
     // Rx/Tx Socket Setup
     let mut rx_socket = giggletech_osc::setup_rx_socket(port_rx).await?;
 
     // Timeout
-    //let headpat_device_ip_clone = headpat_device_ip.clone();
-    //task::spawn(async move {
-    //    osc_timeout(&headpat_device_ip_clone).await.unwrap();
-    //});
+    let headpat_device_ip_clone = headpat_device_ip.clone();
+    task::spawn(async move {
+        osc_timeout(&headpat_device_ip_clone).await.unwrap();
+    });
 
     // Listen for OSC Packets
     while let Some(packet) = rx_socket.next().await {
