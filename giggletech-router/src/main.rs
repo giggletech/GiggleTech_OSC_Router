@@ -140,6 +140,11 @@ async fn main() -> Result<()> {
 
 */
 
+/* 
+
+*/
+
+
 async fn handle_proximity_parameter(
     running: Arc<AtomicBool>,
     device_ip: &Arc<String>,
@@ -152,10 +157,9 @@ async fn handle_proximity_parameter(
     terminator::stop(running.clone()).await?;
 
     // Update Last Signal Time for timeout clock
+        
     let mut last_signal_time = osc_timeout::LAST_SIGNAL_TIME.lock().unwrap();
     *last_signal_time = Instant::now();
-
-    // Stop Function
     if value == 0.0 {
         println!("Stopping pats...");
         terminator::start(running.clone(), &device_ip).await?;
@@ -189,7 +193,7 @@ async fn main() -> Result<()> {
         max_speed_low_limit,
     ) = config::load_config();
 
-    //let headpat_device_ip_arc = Arc::new(headpat_device_ip);
+    // Setup Start / Stop of Terminiator
     let running = Arc::new(AtomicBool::new(false));
 
     // Rx/Tx Socket Setup
@@ -225,7 +229,7 @@ async fn main() -> Result<()> {
                     match index {
                         Some(i) => {
                             handle_proximity_parameter(
-                                running.clone(),
+                                running.clone(), // Terminator
                                 &Arc::new(headpat_device_uris[i].clone()),
                                 value,
                                 max_speed,
