@@ -32,7 +32,7 @@ async fn handle_proximity_parameter(
 ) -> Result<()> {
     terminator::stop(running.clone()).await?;
 
-    // Update Last Signal Time for timeout clock
+    // Update Last Signal Time for timeout clock --------------------------------------------------------------- this has to be changed
         
     let mut last_signal_time = osc_timeout::LAST_SIGNAL_TIME.lock().unwrap();
     *last_signal_time = Instant::now();
@@ -77,13 +77,7 @@ async fn main() -> Result<()> {
     // Rx/Tx Socket Setup
     let mut rx_socket = giggletech_osc::setup_rx_socket(port_rx).await?;
 
-    // Timeout
-    /*
-    let headpat_device_ip_clone = headpat_device_ip.clone();
-    task::spawn(async move {
-        osc_timeout(&headpat_device_ip_clone).await.unwrap();
-    });
-*/
+
     // Timeout
     for ip in &headpat_device_uris {
         let headpat_device_ip_clone = ip.clone();
