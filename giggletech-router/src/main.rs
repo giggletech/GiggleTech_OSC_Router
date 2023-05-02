@@ -78,10 +78,22 @@ async fn main() -> Result<()> {
     let mut rx_socket = giggletech_osc::setup_rx_socket(port_rx).await?;
 
     // Timeout
+    /*
     let headpat_device_ip_clone = headpat_device_ip.clone();
     task::spawn(async move {
         osc_timeout(&headpat_device_ip_clone).await.unwrap();
     });
+*/
+    // Timeout
+    for ip in &headpat_device_uris {
+        let headpat_device_ip_clone = ip.clone();
+        task::spawn(async move {
+            osc_timeout(&headpat_device_ip_clone).await.unwrap();
+        });
+    }
+
+
+
 
     // Listen for OSC Packets
     while let Some(packet) = rx_socket.next().await {
