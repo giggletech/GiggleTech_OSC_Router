@@ -1,5 +1,5 @@
 // osc_timeout.rs
-
+/* 
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
@@ -11,6 +11,7 @@ lazy_static! {
     pub static ref DEVICE_LAST_SIGNAL_TIME: Arc<Mutex<HashMap<String, Instant>>> =
         Arc::new(Mutex::new(HashMap::new()));
 }
+
 
 pub async fn osc_timeout(device_ip: &str, timeout: u64) -> Result<()> {
     loop {
@@ -24,3 +25,4 @@ pub async fn osc_timeout(device_ip: &str, timeout: u64) -> Result<()> {
         }
     }
 }
+*/

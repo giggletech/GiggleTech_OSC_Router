@@ -1,6 +1,6 @@
 // data_processing.rs
 
-
+/*
 pub fn proximity_graph(proximity_signal: f32) -> String {
     let num_dashes = (proximity_signal * 10.0) as usize;
     let graph = "-".repeat(num_dashes) + ">";
@@ -31,4 +31,4 @@ pub fn process_pat(proximity_signal: f32, max_speed: f32, min_speed: f32, speed_
     headpat_tx
 }
 
-
+*/
