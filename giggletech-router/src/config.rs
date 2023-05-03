@@ -37,7 +37,7 @@ pub(crate) fn load_config() -> (
     const MAX_SPEED_LOW_LIMIT_CONST: f32 = 0.05;
 
     // Check the format of the IP URIs
-    let headpat_device_uris: Vec<String> = config.get("Setup", "device_uris")
+    let headpat_device_uris: Vec<String> = config.get("Setup", "device_ips")
         .unwrap()
         .split_whitespace()
         .map(|s| s.to_string()) // convert &str to String
@@ -87,9 +87,8 @@ pub(crate) fn load_config() -> (
     println!("\n Timeout: {}", timeout);
 
 
-    let max_speed_parameter_address = config
-        .get("Setup", "max_speed_parameter")
-        .unwrap_or_else(|| "/avatar/parameters/max_speed".into());
+    let max_speed_parameter_address = format!("/avatar/parameters/{}", config.get("Setup", "max_speed_parameter").unwrap_or_else(|| "/avatar/parameters/max_speed".into()));
+
 
     println!("\n");
     banner_txt();
