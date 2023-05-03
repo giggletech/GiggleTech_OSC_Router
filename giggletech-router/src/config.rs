@@ -13,9 +13,10 @@ fn banner_txt(){
     println!(" ██    ██ ██ ██    ██ ██    ██ ██      ██             ██    ██      ██      ██   ██ ");
     println!("  ██████  ██  ██████   ██████  ███████ ███████        ██    ███████  ██████ ██   ██ ");
     println!("");
-    println!(" █▀█ █▀ █▀▀   █▀█ █▀█ █ █ ▀█▀ █▀▀ █▀█");
-    println!(" █▄█ ▄█ █▄▄   █▀▄ █▄█ █▄█  █  ██▄ █▀▄");
-                                                                                
+    println!(" █ █ █▀█ █▀▀ █ █ ▄▀█ ▀█▀   █▀█ █▀ █▀▀   █▀ █ █▀▄▀█");
+    println!(" ▀▄▀ █▀▄ █▄▄ █▀█ █▀█  █    █▄█ ▄█ █▄▄   ▄█ █ █ ▀ █");
+
+
 }
 
 pub(crate) fn load_config() -> (
@@ -96,13 +97,8 @@ pub(crate) fn load_config() -> (
         println!(" {} => {}", parameter.trim_start_matches("/avatar/parameters/"), headpat_device_uris[i]);
     }
 
-    println!("\n Listening for OSC on port: {}", port_rx);
-    println!("\n Vibration Configuration");
-    println!(" Min Speed: {}%", min_speed);
-    println!(" Max Speed: {:?}%", max_speed_float * 100.0);
-    println!(" Scale Factor: {}%", speed_scale);
-    println!(" Timeout: {}s", timeout);
-    println!("\nWaiting for pats...");
+    println!("\n Sending to Port: {} \n", port_rx);
+
 
     (
         headpat_device_uris,

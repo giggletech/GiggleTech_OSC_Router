@@ -9,11 +9,19 @@ use std::time::Duration;
 use std::thread;
 
 
-mod data_processing;
+
 mod config;
 mod giggletech_osc;
-mod terminator;
-mod osc_timeout;
+
+use std::io::{stdin, stdout, Write};
+
+fn wait_for_enter() {
+    let mut input = String::new();
+    println!("Press 'Enter' to continue...");
+    stdout().flush().expect("Failed to flush stdout");
+    stdin().read_line(&mut input).expect("Failed to read line from stdin");
+}
+
 
 async fn cycle_values(steps: i32, osc_address: &str, port_rx: &str) -> Result<()> {
     for i in 0..2 {
@@ -23,9 +31,9 @@ async fn cycle_values(steps: i32, osc_address: &str, port_rx: &str) -> Result<()
             } else {
                 (steps - j) as f32 / steps as f32
             };
-            println!("sending value: {} to osc_address: {}", value, osc_address);
+            println!("{}: {}", osc_address, value);
             giggletech_osc::send_data("127.0.0.1", osc_address, port_rx, value).await?;
-            thread::sleep(Duration::from_millis(100));
+            thread::sleep(Duration::from_millis(50));
         }
     }
     Ok(())
@@ -35,7 +43,7 @@ async fn cycle_values(steps: i32, osc_address: &str, port_rx: &str) -> Result<()
 async fn cycle_max_speed_up(steps: i32, osc_address: &str, port_rx: &str) -> Result<()> {
     for j in 0..=steps {
         let value = j as f32 / steps as f32;
-        println!("sending value: {} to osc_address: {}", value, osc_address);
+        println!("/avatar/parameters/max_speed: {}", value);
         giggletech_osc::send_data("127.0.0.1", "/avatar/parameters/max_speed", &port_rx, value).await?;
         thread::sleep(Duration::from_millis(100));
     }
@@ -70,11 +78,30 @@ async fn main() -> Result<()> {
         let mut input = String::new();
     
         for osc_address in &proximity_parameters_multi {
+            
+            println!("Cycle {} at 20% Speed", osc_address);
+            println!("");
+            giggletech_osc::send_data("127.0.0.1", "/avatar/parameters/max_speed", &port_rx, 0.2).await?;
+
+            wait_for_enter();
+
             cycle_values(steps, osc_address, &port_rx).await?;
-            println!("cycle complete, cycle max speed");
+            cycle_values(steps, osc_address, &port_rx).await?;
+            cycle_values(steps, osc_address, &port_rx).await?;
+
+            println!("\nCycle complete \n");
+            println!("Set Device to Max Speed \n");
+            wait_for_enter();
+
             cycle_max_speed_up(steps, osc_address, &port_rx).await?;
+            println!("\nTest Device at Max Speed \n");
+            wait_for_enter();
+
             cycle_values(steps, osc_address, &port_rx).await?;
-            println!("reset max speed to 20%");
+            cycle_values(steps, osc_address, &port_rx).await?;
+            cycle_values(steps, osc_address, &port_rx).await?;
+
+            println!("\nReset max speed to 20%");
             giggletech_osc::send_data("127.0.0.1", "/avatar/parameters/max_speed", &port_rx, 0.2).await?;
             println!("Press enter to test next device");
             stdout().flush()?;
