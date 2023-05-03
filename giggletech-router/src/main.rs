@@ -26,7 +26,7 @@ mod config;
 mod giggletech_osc;
 mod terminator;
 mod osc_timeout;
-mod handle_proximity_parameter;
+
 
 
 #[async_std::main]
@@ -44,19 +44,13 @@ async fn main() -> Result<()> {
         timeout,
     ) = config::load_config();
 
-    // Setup Start / Stop of Terminiator
-    let running = Arc::new(AtomicBool::new(false));
 
-    // Rx/Tx Socket Setup
-    let mut rx_socket = giggletech_osc::setup_rx_socket(port_rx).await?;
-
-    // Timeout
-    for ip in &headpat_device_uris {
-        //let headpat_device_ip_clone = ip.clone();
-        println!("ip {}", ip);
-        giggletech_osc::send_data(ip, 100).await?;
+    for osc_address in &proximity_parameters_multi {
+        
+        println!("osc_address: {}",  osc_address);
+        giggletech_osc::send_data("127.0.0.1",  osc_address, &port_rx, 0.9).await?;
         thread::sleep(Duration::from_secs(1));
-        giggletech_osc::send_data(ip, 0).await?;
+        
 
     }
     

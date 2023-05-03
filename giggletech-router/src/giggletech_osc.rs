@@ -27,11 +27,11 @@ pub(crate) async fn setup_tx_socket(address: std::string::String) -> Result<OscS
 }
 
 
-pub(crate) async fn send_data(device_ip: &str, value: i32) -> Result<()> {
-    //println!("Sending Value:{} to IP: {}", value, device_ip);
-    let tx_socket_address = create_socket_address(device_ip, "8888"); // ------------------- Port to Send OSC Data Too
+pub(crate) async fn send_data(device_ip: &str, osc_address: &str, port: &str, value: f32) -> Result<()> {
+    println!("Sending Value:{} to IP: {}", value, device_ip);
+    let tx_socket_address = create_socket_address(device_ip, port); // ------------------- Port to Send OSC Data Too
     let tx_socket = setup_tx_socket(tx_socket_address.clone()).await?;
     tx_socket.connect(tx_socket_address).await?;
-    tx_socket.send((TX_OSC_MOTOR_ADDRESS, (value,))).await?;
+    tx_socket.send((osc_address, (value,))).await?;
     Ok(())
 }
