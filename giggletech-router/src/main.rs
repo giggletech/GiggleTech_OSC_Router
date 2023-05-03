@@ -9,7 +9,6 @@ use async_std::{stream::StreamExt, task::{self}, sync::Arc,};
 use std::sync::atomic::{AtomicBool};
 
 use crate::osc_timeout::osc_timeout;
-
 mod data_processing;
 mod config;
 mod giggletech_osc;
@@ -38,7 +37,6 @@ async fn main() -> Result<()> {
     // Rx/Tx Socket Setup
     let mut rx_socket = giggletech_osc::setup_rx_socket(port_rx).await?;
 
-
     // Timeout
     for ip in &headpat_device_uris {
         let headpat_device_ip_clone = ip.clone();
@@ -50,7 +48,7 @@ async fn main() -> Result<()> {
     while let Some(packet) = rx_socket.next().await {
         let (packet, _peer_addr) = packet?;
 
-        // Filter OSC Signals: Headpat Max & Headpat Prox
+        // Filter OSC Signals
         match packet {
             OscPacket::Bundle(_) => {}
             OscPacket::Message(message) => {
@@ -66,9 +64,11 @@ async fn main() -> Result<()> {
                     max_speed = value.max(max_speed_low_limit);
                 } else {
                     let index = proximity_parameters_multi.iter().position(|a| *a == address);
+                    
 
                     match index {
                         Some(i) => {
+    
                             handle_proximity_parameter::handle_proximity_parameter(
                                 running.clone(), // Terminator
                                 &Arc::new(headpat_device_uris[i].clone()),
@@ -76,6 +76,7 @@ async fn main() -> Result<()> {
                                 max_speed,
                                 min_speed,
                                 speed_scale,
+                                &proximity_parameters_multi[i],
                             )
                             .await?
                         }

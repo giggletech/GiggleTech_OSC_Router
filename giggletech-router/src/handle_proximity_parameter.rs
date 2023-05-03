@@ -19,6 +19,7 @@ pub(crate) async fn handle_proximity_parameter(
     max_speed: f32,
     min_speed: f32,
     speed_scale: f32,
+    proximity_parameters_multi: &String,
 ) -> Result<()> {
     terminator::stop(running.clone()).await?;
 
@@ -35,7 +36,8 @@ pub(crate) async fn handle_proximity_parameter(
         }
     } else {
         giggletech_osc::send_data(&device_ip,
-            data_processing::process_pat(value, max_speed, min_speed, speed_scale)).await?;
+            data_processing::process_pat(value, max_speed, min_speed, speed_scale, proximity_parameters_multi)).await?;
+
     }
     Ok(())
 }
