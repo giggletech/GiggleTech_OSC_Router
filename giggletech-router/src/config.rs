@@ -1,6 +1,7 @@
+// config.rs
+
 use configparser::ini::Ini;
 use std::{net::IpAddr};
-
 
 // Banner
 fn banner_txt(){
@@ -18,15 +19,15 @@ fn banner_txt(){
 }
 
 pub(crate) fn load_config() -> (
-    Vec<String>, // headpat_device_URIs
-    f32,    // min_speed_float
-    f32,    // max_speed_float
-    f32,    // speed_scale_float
-    String, // port_rx
-    Vec<String>, // proximity_parameters_multi
-    String, // max_speed_parameter_address
-    f32,    // Max Speed Low Limit
-    u64,    // Timeout Setting
+    Vec<String>,    // headpat_device_URIs
+    f32,            // min_speed_float
+    f32,            // max_speed_float
+    f32,            // speed_scale_float
+    String,         // port_rx
+    Vec<String>,    // proximity_parameters_multi
+    String,         // max_speed_parameter_address
+    f32,            // Max Speed Low Limit
+    u64,            // Timeout Setting
     ) {
     let mut config = Ini::new();
 
@@ -34,8 +35,7 @@ pub(crate) fn load_config() -> (
         Err(why) => panic!("{}", why),
         Ok(_) => {}
     }
-    const MAX_SPEED_LOW_LIMIT_CONST: f32 = 0.05;
-
+    
     // Check the format of the IP URIs
     let headpat_device_uris: Vec<String> = config.get("Setup", "device_ips")
         .unwrap()
@@ -56,10 +56,6 @@ pub(crate) fn load_config() -> (
         // handle error here, e.g. return early from the function or exit the program
     }
 
-    
-
-    // Multi Device
-
     let proximity_parameters_multi: Vec<String> = config
     .get("Setup", "proximity_parameters_multi")
     .unwrap()
@@ -73,22 +69,24 @@ pub(crate) fn load_config() -> (
         // handle error here, e.g. return early from the function or exit the program
     }
 
-    let min_speed           = config.get("Config", "min_speed").unwrap();
-    let min_speed_float     = min_speed.parse::<f32>().unwrap() / 100.0;
-    let max_speed           = config.get("Config", "max_speed").unwrap();
-    let max_speed_float     = max_speed.parse::<f32>().unwrap() / 100.0; 
-    let max_speed_low_limit = MAX_SPEED_LOW_LIMIT_CONST;
-    let max_speed_float     = max_speed_float.max(max_speed_low_limit);
-    let speed_scale         = config.get("Config", "max_speed_scale").unwrap();
-    let speed_scale_float   = speed_scale.parse::<f32>().unwrap() / 100.0;
-    let port_rx             = config.get("Setup", "port_rx").unwrap();
-    let timeout_str             = config.get("Config", "timeout").unwrap();
-    let timeout = timeout_str.parse::<u64>().unwrap_or(0);
-    println!("\n Timeout: {}", timeout);
+    const MAX_SPEED_LOW_LIMIT_CONST: f32 = 0.05;
 
-
+    let min_speed                = config.get("Config", "min_speed").unwrap();
+    let min_speed_float             = min_speed.parse::<f32>().unwrap() / 100.0;
+    
+    let max_speed                   = config.get("Config", "max_speed").unwrap().parse::<f32>().unwrap() / 100.0; 
+    let max_speed_low_limit         = MAX_SPEED_LOW_LIMIT_CONST;
+    let max_speed_float             = max_speed.max(max_speed_low_limit);
+    
+    let speed_scale              = config.get("Config", "max_speed_scale").unwrap();
+    let speed_scale_float           = speed_scale.parse::<f32>().unwrap() / 100.0;
+    
+    let port_rx                  = config.get("Setup", "port_rx").unwrap();
+    
+    let timeout_str              = config.get("Config", "timeout").unwrap();
+    let timeout                     = timeout_str.parse::<u64>().unwrap_or(0);
+    
     let max_speed_parameter_address = format!("/avatar/parameters/{}", config.get("Setup", "max_speed_parameter").unwrap_or_else(|| "/avatar/parameters/max_speed".into()));
-
 
     println!("\n");
     banner_txt();
@@ -103,6 +101,7 @@ pub(crate) fn load_config() -> (
     println!(" Min Speed: {}%", min_speed);
     println!(" Max Speed: {:?}%", max_speed_float * 100.0);
     println!(" Scale Factor: {}%", speed_scale);
+    println!(" Timeout: {}s", timeout);
     println!("\nWaiting for pats...");
 
     (
@@ -117,3 +116,6 @@ pub(crate) fn load_config() -> (
         timeout,
     )
 }
+
+
+
