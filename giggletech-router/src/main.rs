@@ -6,65 +6,27 @@
 
 use async_osc::{prelude::*, OscPacket, OscType, Result};
 use async_std::{stream::StreamExt, task::{self}, sync::Arc,};
-use std::{time::{Instant}};
 use std::sync::atomic::{AtomicBool};
 
 use crate::osc_timeout::osc_timeout;
+
 mod data_processing;
 mod config;
 mod giggletech_osc;
 mod terminator;
 mod osc_timeout;
-
-
-
-
-async fn handle_proximity_parameter(
-    running: Arc<AtomicBool>,
-    device_ip: &Arc<String>,
-    value: f32,
-    max_speed: f32,
-    min_speed: f32,
-    speed_scale: f32,
-    proximity_parameter_address: &str,
-) -> Result<()> {
-    terminator::stop(running.clone()).await?;
-
-    // Update Last Signal Time for timeout clock --------------------------------------------------------------- this has to be changed
-        
-    let mut device_last_signal_times = osc_timeout::DEVICE_LAST_SIGNAL_TIME.lock().unwrap();
-    device_last_signal_times.insert(device_ip.to_string(), Instant::now());
-    
-    if value == 0.0 {
-        println!("Stopping pats...");
-        terminator::start(running.clone(), &device_ip).await?;
-
-        for _ in 0..5 {
-            giggletech_osc::send_data(&device_ip, 0i32).await?;  
-        }
-    } else {
-        //start_timer(value);
-        giggletech_osc::send_data(&device_ip,
-            data_processing::process_pat(value, max_speed, min_speed, speed_scale)).await?;
-    }
-    Ok(())
-}
-
-
+mod handle_proximity_parameter;
 
 
 #[async_std::main]
 async fn main() -> Result<()> {
-    // Import Config
-    // Todo: Refactor
+
     let (
-        headpat_device_ip,
         headpat_device_uris,
         min_speed,
         mut max_speed,
         speed_scale,
         port_rx,
-        proximity_parameter_addresses,
         proximity_parameters_multi,
         max_speed_parameter_address,
         max_speed_low_limit,
@@ -84,10 +46,6 @@ async fn main() -> Result<()> {
             osc_timeout(&headpat_device_ip_clone).await.unwrap();
         });
     }
-
-
-
-
     // Listen for OSC Packets
     while let Some(packet) = rx_socket.next().await {
         let (packet, _peer_addr) = packet?;
@@ -111,14 +69,13 @@ async fn main() -> Result<()> {
 
                     match index {
                         Some(i) => {
-                            handle_proximity_parameter(
+                            handle_proximity_parameter::handle_proximity_parameter(
                                 running.clone(), // Terminator
                                 &Arc::new(headpat_device_uris[i].clone()),
                                 value,
                                 max_speed,
                                 min_speed,
                                 speed_scale,
-                                &proximity_parameters_multi[i],
                             )
                             .await?
                         }

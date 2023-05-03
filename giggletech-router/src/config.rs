@@ -1,6 +1,7 @@
 use configparser::ini::Ini;
 use std::net::IpAddr;
 
+
 // Banner
 fn banner_txt(){
     // https://fsymbols.com/generators/carty/
@@ -17,13 +18,11 @@ fn banner_txt(){
 }
 
 pub(crate) fn load_config() -> (
-    String, // headpat_device_ip
     Vec<String>, // headpat_device_URIs
     f32,    // min_speed_float
     f32,    // max_speed_float
     f32,    // speed_scale_float
     String, // port_rx
-    String, // proximity_parameter_address
     Vec<String>, // proximity_parameters_multi
     String, // max_speed_parameter_address
     f32,    // Max Speed Low Limit
@@ -35,8 +34,6 @@ pub(crate) fn load_config() -> (
         Ok(_) => {}
     }
     const MAX_SPEED_LOW_LIMIT_CONST: f32 = 0.05;
-
-
 
     // Check the format of the IP URIs
     let headpat_device_uris: Vec<String> = config.get("Setup", "device_uris")
@@ -58,18 +55,16 @@ pub(crate) fn load_config() -> (
         // handle error here, e.g. return early from the function or exit the program
     }
 
-    println!("Device URIs: {:?}", headpat_device_uris);
+    
 
     // Multi Device
 
-
-    let proximity_parameters_multi: Vec<String> = config.get("Setup", "proximity_parameters_multi")
+    let proximity_parameters_multi: Vec<String> = config
+    .get("Setup", "proximity_parameters_multi")
     .unwrap()
     .split_whitespace()
-    .map(|s| format!("/avatar/parameters/{}", s)) // add "/avatar/parameters/" prefix to each string
+    .map(|s| format!("/avatar/parameters/{}", s))
     .collect();
-
-    println!("Device URIs: {:?}", proximity_parameters_multi);
 
     
     if headpat_device_uris.len() != proximity_parameters_multi.len() {
@@ -77,21 +72,6 @@ pub(crate) fn load_config() -> (
         // handle error here, e.g. return early from the function or exit the program
     }
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-    let headpat_device_ip   = config.get("Setup", "device_ip").unwrap();
-    let headpat_device_port = "8888".to_string();
     let min_speed           = config.get("Haptic_Config", "min_speed").unwrap();
     let min_speed_float     = min_speed.parse::<f32>().unwrap() / 100.0;
     let max_speed           = config.get("Haptic_Config", "max_speed").unwrap();
@@ -102,9 +82,7 @@ pub(crate) fn load_config() -> (
     let speed_scale_float   = speed_scale.parse::<f32>().unwrap() / 100.0;
     let port_rx             = config.get("Setup", "port_rx").unwrap();
 
-    let proximity_parameter_address = config
-        .get("Setup", "proximity_parameter")
-        .unwrap_or_else(|| "/avatar/parameters/proximity_01".into());
+
     let max_speed_parameter_address = config
         .get("Setup", "max_speed_parameter")
         .unwrap_or_else(|| "/avatar/parameters/max_speed".into());
@@ -112,8 +90,12 @@ pub(crate) fn load_config() -> (
     println!("\n");
     banner_txt();
     println!("\n");
-    println!(" Haptic Device: {}:{}", headpat_device_ip, headpat_device_port);
-    println!(" Listening for OSC on port: {}", port_rx);
+    println!(" Device Maps");
+    for (i, parameter) in proximity_parameters_multi.iter().enumerate() {
+        println!(" {} => {}", parameter.trim_start_matches("/avatar/parameters/"), headpat_device_uris[i]);
+    }
+
+    println!("\n Listening for OSC on port: {}", port_rx);
     println!("\n Vibration Configuration");
     println!(" Min Speed: {}%", min_speed);
     println!(" Max Speed: {:?}%", max_speed_float * 100.0);
@@ -121,13 +103,11 @@ pub(crate) fn load_config() -> (
     println!("\nWaiting for pats...");
 
     (
-        headpat_device_ip,
         headpat_device_uris,
         min_speed_float,
         max_speed_float,
         speed_scale_float,
         port_rx,
-        proximity_parameter_address,
         proximity_parameters_multi,
         max_speed_parameter_address,
         max_speed_low_limit,
