@@ -19,8 +19,6 @@ mod osc_timeout;
 
 
 
-
-
 async fn handle_proximity_parameter(
     running: Arc<AtomicBool>,
     device_ip: &Arc<String>,
@@ -34,8 +32,9 @@ async fn handle_proximity_parameter(
 
     // Update Last Signal Time for timeout clock --------------------------------------------------------------- this has to be changed
         
-    let mut last_signal_time = osc_timeout::LAST_SIGNAL_TIME.lock().unwrap();
-    *last_signal_time = Instant::now();
+    let mut device_last_signal_times = osc_timeout::DEVICE_LAST_SIGNAL_TIME.lock().unwrap();
+    device_last_signal_times.insert(device_ip.to_string(), Instant::now());
+    
     if value == 0.0 {
         println!("Stopping pats...");
         terminator::start(running.clone(), &device_ip).await?;
