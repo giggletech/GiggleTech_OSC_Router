@@ -40,7 +40,7 @@ async fn cycle_values(steps: i32, osc_address: &str, port_rx: &str) -> Result<()
 }
 
 
-async fn cycle_max_speed_up(steps: i32, osc_address: &str, port_rx: &str) -> Result<()> {
+async fn cycle_max_speed_up(steps: i32, _osc_address: &str, port_rx: &str) -> Result<()> {
     for j in 0..=steps {
         let value = j as f32 / steps as f32;
         println!("/avatar/parameters/max_speed: {}", value);
@@ -124,7 +124,6 @@ async fn main() -> Result<()> {
     }
     
 
-    //giggletech_osc::send_data("127.0.0.1", "/avatar/parameters/max_speed", &port_rx, max_speed_value).await?;
 
 
     Ok(())
