@@ -1,5 +1,5 @@
 use configparser::ini::Ini;
-use std::net::IpAddr;
+use std::{net::IpAddr};
 
 
 // Banner
@@ -26,6 +26,7 @@ pub(crate) fn load_config() -> (
     Vec<String>, // proximity_parameters_multi
     String, // max_speed_parameter_address
     f32,    // Max Speed Low Limit
+    u64,    // Timeout Setting
     ) {
     let mut config = Ini::new();
 
@@ -72,15 +73,18 @@ pub(crate) fn load_config() -> (
         // handle error here, e.g. return early from the function or exit the program
     }
 
-    let min_speed           = config.get("Haptic_Config", "min_speed").unwrap();
+    let min_speed           = config.get("Config", "min_speed").unwrap();
     let min_speed_float     = min_speed.parse::<f32>().unwrap() / 100.0;
-    let max_speed           = config.get("Haptic_Config", "max_speed").unwrap();
+    let max_speed           = config.get("Config", "max_speed").unwrap();
     let max_speed_float     = max_speed.parse::<f32>().unwrap() / 100.0; 
     let max_speed_low_limit = MAX_SPEED_LOW_LIMIT_CONST;
     let max_speed_float     = max_speed_float.max(max_speed_low_limit);
-    let speed_scale         = config.get("Haptic_Config", "max_speed_scale").unwrap();
+    let speed_scale         = config.get("Config", "max_speed_scale").unwrap();
     let speed_scale_float   = speed_scale.parse::<f32>().unwrap() / 100.0;
     let port_rx             = config.get("Setup", "port_rx").unwrap();
+    let timeout_str             = config.get("Config", "timeout").unwrap();
+    let timeout = timeout_str.parse::<u64>().unwrap_or(0);
+    println!("\n Timeout: {}", timeout);
 
 
     let max_speed_parameter_address = config
@@ -111,5 +115,6 @@ pub(crate) fn load_config() -> (
         proximity_parameters_multi,
         max_speed_parameter_address,
         max_speed_low_limit,
+        timeout,
     )
 }

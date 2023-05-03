@@ -29,6 +29,7 @@ async fn main() -> Result<()> {
         proximity_parameters_multi,
         max_speed_parameter_address,
         max_speed_low_limit,
+        timeout,
     ) = config::load_config();
 
     // Setup Start / Stop of Terminiator
@@ -41,7 +42,7 @@ async fn main() -> Result<()> {
     for ip in &headpat_device_uris {
         let headpat_device_ip_clone = ip.clone();
         task::spawn(async move {
-            osc_timeout(&headpat_device_ip_clone).await.unwrap();
+            osc_timeout(&headpat_device_ip_clone, timeout).await.unwrap();
         });
     }
     // Listen for OSC Packets
@@ -64,7 +65,6 @@ async fn main() -> Result<()> {
                     max_speed = value.max(max_speed_low_limit);
                 } else {
                     let index = proximity_parameters_multi.iter().position(|a| *a == address);
-                    
 
                     match index {
                         Some(i) => {
