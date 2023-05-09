@@ -29,6 +29,11 @@ pub(crate) async fn setup_tx_socket(address: std::string::String) -> Result<OscS
 
 pub(crate) async fn send_data(device_ip: &str, value: i32) -> Result<()> {
     //println!("Sending Value:{} to IP: {}", value, device_ip);
+    
+    // Todo 
+    // Move socket conneciton out of send_data function
+    // Notice no issues from setting up port upon every request at this point, have to move if there are any bug reports or memory leaks
+
     let tx_socket_address = create_socket_address(device_ip, "8888"); // ------------------- Port to Send OSC Data Too
     let tx_socket = setup_tx_socket(tx_socket_address.clone()).await?;
     tx_socket.connect(tx_socket_address).await?;
