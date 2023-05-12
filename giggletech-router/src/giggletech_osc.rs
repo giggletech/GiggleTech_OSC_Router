@@ -31,7 +31,7 @@ pub(crate) async fn send_data(device_ip: &str, value: i32) -> Result<()> {
     //println!("Sending Value:{} to IP: {}", value, device_ip);
     
     // Todo 
-    // Move socket conneciton out of send_data function
+    // Move socket connection out of send_data function
     // Notice no issues from setting up port upon every request at this point, have to move if there are any bug reports or memory leaks
 
     let tx_socket_address = create_socket_address(device_ip, "8888"); // ------------------- Port to Send OSC Data Too
