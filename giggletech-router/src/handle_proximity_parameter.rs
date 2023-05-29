@@ -39,6 +39,12 @@ pub(crate) async fn handle_proximity_parameter(
     // Add a Mutex to hold the last value
     //static LAST_VALUES: Lazy<Mutex<Option<f32>>> = Lazy::new(|| Mutex::new(None));'
     static LAST_VALUES: Lazy<Mutex<VecDeque<f32>>> = Lazy::new(|| Mutex::new(VecDeque::with_capacity(5)));
+
+    // Threshold for rate of change
+    let rate_of_change_threshold = 0.1;
+
+    let plateau_count = 3;
+
     
     if value == 0.0 {
         println!("Stopping pats...");
@@ -48,11 +54,6 @@ pub(crate) async fn handle_proximity_parameter(
             giggletech_osc::send_data(&device_ip, 0i32).await?;  
         }
     } else {
-        // Print the last values
-        if let Ok(last_values_guard) = LAST_VALUES.lock() {
-            println!("Last values: {:?}", *last_values_guard);
-        }
-        
         // Update the last values
         if let Ok(mut last_values_guard) = LAST_VALUES.lock() {
             last_values_guard.push_front(value);
@@ -60,6 +61,10 @@ pub(crate) async fn handle_proximity_parameter(
             if last_values_guard.len() > 5 {
                 last_values_guard.pop_back();
             }
+            
+            // Print the last values including the current value
+            let last_values: Vec<f32> = last_values_guard.iter().cloned().collect();
+            println!("Last values: {:?}", last_values);
         }
         
         // Send Data
@@ -68,4 +73,11 @@ pub(crate) async fn handle_proximity_parameter(
 
     }
     Ok(())
+}
+
+
+fn external_function() {
+    // Perform the desired action when the rate of change falls below the threshold
+    println!("Rate of change is slowing down. Triggering external function...");
+    // Your code here
 }
