@@ -37,7 +37,8 @@ pub(crate) async fn handle_proximity_parameter(
     device_last_signal_times.insert(device_ip.to_string(), Instant::now());
 
     // Add a Mutex to hold the last value
-    static LAST_VALUE: Lazy<Mutex<Option<f32>>> = Lazy::new(|| Mutex::new(None));
+    //static LAST_VALUES: Lazy<Mutex<Option<f32>>> = Lazy::new(|| Mutex::new(None));'
+    static LAST_VALUES: Lazy<Mutex<VecDeque<f32>>> = Lazy::new(|| Mutex::new(VecDeque::with_capacity(5)));
     
     if value == 0.0 {
         println!("Stopping pats...");
@@ -47,16 +48,18 @@ pub(crate) async fn handle_proximity_parameter(
             giggletech_osc::send_data(&device_ip, 0i32).await?;  
         }
     } else {
-        // Print the last value
-        if let Ok(last_value_guard) = LAST_VALUE.lock() {
-            if let Some(last_value) = *last_value_guard {
-                println!("Current Value: {} Last value: {}", value, last_value);
-            }
+        // Print the last values
+        if let Ok(last_values_guard) = LAST_VALUES.lock() {
+            println!("Last values: {:?}", *last_values_guard);
         }
         
-        // Update the last value
-        if let Ok(mut last_value_guard) = LAST_VALUE.lock() {
-            *last_value_guard = Some(value);
+        // Update the last values
+        if let Ok(mut last_values_guard) = LAST_VALUES.lock() {
+            last_values_guard.push_front(value);
+            
+            if last_values_guard.len() > 5 {
+                last_values_guard.pop_back();
+            }
         }
         
         // Send Data
