@@ -12,13 +12,26 @@ lazy_static! {
         Arc::new(Mutex::new(HashMap::new()));
 }
 
-pub async fn osc_timeout(device_ip: &str, timeout: u64) -> Result<()> {
+// The time is updated in handle_proximity_paramter module
+
+
+/*
+What do i want it to do?
+
+Ramp down after prox signal has ramped up, even if prox signal has platued
+
+Ignore is delta -> +
+Start ramp down if no change
+
+ */
+
+pub async fn kays_decay(device_ip: &str, timeout: u64) -> Result<()> {
     loop {
         async_std::task::sleep(Duration::from_secs(1)).await;
         let elapsed_time = Instant::now().duration_since(*DEVICE_LAST_SIGNAL_TIME.lock().unwrap().get(device_ip).unwrap_or(&Instant::now()));
-        //println!("Device Ip {} Elapsed Time {:?}", device_ip, elapsed_time);
-        if elapsed_time >= Duration::from_secs(timeout) {
-            println!("OSC Timeout ");
+        println!("Device Ip {} Elapsed Time {:?}", device_ip, elapsed_time);
+        if elapsed_time >= Duration::from_secs(timeout-1) {
+            println!("Kays Decay ");
             giggletech_osc::send_data(device_ip, 0i32).await?;
             let mut device_last_signal_times = DEVICE_LAST_SIGNAL_TIME.lock().unwrap();
             device_last_signal_times.insert(device_ip.to_string(), Instant::now());

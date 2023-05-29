@@ -15,6 +15,8 @@ mod giggletech_osc;
 mod terminator;
 mod osc_timeout;
 mod handle_proximity_parameter;
+mod kays_pat_decay;
+use crate::kays_pat_decay::kays_decay;
 
 
 #[async_std::main]
@@ -41,9 +43,19 @@ async fn main() -> Result<()> {
     // Timeout
     for ip in &headpat_device_uris {
         let headpat_device_ip_clone = ip.clone();
+        let headpat_device_ip_kay = ip.clone();
+        
+         
         task::spawn(async move {
             osc_timeout(&headpat_device_ip_clone, timeout).await.unwrap();
+
         });
+
+        task::spawn(async move {
+            kays_decay(&headpat_device_ip_kay, timeout).await.unwrap();
+
+        });
+
     }
     // Listen for OSC Packets
     while let Some(packet) = rx_socket.next().await {

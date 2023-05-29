@@ -7,12 +7,16 @@ use std::{
     time::Instant,
 };
 
+use once_cell::sync::Lazy;
+use std::collections::VecDeque;
 
 use crate::osc_timeout;
 use crate::terminator;
 use crate::giggletech_osc;
 use crate::data_processing;
+use crate::kays_pat_decay;
 
+use std::sync::{Mutex};
 
 pub(crate) async fn handle_proximity_parameter(
     running: Arc<AtomicBool>,
@@ -28,6 +32,12 @@ pub(crate) async fn handle_proximity_parameter(
     // Update Last Signal Time for timeout clock 
     let mut device_last_signal_times = osc_timeout::DEVICE_LAST_SIGNAL_TIME.lock().unwrap();
     device_last_signal_times.insert(device_ip.to_string(), Instant::now());
+
+    let mut device_last_signal_times = kays_pat_decay::DEVICE_LAST_SIGNAL_TIME.lock().unwrap();
+    device_last_signal_times.insert(device_ip.to_string(), Instant::now());
+
+    // Add a Mutex to hold the last value
+    static LAST_VALUE: Lazy<Mutex<Option<f32>>> = Lazy::new(|| Mutex::new(None));
     
     if value == 0.0 {
         println!("Stopping pats...");
@@ -37,6 +47,19 @@ pub(crate) async fn handle_proximity_parameter(
             giggletech_osc::send_data(&device_ip, 0i32).await?;  
         }
     } else {
+        // Print the last value
+        if let Ok(last_value_guard) = LAST_VALUE.lock() {
+            if let Some(last_value) = *last_value_guard {
+                println!("Current Value: {} Last value: {}", value, last_value);
+            }
+        }
+        
+        // Update the last value
+        if let Ok(mut last_value_guard) = LAST_VALUE.lock() {
+            *last_value_guard = Some(value);
+        }
+        
+        // Send Data
         giggletech_osc::send_data(&device_ip,
             data_processing::process_pat(value, max_speed, min_speed, speed_scale, proximity_parameters_multi)).await?;
 
