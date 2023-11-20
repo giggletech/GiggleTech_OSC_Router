@@ -30,6 +30,7 @@ async fn main() -> Result<()> {
         max_speed_parameter_address,
         max_speed_low_limit,
         timeout,
+        advanced_config
     ) = config::load_config();
 
     // Setup Start / Stop of Terminiator
@@ -77,6 +78,7 @@ async fn main() -> Result<()> {
                                 min_speed,
                                 speed_scale,
                                 &proximity_parameters_multi[i],
+                                advanced_config,
                             )
                             .await?
                         }

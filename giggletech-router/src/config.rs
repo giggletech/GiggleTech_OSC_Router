@@ -18,6 +18,14 @@ fn banner_txt(){
                                                                                 
 }
 
+#[derive(Copy, Clone)]
+pub(crate) struct AdvancedConfig {
+    pub active: bool,
+    pub outer_proximity: f32,
+    pub inner_proximity: f32,
+    pub velocity_scalar: f32,
+}
+
 pub(crate) fn load_config() -> (
     Vec<String>,    // headpat_device_URIs
     f32,            // min_speed_float
@@ -28,6 +36,7 @@ pub(crate) fn load_config() -> (
     String,         // max_speed_parameter_address
     f32,            // Max Speed Low Limit
     u64,            // Timeout Setting
+    AdvancedConfig, // Advanced mode
     ) {
     let mut config = Ini::new();
 
@@ -88,6 +97,9 @@ pub(crate) fn load_config() -> (
     
     let max_speed_parameter_address = format!("/avatar/parameters/{}", config.get("Setup", "max_speed_parameter").unwrap_or_else(|| "/avatar/parameters/max_speed".into()));
 
+
+    let advanced_config = load_advanced_config(config);
+
     println!("\n");
     banner_txt();
     println!("\n");
@@ -102,6 +114,7 @@ pub(crate) fn load_config() -> (
     println!(" Max Speed: {:?}%", max_speed_float * 100.0);
     println!(" Scale Factor: {}%", speed_scale);
     println!(" Timeout: {}s", timeout);
+    println!(" Advanced Mode: {}", advanced_config.active);
     println!("\nWaiting for pats...");
 
     (
@@ -114,8 +127,30 @@ pub(crate) fn load_config() -> (
         max_speed_parameter_address,
         max_speed_low_limit,
         timeout,
+        advanced_config,
     )
 }
 
+pub(crate) fn load_advanced_config(config: Ini) -> AdvancedConfig {
+    // println!("{}", config.get("Setup", "advanced_mode").unwrap());
+    if !config.get("Setup", "advanced_mode").unwrap().eq("true") {
+        return AdvancedConfig {
+            active: false,
+            outer_proximity: 0.0,
+            inner_proximity: 0.0,
+            velocity_scalar: 0.0,
+        }
+    }
 
+    let outer_proximity     = config.get("Advanced", "outer_proximity").unwrap().parse::<f32>().unwrap();
+    let inner_proximity     = config.get("Advanced", "inner_proximity").unwrap().parse::<f32>().unwrap();
+    let velocity_scalar     = config.get("Advanced", "velocity_scalar").unwrap().parse::<f32>().unwrap();
+
+    return AdvancedConfig {
+        active: true,
+        outer_proximity: outer_proximity,
+        inner_proximity: inner_proximity,
+        velocity_scalar: velocity_scalar,
+    }
+}
 
