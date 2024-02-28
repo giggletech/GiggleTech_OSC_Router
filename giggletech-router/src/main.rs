@@ -3,6 +3,8 @@
 // by Sideways
 // Based off OSC Async https://github.com/Frando/async-osc
 
+// Add System Tray Minimization
+
 
 use async_osc::{prelude::*, OscPacket, OscType, Result};
 use async_std::{stream::StreamExt, task::{self}, sync::Arc,};
