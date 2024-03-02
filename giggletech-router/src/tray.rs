@@ -1,4 +1,4 @@
-use std::{thread, time::Duration};
+use std::{env, thread, time::Duration};
 
 use tray_icon::{
     menu::{accelerator::Accelerator, Menu, MenuEvent, MenuId, MenuItem},
@@ -23,7 +23,8 @@ pub fn setup_and_run_tray() {
     let menu: Menu = Menu::new();
     let show_terminal_id: MenuId = MenuId::new("1");
     let hide_terminal_id = MenuId::new("2");
-    let quit_id: MenuId = MenuId::new("3");
+    let restart_id: MenuId = MenuId::new("3");
+    let quit_id: MenuId = MenuId::new("4");
 
     let _ = menu.append_items(&[
         &MenuItem::with_id(
@@ -38,6 +39,7 @@ pub fn setup_and_run_tray() {
             true,
             None::<Accelerator>,
         ),
+        &MenuItem::with_id(restart_id.clone(), "Restart", true, None::<Accelerator>),
         &MenuItem::with_id(quit_id.clone(), "Quit", true, None::<Accelerator>),
     ]);
 
@@ -58,6 +60,8 @@ pub fn setup_and_run_tray() {
                 show_terminal();
             } else if event.id == hide_terminal_id {
                 hide_terminal();
+            } else if event.id == restart_id {
+                restart_application();
             } else if event.id == quit_id {
                 std::process::exit(0);
             }
@@ -112,4 +116,42 @@ fn load_icon_from_bytes(bytes: &[u8]) -> tray_icon::Icon {
     };
     tray_icon::Icon::from_rgba(icon_rgba, icon_width, icon_height)
         .expect("Failed to create icon from RGBA data")
+}
+
+fn get_executable_path() -> std::io::Result<std::path::PathBuf> {
+    env::current_exe()
+}
+
+fn restart_application() {
+    use std::process::{exit, Command};
+
+    // Get the current executable path
+    let exe_path = match get_executable_path() {
+        Ok(path) => path,
+        Err(e) => {
+            eprintln!("Failed to get the current executable path: {}", e);
+            return;
+        }
+    };
+
+    // Convert the path to a string, if possible
+    let exe_str = match exe_path.to_str() {
+        Some(s) => s,
+        None => {
+            eprintln!("Failed to convert executable path to string.");
+            return;
+        }
+    };
+
+    #[cfg(windows)]
+    let _ = Command::new(exe_str)
+        .spawn()
+        .expect("Application restart failed.");
+
+    #[cfg(not(windows))]
+    let _ = Command::new(exe_str)
+        .spawn()
+        .expect("Application restart failed.");
+
+    exit(0);
 }
