@@ -11,8 +11,7 @@ use async_std::{
     sync::Arc,
     task::{self},
 };
-use futures::future::err;
-use log::{error, info};
+use log::error;
 use std::sync::atomic::AtomicBool;
 
 use crate::osc_timeout::osc_timeout;
@@ -28,7 +27,7 @@ mod logger;
 #[async_std::main]
 async fn main() -> Result<()> {
     if let Err(e) = logger::init_logging() {
-        eprintln!("Error initializing logging: {}", e);
+        error!("Error initializing logging: {}", e);
         return Ok(());
     }
 

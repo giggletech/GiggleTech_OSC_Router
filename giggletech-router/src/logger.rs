@@ -6,12 +6,19 @@ use log4rs::{
     encode::pattern::PatternEncoder,
     filter::threshold::ThresholdFilter,
 };
+use std::env;
+use std::path::PathBuf;
 
 pub fn init_logging() -> Result<(), Box<dyn std::error::Error>> {
     // Configuration for logging to a file
+    let binding = env::current_exe()?;
+    let current_exe_dir = binding
+        .parent()
+        .ok_or("Could not determine the executable's directory")?;
+    let log_file_path: PathBuf = current_exe_dir.join("output.log");
     let logfile = FileAppender::builder()
         .encoder(Box::new(PatternEncoder::new("{d} - {l} - {m}{n}")))
-        .build("log/output.log")?;
+        .build(log_file_path)?;
 
     // Configuration for logging to the console
     let stdout = ConsoleAppender::builder()

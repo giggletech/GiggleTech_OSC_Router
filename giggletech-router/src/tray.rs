@@ -57,15 +57,11 @@ fn load_icon_from_bytes(bytes: &[u8]) -> tray_icon::Icon {
         .expect("Failed to create icon from RGBA data")
 }
 
-fn get_executable_path() -> std::io::Result<std::path::PathBuf> {
-    env::current_exe()
-}
-
 fn restart_application() {
     use std::process::{exit, Command};
 
     // Get the current executable path
-    let exe_path = match get_executable_path() {
+    let exe_path = match env::current_exe() {
         Ok(path) => path,
         Err(e) => {
             error!("Failed to get the current executable path: {}", e);
