@@ -3,7 +3,7 @@
 // by Sideways
 // Based off OSC Async https://github.com/Frando/async-osc
 
-// Add System Tray Minimization
+#![windows_subsystem = "windows"]
 
 use async_osc::{prelude::*, OscPacket, OscType, Result};
 use async_std::{
@@ -12,7 +12,6 @@ use async_std::{
     task::{self},
 };
 use std::sync::atomic::AtomicBool;
-
 
 use crate::osc_timeout::osc_timeout;
 mod config;

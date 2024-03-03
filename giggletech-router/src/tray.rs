@@ -1,47 +1,19 @@
-use std::{env, thread, time::Duration};
-
+use std::env;
 use tray_icon::{
-    menu::{accelerator::Accelerator, Menu, MenuEvent, MenuId, MenuItem},
+    menu::{accelerator::Accelerator, Menu, MenuEvent, MenuItem},
     TrayIconBuilder,
 };
-#[cfg(windows)]
-use winapi::um::wincon::GetConsoleWindow;
-#[cfg(windows)]
-use winapi::um::winuser::{ShowWindow, SW_HIDE, SW_SHOW};
 use winit::event_loop::{ControlFlow, EventLoopBuilder};
 
 pub fn setup_and_run_tray() {
-    // Hide the terminal after 1 second
-    thread::spawn(move || {
-        thread::sleep(Duration::from_secs(1));
-        hide_terminal();
-    });
-
     let icon = load_icon();
     let event_loop = EventLoopBuilder::new().build().unwrap();
 
     let menu: Menu = Menu::new();
-    let show_terminal_id: MenuId = MenuId::new("1");
-    let hide_terminal_id = MenuId::new("2");
-    let restart_id: MenuId = MenuId::new("3");
-    let quit_id: MenuId = MenuId::new("4");
+    let restart_item = MenuItem::new("Restart", true, None::<Accelerator>);
+    let quit_item = MenuItem::new("Quit", true, None::<Accelerator>);
 
-    let _ = menu.append_items(&[
-        &MenuItem::with_id(
-            show_terminal_id.clone(),
-            "Show Terminal",
-            true,
-            None::<Accelerator>,
-        ),
-        &MenuItem::with_id(
-            hide_terminal_id.clone(),
-            "Hide Terminal",
-            true,
-            None::<Accelerator>,
-        ),
-        &MenuItem::with_id(restart_id.clone(), "Restart", true, None::<Accelerator>),
-        &MenuItem::with_id(quit_id.clone(), "Quit", true, None::<Accelerator>),
-    ]);
+    let _ = menu.append_items(&[&restart_item, &quit_item]);
 
     let _tray_icon = Some(
         TrayIconBuilder::new()
@@ -56,47 +28,13 @@ pub fn setup_and_run_tray() {
     let _ = event_loop.run(move |event, event_loop| {
         event_loop.set_control_flow(ControlFlow::Poll);
         if let Ok(event) = menu_channel.try_recv() {
-            if event.id == show_terminal_id {
-                show_terminal();
-            } else if event.id == hide_terminal_id {
-                hide_terminal();
-            } else if event.id == restart_id {
+            if event.id == restart_item.id() {
                 restart_application();
-            } else if event.id == quit_id {
+            } else if event.id == quit_item.id() {
                 std::process::exit(0);
             }
         }
     });
-}
-
-#[cfg(windows)]
-fn show_terminal() {
-    unsafe {
-        let window = GetConsoleWindow();
-        if window != std::ptr::null_mut() {
-            ShowWindow(window, SW_SHOW);
-        }
-    }
-}
-
-#[cfg(windows)]
-fn hide_terminal() {
-    unsafe {
-        let window = GetConsoleWindow();
-        if window != std::ptr::null_mut() {
-            ShowWindow(window, SW_HIDE);
-        }
-    }
-}
-
-#[cfg(not(windows))]
-fn show_terminal() {
-    // Other platform code or no-op
-}
-
-#[cfg(not(windows))]
-fn hide_terminal() {
-    // Other platform code or no-op
 }
 
 fn load_icon() -> tray_icon::Icon {
