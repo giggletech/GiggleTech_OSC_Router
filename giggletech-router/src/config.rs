@@ -1,20 +1,21 @@
 // config.rs
 
 use configparser::ini::Ini;
+use log::{error, info};
 use std::{net::IpAddr};
 
 // Banner
 fn banner_txt(){
     // https://fsymbols.com/generators/carty/
-    println!("");
-    println!("  ██████  ██  ██████   ██████  ██      ███████     ████████ ███████  ██████ ██   ██ ");
-    println!(" ██       ██ ██       ██       ██      ██             ██    ██      ██      ██   ██ ");
-    println!(" ██   ███ ██ ██   ███ ██   ███ ██      █████          ██    █████   ██      ███████ ");
-    println!(" ██    ██ ██ ██    ██ ██    ██ ██      ██             ██    ██      ██      ██   ██ ");
-    println!("  ██████  ██  ██████   ██████  ███████ ███████        ██    ███████  ██████ ██   ██ ");
-    println!("");
-    println!(" █▀█ █▀ █▀▀   █▀█ █▀█ █ █ ▀█▀ █▀▀ █▀█");
-    println!(" █▄█ ▄█ █▄▄   █▀▄ █▄█ █▄█  █  ██▄ █▀▄");
+    info!("");
+    info!("  ██████  ██  ██████   ██████  ██      ███████     ████████ ███████  ██████ ██   ██ ");
+    info!(" ██       ██ ██       ██       ██      ██             ██    ██      ██      ██   ██ ");
+    info!(" ██   ███ ██ ██   ███ ██   ███ ██      █████          ██    █████   ██      ███████ ");
+    info!(" ██    ██ ██ ██    ██ ██    ██ ██      ██             ██    ██      ██      ██   ██ ");
+    info!("  ██████  ██  ██████   ██████  ███████ ███████        ██    ███████  ██████ ██   ██ ");
+    info!("");
+    info!(" █▀█ █▀ █▀▀   █▀█ █▀█ █ █ ▀█▀ █▀▀ █▀█");
+    info!(" █▄█ ▄█ █▄▄   █▀▄ █▄█ █▄█  █  ██▄ █▀▄");
                                                                                 
 }
 
@@ -54,14 +55,14 @@ pub(crate) fn load_config() -> (
             match s.parse::<IpAddr>() {
                 Ok(_) => Some(s),
                 Err(_) => {
-                    println!("Invalid IP address format: {}", s);
+                    error!("Invalid IP address format: {}", s);
                     None
                 }
             }
         })
         .collect();
     if headpat_device_uris.is_empty() {
-        eprintln!("Error: no device URIs specified in config file");
+        error!("Error: no device URIs specified in config file");
         // handle error here, e.g. return early from the function or exit the program
     }
 
@@ -74,7 +75,7 @@ pub(crate) fn load_config() -> (
 
     
     if headpat_device_uris.len() != proximity_parameters_multi.len() {
-        eprintln!("Error: number of device URIs does not match number of proximity parameters");
+        error!("Error: number of device URIs does not match number of proximity parameters");
         // handle error here, e.g. return early from the function or exit the program
     }
 
@@ -100,22 +101,22 @@ pub(crate) fn load_config() -> (
 
     let advanced_config = load_advanced_config(config);
 
-    println!("\n");
+    info!("\n");
     banner_txt();
-    println!("\n");
-    println!(" Device Maps");
+    info!("\n");
+    info!(" Device Maps");
     for (i, parameter) in proximity_parameters_multi.iter().enumerate() {
-        println!(" {} => {}", parameter.trim_start_matches("/avatar/parameters/"), headpat_device_uris[i]);
+        info!(" {} => {}", parameter.trim_start_matches("/avatar/parameters/"), headpat_device_uris[i]);
     }
 
-    println!("\n Listening for OSC on port: {}", port_rx);
-    println!("\n Vibration Configuration");
-    println!(" Min Speed: {}%", min_speed);
-    println!(" Max Speed: {:?}%", max_speed_float * 100.0);
-    println!(" Scale Factor: {}%", speed_scale);
-    println!(" Timeout: {}s", timeout);
-    println!(" Advanced Mode: {}", advanced_config.active);
-    println!("\nWaiting for pats...");
+    info!("\n Listening for OSC on port: {}", port_rx);
+    info!("\n Vibration Configuration");
+    info!(" Min Speed: {}%", min_speed);
+    info!(" Max Speed: {:?}%", max_speed_float * 100.0);
+    info!(" Scale Factor: {}%", speed_scale);
+    info!(" Timeout: {}s", timeout);
+    info!(" Advanced Mode: {}", advanced_config.active);
+    info!("\nWaiting for pats...");
 
     (
         headpat_device_uris,
@@ -132,7 +133,7 @@ pub(crate) fn load_config() -> (
 }
 
 pub(crate) fn load_advanced_config(config: Ini) -> AdvancedConfig {
-    // println!("{}", config.get("Setup", "advanced_mode").unwrap());
+    // info!("{}", config.get("Setup", "advanced_mode").unwrap());
     if !config.get("Setup", "advanced_mode").unwrap().eq("true") {
         return AdvancedConfig {
             active: false,

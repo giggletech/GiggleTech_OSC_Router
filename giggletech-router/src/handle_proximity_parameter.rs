@@ -2,6 +2,7 @@
 
 use async_osc::Result;
 use async_std::sync::{Arc, Mutex};
+use log::info;
 use std::{
     sync::atomic::{AtomicBool},
     time::{Instant, Duration}, collections::HashMap,
@@ -43,7 +44,7 @@ pub(crate) async fn handle_proximity_parameter(
     };
 
     if value == 0.0 {
-        println!("Stopping pats...");
+        info!("Stopping pats...");
         terminator::start(running.clone(), &device_ip).await?;
 
         for _ in 0..5 {

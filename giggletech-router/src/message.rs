@@ -26,7 +26,7 @@ pub trait OscMessageExt {
     ///
     /// match message.as_tuple() {
     ///     ("foo", &[OscType::Float(val), OscType::String(ref text)]) => {
-    ///         eprintln!("Got foo message with args: {}, {}", val, text);
+    ///         error!("Got foo message with args: {}, {}", val, text);
     ///     },
     ///     _ => {}
     /// }
