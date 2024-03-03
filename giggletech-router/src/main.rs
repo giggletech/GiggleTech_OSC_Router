@@ -11,6 +11,7 @@ use async_std::{
     sync::Arc,
     task::{self},
 };
+use log::info;
 use std::sync::atomic::AtomicBool;
 
 use crate::osc_timeout::osc_timeout;
@@ -21,11 +22,21 @@ mod handle_proximity_parameter;
 mod osc_timeout;
 mod terminator;
 mod tray; 
+mod logger;
 
 #[async_std::main]
 async fn main() -> Result<()> {
+    if let Err(e) = logger::init_logging() {
+        println!("Error initializing logging: {}", e);
+        return Ok(());
+    }
+
+    info!("This is an information message.");
+
     _ = task::spawn(handle_osc());
+
     tray::setup_and_run_tray();
+    
     Ok(())
 }
 

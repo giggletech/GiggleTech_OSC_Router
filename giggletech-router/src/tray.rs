@@ -1,4 +1,5 @@
 use std::env;
+use log::error;
 use tray_icon::{
     menu::{accelerator::Accelerator, Menu, MenuEvent, MenuItem},
     TrayIconBuilder,
@@ -67,7 +68,7 @@ fn restart_application() {
     let exe_path = match get_executable_path() {
         Ok(path) => path,
         Err(e) => {
-            eprintln!("Failed to get the current executable path: {}", e);
+            error!("Failed to get the current executable path: {}", e);
             return;
         }
     };
@@ -76,7 +77,7 @@ fn restart_application() {
     let exe_str = match exe_path.to_str() {
         Some(s) => s,
         None => {
-            eprintln!("Failed to convert executable path to string.");
+            error!("Failed to convert executable path to string.");
             return;
         }
     };
