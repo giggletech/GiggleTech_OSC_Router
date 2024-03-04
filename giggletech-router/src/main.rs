@@ -23,6 +23,7 @@ mod osc_timeout;
 mod terminator;
 mod tray; 
 mod logger;
+mod path;
 
 #[async_std::main]
 async fn main() -> Result<()> {
