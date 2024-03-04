@@ -9,6 +9,7 @@ use winit::{
 };
 use crate::path;
 use std::process::exit;
+use crate::logger;
 
 pub fn setup_and_run_tray() {
     let icon = load_icon();
@@ -42,7 +43,6 @@ pub fn setup_and_run_tray() {
                     std::process::exit(0);
                 },
                 id if id == open_terminal_item.id() => {
-                    // Signal the event loop to open a terminal-like window
                     let _ = event_loop_proxy.send_event(());
                 }
                 _ => (),
@@ -55,7 +55,7 @@ pub fn setup_and_run_tray() {
 }
 
 fn open_terminal_with_logs() -> Result<(), Box<dyn std::error::Error>> {
-    let log_file_path = path::join_exe_dir_with_file("/logs/output.log")?;
+    let log_file_path = path::join_exe_dir_with_file(logger::LOG_FILE)?;
     let log_file_str = log_file_path.to_str().ok_or("Path contains invalid Unicode characters")?;
     
     Command::new("powershell")
