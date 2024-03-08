@@ -19,11 +19,11 @@ mod config;
 mod data_processing;
 mod giggletech_osc;
 mod handle_proximity_parameter;
-mod osc_timeout;
-mod terminator;
-mod tray; 
 mod logger;
+mod osc_timeout;
 mod path;
+mod terminator;
+mod tray;
 
 #[async_std::main]
 async fn main() -> Result<()> {
@@ -34,8 +34,9 @@ async fn main() -> Result<()> {
 
     _ = task::spawn(handle_osc());
 
-    tray::setup_and_run_tray();
-    
+    let mut tray_app = tray::TrayApplication::new();
+    tray_app.setup_and_run_tray();
+
     Ok(())
 }
 
@@ -79,7 +80,9 @@ async fn handle_osc() -> Result<()> {
                 let (address, osc_value) = message.as_tuple();
                 let value = match osc_value.first().unwrap_or(&OscType::Nil).clone().float() {
                     Some(v) => v,
-                    None => continue,
+                    None => {
+                        continue;
+                    }
                 };
 
                 // Max Speed Setting
@@ -103,7 +106,7 @@ async fn handle_osc() -> Result<()> {
                                 &proximity_parameters_multi[i],
                                 advanced_config,
                             )
-                            .await?
+                            .await?;
                         }
                         None => {}
                     }
@@ -113,4 +116,3 @@ async fn handle_osc() -> Result<()> {
     }
     Ok(())
 }
-
