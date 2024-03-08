@@ -34,7 +34,7 @@ pub(crate) async fn handle_proximity_parameter(
     terminator::stop(running.clone()).await?;
 
     // Update Last Signal Time for timeout clock 
-    let mut device_last_signal_times = osc_timeout::DEVICE_LAST_SIGNAL_TIME.lock().await;
+    let mut device_last_signal_times = osc_timeout::DEVICE_LAST_SIGNAL_TIME.lock().unwrap();
     // let last_signal_time: Option<Instant> = device_last_signal_times.get(&device_ip.to_string()).copied();
     let last_signal_time = device_last_signal_times.insert(device_ip.to_string(), Instant::now());
     let mut device_last_values = DEVICE_LAST_VALUE.lock().await;

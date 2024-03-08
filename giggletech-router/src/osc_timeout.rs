@@ -1,9 +1,11 @@
-use crate::giggletech_osc;
+// osc_timeout.rs
+
+use std::collections::HashMap;
+use std::sync::{Arc, Mutex};
+use std::time::{Duration, Instant};
 use anyhow::Result;
 use lazy_static::lazy_static;
-use std::collections::HashMap;
-use async_std::sync::{Arc, Mutex};
-use std::time::{Duration, Instant};
+use crate::giggletech_osc;
 
 lazy_static! {
     pub static ref DEVICE_LAST_SIGNAL_TIME: Arc<Mutex<HashMap<String, Instant>>> =
@@ -13,21 +15,13 @@ lazy_static! {
 pub async fn osc_timeout(device_ip: &str, timeout: u64) -> Result<()> {
     loop {
         async_std::task::sleep(Duration::from_secs(1)).await;
-        
-        let elapsed_time = {
-            let lock = DEVICE_LAST_SIGNAL_TIME.lock().await;
-            let device_last_signal_times = lock.get(device_ip);
-            match device_last_signal_times {
-                Some(last_signal) => Instant::now().duration_since(*last_signal),
-                None => Duration::from_secs(0), // Assume no elapsed time if not found
-            }
-        };
-
+        let elapsed_time = Instant::now().duration_since(*DEVICE_LAST_SIGNAL_TIME.lock().unwrap().get(device_ip).unwrap_or(&Instant::now()));
+        //println!("Device Ip {} Elapsed Time {:?}", device_ip, elapsed_time);
         if elapsed_time >= Duration::from_secs(timeout) {
+            //println!("Timeout");
             giggletech_osc::send_data(device_ip, 0i32).await?;
-            
-            let mut lock = DEVICE_LAST_SIGNAL_TIME.lock().await;
-            lock.insert(device_ip.to_string(), Instant::now());
+            let mut device_last_signal_times = DEVICE_LAST_SIGNAL_TIME.lock().unwrap();
+            device_last_signal_times.insert(device_ip.to_string(), Instant::now());
         }
     }
 }
