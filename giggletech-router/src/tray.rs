@@ -35,7 +35,7 @@ pub fn setup_and_run_tray() {
     let event_loop_proxy = event_loop.create_proxy();
 
     let _ = event_loop.run(move |event, event_loop| {
-        event_loop.set_control_flow(ControlFlow::Poll);
+        event_loop.set_control_flow(ControlFlow::Wait);
         if let Ok(event) = menu_channel.try_recv() {
             match event.id {
                 id if id == restart_item.id() => restart_application(),
