@@ -1,6 +1,6 @@
 use crate::logger;
 use crate::path;
-use log::{error, info};
+use log::error;
 use std::{
     collections::HashMap,
     env,
