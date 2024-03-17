@@ -3,25 +3,44 @@
 // by Sideways
 // Based off OSC Async https://github.com/Frando/async-osc
 
-// Add System Tray Minimization
-
+#![windows_subsystem = "windows"]
 
 use async_osc::{prelude::*, OscPacket, OscType, Result};
-use async_std::{stream::StreamExt, task::{self}, sync::Arc,};
-use std::sync::atomic::{AtomicBool};
+use async_std::{
+    stream::StreamExt,
+    sync::Arc,
+    task::{self},
+};
+use log::error;
+use std::sync::atomic::AtomicBool;
 
 use crate::osc_timeout::osc_timeout;
-mod data_processing;
 mod config;
+mod data_processing;
 mod giggletech_osc;
-mod terminator;
-mod osc_timeout;
 mod handle_proximity_parameter;
-
+mod logger;
+mod osc_timeout;
+mod path;
+mod terminator;
+mod tray;
 
 #[async_std::main]
 async fn main() -> Result<()> {
+    if let Err(e) = logger::init_logging() {
+        error!("Error initializing logging: {}", e);
+        return Ok(());
+    }
 
+    _ = task::spawn(handle_osc());
+
+    let mut tray_app = tray::TrayApplication::new();
+    tray_app.setup_and_run_tray();
+
+    Ok(())
+}
+
+async fn handle_osc() -> Result<()> {
     let (
         headpat_device_uris,
         min_speed,
@@ -32,7 +51,7 @@ async fn main() -> Result<()> {
         max_speed_parameter_address,
         max_speed_low_limit,
         timeout,
-        advanced_config
+        advanced_config,
     ) = config::load_config();
 
     // Setup Start / Stop of Terminiator
@@ -45,7 +64,9 @@ async fn main() -> Result<()> {
     for ip in &headpat_device_uris {
         let headpat_device_ip_clone = ip.clone();
         task::spawn(async move {
-            osc_timeout(&headpat_device_ip_clone, timeout).await.unwrap();
+            osc_timeout(&headpat_device_ip_clone, timeout)
+                .await
+                .unwrap();
         });
     }
     // Listen for OSC Packets
@@ -59,7 +80,9 @@ async fn main() -> Result<()> {
                 let (address, osc_value) = message.as_tuple();
                 let value = match osc_value.first().unwrap_or(&OscType::Nil).clone().float() {
                     Some(v) => v,
-                    None => continue,
+                    None => {
+                        continue;
+                    }
                 };
 
                 // Max Speed Setting
@@ -67,11 +90,12 @@ async fn main() -> Result<()> {
                     data_processing::print_speed_limit(value);
                     max_speed = value.max(max_speed_low_limit);
                 } else {
-                    let index = proximity_parameters_multi.iter().position(|a| *a == address);
+                    let index = proximity_parameters_multi
+                        .iter()
+                        .position(|a| *a == address);
 
                     match index {
                         Some(i) => {
-    
                             handle_proximity_parameter::handle_proximity_parameter(
                                 running.clone(), // Terminator
                                 &Arc::new(headpat_device_uris[i].clone()),
@@ -82,7 +106,7 @@ async fn main() -> Result<()> {
                                 &proximity_parameters_multi[i],
                                 advanced_config,
                             )
-                            .await?
+                            .await?;
                         }
                         None => {}
                     }

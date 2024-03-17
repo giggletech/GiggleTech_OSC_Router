@@ -29,7 +29,7 @@ pub(crate) async fn setup_tx_socket(address: std::string::String) -> Result<OscS
 
 
 pub(crate) async fn send_data(device_ip: &str, value: i32) -> Result<()> {
-    //println!("Sending Value:{} to IP: {}", value, device_ip);
+    //info!("Sending Value:{} to IP: {}", value, device_ip);
     
     // Todo 
     // Move socket connection out of send_data function

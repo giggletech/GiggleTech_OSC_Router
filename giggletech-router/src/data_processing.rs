@@ -2,6 +2,8 @@
 
 use std::time::Duration;
 
+use log::{error, info};
+
 use crate::config::AdvancedConfig;
 
 
@@ -20,7 +22,7 @@ pub fn print_speed_limit(headpat_max_rx: f32) {
         51..=75 => "!  ",
         _ => "   ",
     };
-    println!("Speed Limit: {}% {}", headpat_max_rx_print, max_meter);
+    info!("Speed Limit: {}% {}", headpat_max_rx_print, max_meter);
 }
 
 // Pat Processor
@@ -30,7 +32,7 @@ pub fn process_pat(proximity_signal: f32, max_speed: f32, min_speed: f32, speed_
     let graph_str = proximity_graph(proximity_signal);
     let headpat_tx = (((max_speed - min_speed) * proximity_signal + min_speed) * MOTOR_SPEED_SCALE * speed_scale * 255.0).round() as i32;
     let proximity_signal = format!("{:.2}", proximity_signal);
-    eprintln!("{} Prox: {:5} Motor Tx: {:3} |{:11}|", proximity_parameter.trim_start_matches("/avatar/parameters/") , proximity_signal, headpat_tx, graph_str);
+    error!("{} Prox: {:5} Motor Tx: {:3} |{:11}|", proximity_parameter.trim_start_matches("/avatar/parameters/") , proximity_signal, headpat_tx, graph_str);
 
     headpat_tx
 }
@@ -43,7 +45,7 @@ pub fn process_pat_advanced(proximity_signal: f32, prev_signal: f32, delta_t: Du
         vel = f32::max(0.0, (proximity_signal - prev_signal) / delta_t.as_secs_f32() * adv_config.velocity_scalar);
         headpat_tx = (((max_speed - min_speed) * vel * min_speed) * MOTOR_SPEED_SCALE * speed_scale * 255.0).round() as i32;
     }
-    eprintln!("{} Prox: {:5} Vel: {:5} Motor Tx: {:3} |{:11}|", proximity_parameter.trim_start_matches("/avatar/parameters/") , format!("{:.2}", proximity_signal), format!("{:.2}", vel), headpat_tx, graph_str);
+    error!("{} Prox: {:5} Vel: {:5} Motor Tx: {:3} |{:11}|", proximity_parameter.trim_start_matches("/avatar/parameters/") , format!("{:.2}", proximity_signal), format!("{:.2}", vel), headpat_tx, graph_str);
 
     return headpat_tx;
 }
