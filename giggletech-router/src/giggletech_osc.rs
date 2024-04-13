@@ -8,6 +8,11 @@ use async_osc::{ OscSocket, Result};
 // OSC Address Setup
 const TX_OSC_MOTOR_ADDRESS: &str = "/avatar/parameters/motor"; 
 const TX_OSC_GIGGLESPARK: &str = "/motor"; 
+
+const TX_OSC_COLLAR_1: &str = "/motor";
+const TX_OSC_COLLAR_2: &str = "/motor_02";
+const TX_OSC_COLLAR_3: &str = "/motor_03";
+const TX_OSC_COLLAR_4: &str = "/motor_04";
 //const TX_OSC_LED_ADDRESS_2: &str = "/avatar/parameters/led";
 
 pub(crate) fn create_socket_address(host: &str, port: &str) -> String {
@@ -39,6 +44,10 @@ pub(crate) async fn send_data(device_ip: &str, value: i32) -> Result<()> {
     let tx_socket = setup_tx_socket(tx_socket_address.clone()).await?;
     tx_socket.connect(tx_socket_address).await?;
     tx_socket.send((TX_OSC_MOTOR_ADDRESS, (value,))).await?;
-    tx_socket.send((TX_OSC_GIGGLESPARK, (value,))).await?;
+    //tx_socket.send((TX_OSC_GIGGLESPARK, (value,))).await?;
+
+    tx_socket.send((TX_OSC_COLLAR_4, (value,))).await?; // Can TX to the diff channels
+
+
     Ok(())
 }
