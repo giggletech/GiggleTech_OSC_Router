@@ -46,7 +46,13 @@ pub(crate) async fn send_data(device_ip: &str, value: i32) -> Result<()> {
     tx_socket.send((TX_OSC_MOTOR_ADDRESS, (value,))).await?;
     //tx_socket.send((TX_OSC_GIGGLESPARK, (value,))).await?;
 
+    tx_socket.send((TX_OSC_COLLAR_1, (value,))).await?; // Can TX to the diff channels
+    tx_socket.send((TX_OSC_COLLAR_2, (value,))).await?; // Can TX to the diff channels
+
+    tx_socket.send((TX_OSC_COLLAR_3, (value,))).await?; // Can TX to the diff channels
+
     tx_socket.send((TX_OSC_COLLAR_4, (value,))).await?; // Can TX to the diff channels
+
 
 
     Ok(())
