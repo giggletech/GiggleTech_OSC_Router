@@ -5,3 +5,4 @@ Cargo.lock
 SANDBOX
 .vscode
 *.exe
+.idea
