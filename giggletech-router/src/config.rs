@@ -1,11 +1,9 @@
 // config.rs
 
-use configparser::ini::Ini;
 use std::{net::IpAddr};
-use std::fmt::format;
 use std::fs::File;
 use std::io::Read;
-use yaml_rust::{YamlLoader, YamlEmitter, Yaml};
+use yaml_rust::{YamlLoader, Yaml};
 use yaml_rust::yaml::Hash;
 
 // Banner
