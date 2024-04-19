@@ -2,6 +2,11 @@
 
 use configparser::ini::Ini;
 use std::{net::IpAddr};
+use std::fmt::format;
+use std::fs::File;
+use std::io::Read;
+use yaml_rust::{YamlLoader, YamlEmitter, Yaml};
+use yaml_rust::yaml::Hash;
 
 // Banner
 fn banner_txt(){
@@ -18,139 +23,191 @@ fn banner_txt(){
                                                                                 
 }
 
-#[derive(Copy, Clone)]
-pub(crate) struct AdvancedConfig {
-    pub active: bool,
+#[derive(Clone, Debug)]
+pub(crate) struct DeviceConfig {
+    pub device_uri: String,
+    pub min_speed: f32,
+    pub max_speed: f32,
+    pub speed_scale: f32,
+    pub proximity_parameter: String,
+    pub max_speed_parameter: String,
+    pub use_velocity_control: bool,
     pub outer_proximity: f32,
     pub inner_proximity: f32,
-    pub velocity_scalar: f32,
+    pub velocity_scalar: f32
 }
 
-pub(crate) fn load_config() -> (
-    Vec<String>,    // headpat_device_URIs
-    f32,            // min_speed_float
-    f32,            // max_speed_float
-    f32,            // speed_scale_float
-    String,         // port_rx
-    Vec<String>,    // proximity_parameters_multi
-    String,         // max_speed_parameter_address
-    f32,            // Max Speed Low Limit
-    u64,            // Timeout Setting
-    AdvancedConfig, // Advanced mode
-    ) {
-    let mut config = Ini::new();
+#[derive(Clone, Debug)]
+pub(crate) struct GlobalConfig {
+    pub port_rx: String,
+    pub default_min_speed: f32,
+    pub default_max_speed: f32,
+    pub default_speed_scale: f32,
+    pub default_max_speed_parameter: String,
+    pub minimum_max_speed: f32,
+    pub timeout: u64,
+    pub default_use_velocity_control: bool,
+    pub default_outer_proximity: f32,
+    pub default_inner_proximity: f32,
+    pub default_velocity_scalar: f32
+}
 
-    match config.load("./config.ini") {
+struct YamlHashWrapper {
+    yaml_hash: Hash
+}
+
+impl YamlHashWrapper {
+    fn has_key(&self, key: &str) -> bool {
+        self.yaml_hash.contains_key(&Yaml::String(key.to_string()))
+    }
+
+    fn get_i64(&self, key: &str) -> Option<i64> {
+        self.yaml_hash.get(&Yaml::String(key.to_string()))?.as_i64()
+    }
+
+    fn get_f64(&self, key: &str) -> Option<f64> {
+        let value = self.yaml_hash.get(&Yaml::String(key.to_string()))?.as_f64();
+        match value {
+            None => self.get_i64(key).map(|x| x as f64),
+            Some(_) => value
+        }
+    }
+
+    fn get_str(&self, key: &str) -> Option<String> {
+        let mut value = self.yaml_hash.get(&Yaml::String(key.to_string()))?.as_str().map(|x| x.to_string());
+        if value.is_none() {
+            value = self.get_bool(key).map(|x| x.to_string());
+        }
+        if value.is_none() {
+            value = self.get_i64(key).map(|x| x.to_string());
+        }
+        if value.is_none() {
+            value = self.get_f64(key).map(|x| x.to_string());
+        }
+
+        value
+    }
+
+    fn get_bool(&self, key: &str) -> Option<bool> {
+        self.yaml_hash.get(&Yaml::String(key.to_string()))?.as_bool()
+    }
+}
+
+pub(crate) fn load_config() -> (GlobalConfig, Vec<DeviceConfig>) {
+    let mut config_file = match File::open("./config.yml") {
         Err(why) => panic!("{}", why),
+        Ok(f) => f
+    };
+    let mut config_data = String::new();
+    match config_file.read_to_string(&mut config_data) {
+        Err(why) => panic!("{}", why),
+        // don't care how many bytes were read
         Ok(_) => {}
     }
-    
-    // Check the format of the IP URIs
-    let headpat_device_uris: Vec<String> = config.get("Setup", "device_ips")
-        .unwrap()
-        .split_whitespace()
-        .map(|s| s.to_string()) // convert &str to String
-        .filter_map(|s| {
-            match s.parse::<IpAddr>() {
-                Ok(_) => Some(s),
-                Err(_) => {
-                    println!("Invalid IP address format: {}", s);
-                    None
-                }
-            }
-        })
-        .collect();
-    if headpat_device_uris.is_empty() {
-        eprintln!("Error: no device URIs specified in config file");
-        // handle error here, e.g. return early from the function or exit the program
-    }
 
-    let proximity_parameters_multi: Vec<String> = config
-    .get("Setup", "proximity_parameters_multi")
-    .unwrap()
-    .split_whitespace()
-    .map(|s| format!("/avatar/parameters/{}", s))
-    .collect();
+    let config = match YamlLoader::load_from_str(&config_data) {
+        Err(why) => panic!("{}", why),
+        Ok(yaml_data) => yaml_data
+    };
+    assert_eq!(config.len(), 1, "Only 1 element should be in the yaml file");
+    let map = config.first().unwrap().as_hash().expect("Expected config to be a map at the top level");
+    let setup = map.get(&Yaml::String("setup".to_string())).expect("Missing setup section").as_hash().expect("Setup section must be a map");
+    let setup = YamlHashWrapper {yaml_hash: setup.clone()};
+    let global_config = parse_global_config(setup);
 
-    
-    if headpat_device_uris.len() != proximity_parameters_multi.len() {
-        eprintln!("Error: number of device URIs does not match number of proximity parameters");
-        // handle error here, e.g. return early from the function or exit the program
-    }
-
-    const MAX_SPEED_LOW_LIMIT_CONST: f32 = 0.05;
-
-    let min_speed                = config.get("Config", "min_speed").unwrap();
-    let min_speed_float             = min_speed.parse::<f32>().unwrap() / 100.0;
-    
-    let max_speed                   = config.get("Config", "max_speed").unwrap().parse::<f32>().unwrap() / 100.0; 
-    let max_speed_low_limit         = MAX_SPEED_LOW_LIMIT_CONST;
-    let max_speed_float             = max_speed.max(max_speed_low_limit);
-    
-    let speed_scale              = config.get("Config", "max_speed_scale").unwrap();
-    let speed_scale_float           = speed_scale.parse::<f32>().unwrap() / 100.0;
-    
-    let port_rx                  = config.get("Setup", "port_rx").unwrap();
-    
-    let timeout_str              = config.get("Config", "timeout").unwrap();
-    let timeout                     = timeout_str.parse::<u64>().unwrap_or(0);
-    
-    let max_speed_parameter_address = format!("/avatar/parameters/{}", config.get("Setup", "max_speed_parameter").unwrap_or_else(|| "/avatar/parameters/max_speed".into()));
-
-
-    let advanced_config = load_advanced_config(config);
+    let devices = map.get(&Yaml::String("devices".to_string())).expect("Missing devices section").as_vec().expect("Devices section must be a list");
+    let devices: Vec<DeviceConfig> = devices.iter().map(|dev| {
+        let device_data = YamlHashWrapper {yaml_hash: dev.as_hash().unwrap().clone()};
+        parse_device_config(device_data, &global_config)
+    }).collect();
 
     println!("\n");
     banner_txt();
     println!("\n");
     println!(" Device Maps");
-    for (i, parameter) in proximity_parameters_multi.iter().enumerate() {
-        println!(" {} => {}", parameter.trim_start_matches("/avatar/parameters/"), headpat_device_uris[i]);
+    for (i, device) in devices.iter().enumerate() {
+        println!("  Device {i}");
+        println!("   {} => {}", device.proximity_parameter.trim_start_matches("/avatar/parameters/"), device.device_uri);
+        println!("   Vibration Configuration");
+        println!("    Min Speed: {:?}%", device.min_speed * 100.0);
+        println!("    Max Speed: {:?}%", device.max_speed * 100.0);
+        println!("    Scale Factor: {:?}%", device.speed_scale * 100.0);
+        println!("    Advanced Mode: {}", device.use_velocity_control);
     }
 
-    println!("\n Listening for OSC on port: {}", port_rx);
-    println!("\n Vibration Configuration");
-    println!(" Min Speed: {}%", min_speed);
-    println!(" Max Speed: {:?}%", max_speed_float * 100.0);
-    println!(" Scale Factor: {}%", speed_scale);
-    println!(" Timeout: {}s", timeout);
-    println!(" Advanced Mode: {}", advanced_config.active);
+    println!("\n Listening for OSC on port: {}", global_config.port_rx);
+    println!(" Timeout: {}s", global_config.timeout);
     println!("\nWaiting for pats...");
 
-    (
-        headpat_device_uris,
-        min_speed_float,
-        max_speed_float,
-        speed_scale_float,
+    (global_config, devices)
+}
+
+fn parse_global_config(setup: YamlHashWrapper) -> GlobalConfig {
+    let port_rx = setup.get_str("port_rx").unwrap();
+    // only allow valid ports
+    assert!(u16::from_str_radix(&port_rx, 10).is_ok());
+
+    let default_min_speed = setup.get_f64("default_min_speed").unwrap() as f32 / 100.0;
+    assert!(default_min_speed >= 0.0 && default_min_speed <= 1.0);
+
+    const MAX_SPEED_LOW_LIMIT_CONST: f32 = 0.05;
+
+    let default_max_speed = setup.get_f64("default_max_speed").unwrap() as f32 / 100.0;
+    let default_max_speed = default_max_speed.max(MAX_SPEED_LOW_LIMIT_CONST);
+    assert!(default_max_speed >= default_min_speed && default_max_speed <= 1.0);
+
+    let default_max_speed_parameter = setup.get_str("default_max_speed_parameter").unwrap_or("max_speed".to_string());
+    let default_max_speed_parameter = format!("/avatar/parameters/{}", default_max_speed_parameter);
+
+    let default_speed_scale = setup.get_f64("default_speed_scale").unwrap() as f32 / 100.0;
+    assert!(default_speed_scale >= 0.10 && default_speed_scale <= 1.0);
+
+    let timeout = setup.get_i64("timeout").unwrap_or(0) as u64;
+
+    let default_use_velocity_control = setup.get_bool("default_use_velocity_control").unwrap();
+    let default_outer_proximity = setup.get_f64("default_outer_proximity").unwrap() as f32;
+    let default_inner_proximity = setup.get_f64("default_inner_proximity").unwrap() as f32;
+    let default_velocity_scalar = setup.get_f64("default_velocity_scalar").unwrap() as f32;
+
+    GlobalConfig {
         port_rx,
-        proximity_parameters_multi,
-        max_speed_parameter_address,
-        max_speed_low_limit,
+        default_min_speed,
+        default_max_speed,
+        default_max_speed_parameter,
+        minimum_max_speed: MAX_SPEED_LOW_LIMIT_CONST,
+        default_speed_scale,
         timeout,
-        advanced_config,
-    )
-}
-
-pub(crate) fn load_advanced_config(config: Ini) -> AdvancedConfig {
-    // println!("{}", config.get("Setup", "advanced_mode").unwrap());
-    if !config.get("Setup", "advanced_mode").unwrap().eq("true") {
-        return AdvancedConfig {
-            active: false,
-            outer_proximity: 0.0,
-            inner_proximity: 0.0,
-            velocity_scalar: 0.0,
-        }
-    }
-
-    let outer_proximity     = config.get("Advanced", "outer_proximity").unwrap().parse::<f32>().unwrap();
-    let inner_proximity     = config.get("Advanced", "inner_proximity").unwrap().parse::<f32>().unwrap();
-    let velocity_scalar     = config.get("Advanced", "velocity_scalar").unwrap().parse::<f32>().unwrap();
-
-    return AdvancedConfig {
-        active: true,
-        outer_proximity: outer_proximity,
-        inner_proximity: inner_proximity,
-        velocity_scalar: velocity_scalar,
+        default_use_velocity_control,
+        default_outer_proximity,
+        default_inner_proximity,
+        default_velocity_scalar
     }
 }
 
+fn parse_device_config(device_data: YamlHashWrapper, global_config: &GlobalConfig) -> DeviceConfig {
+    let ip = device_data.get_str("ip").unwrap();
+    ip.as_str().parse::<IpAddr>().expect(&format!("Invalid IP address format: {}", ip));
+    let proximity_parameter = format!("/avatar/parameters/{}", device_data.get_str("proximity_parameter").unwrap());
+    let min_speed = device_data.get_f64("min_speed").map(|x| x as f32 / 100.0).unwrap_or(global_config.default_min_speed);
+    let max_speed = device_data.get_f64("max_speed").map(|x| (x as f32 / 100.0).max(global_config.minimum_max_speed)).unwrap_or(global_config.default_max_speed);
+    let speed_scale = device_data.get_f64("speed_scale").map(|x| x as f32 / 100.0).unwrap_or(global_config.default_speed_scale);
+    let max_speed_parameter = device_data.get_str("max_speed_parameter").map(|x| format!("/avatar/parameters/{}", x)).unwrap_or(global_config.default_max_speed_parameter.clone());
+    let use_velocity_control = device_data.get_bool("use_velocity_control").unwrap_or(global_config.default_use_velocity_control);
+    let outer_proximity = device_data.get_f64("outer_proximity").map(|x| x as f32).unwrap_or(global_config.default_outer_proximity);
+    let inner_proximity = device_data.get_f64("inner_proximity").map(|x| x as f32).unwrap_or(global_config.default_inner_proximity);
+    let velocity_scalar = device_data.get_f64("velocity_scalar").map(|x| x as f32).unwrap_or(global_config.default_velocity_scalar);
+
+
+    DeviceConfig {
+        device_uri: ip,
+        proximity_parameter,
+        min_speed,
+        max_speed,
+        speed_scale,
+        max_speed_parameter,
+        use_velocity_control,
+        outer_proximity,
+        inner_proximity,
+        velocity_scalar
+    }
+}
