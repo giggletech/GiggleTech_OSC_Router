@@ -64,26 +64,21 @@ impl YamlHashWrapper {
     }
 
     fn get_f64(&self, key: &str) -> Option<f64> {
-        let value = self.yaml_hash.get(&Yaml::String(key.to_string()))?.as_f64();
-        match value {
-            None => self.get_i64(key).map(|x| x as f64),
-            Some(_) => value
-        }
+        let value = self.yaml_hash.get(&Yaml::String(key.to_string()));
+        value.map(|yaml| {
+            yaml.as_f64()
+                .or(yaml.as_i64().map(|x| x as f64))
+        }).flatten()
     }
 
     fn get_str(&self, key: &str) -> Option<String> {
-        let mut value = self.yaml_hash.get(&Yaml::String(key.to_string()))?.as_str().map(|x| x.to_string());
-        if value.is_none() {
-            value = self.get_bool(key).map(|x| x.to_string());
-        }
-        if value.is_none() {
-            value = self.get_i64(key).map(|x| x.to_string());
-        }
-        if value.is_none() {
-            value = self.get_f64(key).map(|x| x.to_string());
-        }
-
-        value
+        let value = self.yaml_hash.get(&Yaml::String(key.to_string()));
+        value.map(|yaml| {
+            yaml.as_str().map(|x| x.to_string())
+                .or(yaml.as_bool().map(|x| x.to_string()))
+                .or(yaml.as_i64().map(|x| x.to_string()))
+                .or(yaml.as_f64().map(|x| x.to_string()))
+        }).flatten()
     }
 
     fn get_bool(&self, key: &str) -> Option<bool> {
