@@ -141,19 +141,18 @@ fn parse_global_config(setup: YamlHashWrapper) -> GlobalConfig {
     assert!(u16::from_str_radix(&port_rx, 10).is_ok());
 
     let default_min_speed = setup.get_f64("default_min_speed").unwrap() as f32 / 100.0;
-    assert!(default_min_speed >= 0.0 && default_min_speed <= 1.0);
+    // negative speeds don't make sense
+    assert!(default_min_speed >= 0.0);
 
     const MAX_SPEED_LOW_LIMIT_CONST: f32 = 0.05;
 
     let default_max_speed = setup.get_f64("default_max_speed").unwrap() as f32 / 100.0;
-    let default_max_speed = default_max_speed.max(MAX_SPEED_LOW_LIMIT_CONST);
-    assert!(default_max_speed >= default_min_speed && default_max_speed <= 1.0);
+    let default_max_speed = default_max_speed.max(default_min_speed).max(MAX_SPEED_LOW_LIMIT_CONST);
 
     let default_max_speed_parameter = setup.get_str("default_max_speed_parameter").unwrap_or("max_speed".to_string());
     let default_max_speed_parameter = format!("/avatar/parameters/{}", default_max_speed_parameter);
 
     let default_speed_scale = setup.get_f64("default_speed_scale").unwrap() as f32 / 100.0;
-    assert!(default_speed_scale >= 0.10 && default_speed_scale <= 1.0);
 
     let timeout = setup.get_i64("timeout").unwrap_or(0) as u64;
 
@@ -182,14 +181,14 @@ fn parse_device_config(device_data: YamlHashWrapper, global_config: &GlobalConfi
     ip.as_str().parse::<IpAddr>().expect(&format!("Invalid IP address format: {}", ip));
     let proximity_parameter = format!("/avatar/parameters/{}", device_data.get_str("proximity_parameter").unwrap());
     let min_speed = device_data.get_f64("min_speed").map(|x| x as f32 / 100.0).unwrap_or(global_config.default_min_speed);
-    let max_speed = device_data.get_f64("max_speed").map(|x| (x as f32 / 100.0).max(global_config.minimum_max_speed)).unwrap_or(global_config.default_max_speed);
+    assert!(min_speed >= 0.0);
+    let max_speed = device_data.get_f64("max_speed").map(|x| (x as f32 / 100.0).max(min_speed).max(global_config.minimum_max_speed)).unwrap_or(global_config.default_max_speed);
     let speed_scale = device_data.get_f64("speed_scale").map(|x| x as f32 / 100.0).unwrap_or(global_config.default_speed_scale);
     let max_speed_parameter = device_data.get_str("max_speed_parameter").map(|x| format!("/avatar/parameters/{}", x)).unwrap_or(global_config.default_max_speed_parameter.clone());
     let use_velocity_control = device_data.get_bool("use_velocity_control").unwrap_or(global_config.default_use_velocity_control);
     let outer_proximity = device_data.get_f64("outer_proximity").map(|x| x as f32).unwrap_or(global_config.default_outer_proximity);
     let inner_proximity = device_data.get_f64("inner_proximity").map(|x| x as f32).unwrap_or(global_config.default_inner_proximity);
     let velocity_scalar = device_data.get_f64("velocity_scalar").map(|x| x as f32).unwrap_or(global_config.default_velocity_scalar);
-
 
     DeviceConfig {
         device_uri: ip,
