@@ -28,7 +28,7 @@ async fn main() -> Result<()> {
     let running = Arc::new(AtomicBool::new(false));
 
     // Rx/Tx Socket Setup
-    let mut rx_socket = giggletech_osc::setup_rx_socket(global_config.port_rx.clone()).await?;
+    let mut rx_socket = giggletech_osc::setup_rx_socket(global_config.port_rx.to_string()).await?;
 
     // Timeout
     for device in devices.iter() {
@@ -53,10 +53,10 @@ async fn main() -> Result<()> {
 
                 for device in devices.iter_mut() {
                     // Max Speed Setting
-                    if address == device.max_speed_parameter {
+                    if address == *device.max_speed_parameter {
                         data_processing::print_speed_limit(value);
                         device.max_speed = value.max(global_config.minimum_max_speed);
-                    } else if address == device.proximity_parameter {
+                    } else if address == *device.proximity_parameter {
                         handle_proximity_parameter::handle_proximity_parameter(
                             running.clone(), // Terminator
                             value,

@@ -3,6 +3,7 @@
 use std::{net::IpAddr};
 use std::fs::File;
 use std::io::Read;
+use std::sync::Arc;
 use yaml_rust::{YamlLoader, Yaml};
 use yaml_rust::yaml::Hash;
 
@@ -23,12 +24,12 @@ fn banner_txt(){
 
 #[derive(Clone, Debug)]
 pub(crate) struct DeviceConfig {
-    pub device_uri: String,
+    pub device_uri: Arc<String>,
     pub min_speed: f32,
     pub max_speed: f32,
     pub speed_scale: f32,
-    pub proximity_parameter: String,
-    pub max_speed_parameter: String,
+    pub proximity_parameter: Arc<String>,
+    pub max_speed_parameter: Arc<String>,
     pub use_velocity_control: bool,
     pub outer_proximity: f32,
     pub inner_proximity: f32,
@@ -37,11 +38,11 @@ pub(crate) struct DeviceConfig {
 
 #[derive(Clone, Debug)]
 pub(crate) struct GlobalConfig {
-    pub port_rx: String,
+    pub port_rx: Arc<String>,
     pub default_min_speed: f32,
     pub default_max_speed: f32,
     pub default_speed_scale: f32,
-    pub default_max_speed_parameter: String,
+    pub default_max_speed_parameter: Arc<String>,
     pub minimum_max_speed: f32,
     pub timeout: u64,
     pub default_use_velocity_control: bool,
@@ -136,7 +137,7 @@ pub(crate) fn load_config() -> (GlobalConfig, Vec<DeviceConfig>) {
 }
 
 fn parse_global_config(setup: YamlHashWrapper) -> GlobalConfig {
-    let port_rx = setup.get_str("port_rx").unwrap();
+    let port_rx = Arc::new(setup.get_str("port_rx").unwrap());
     // only allow valid ports
     assert!(u16::from_str_radix(&port_rx, 10).is_ok());
 
@@ -150,7 +151,7 @@ fn parse_global_config(setup: YamlHashWrapper) -> GlobalConfig {
     let default_max_speed = default_max_speed.max(default_min_speed).max(MAX_SPEED_LOW_LIMIT_CONST);
 
     let default_max_speed_parameter = setup.get_str("default_max_speed_parameter").unwrap_or("max_speed".to_string());
-    let default_max_speed_parameter = format!("/avatar/parameters/{}", default_max_speed_parameter);
+    let default_max_speed_parameter = Arc::new(format!("/avatar/parameters/{}", default_max_speed_parameter));
 
     let default_speed_scale = setup.get_f64("default_speed_scale").unwrap() as f32 / 100.0;
 
@@ -177,14 +178,14 @@ fn parse_global_config(setup: YamlHashWrapper) -> GlobalConfig {
 }
 
 fn parse_device_config(device_data: YamlHashWrapper, global_config: &GlobalConfig) -> DeviceConfig {
-    let ip = device_data.get_str("ip").unwrap();
+    let ip = Arc::new(device_data.get_str("ip").unwrap());
     ip.as_str().parse::<IpAddr>().expect(&format!("Invalid IP address format: {}", ip));
-    let proximity_parameter = format!("/avatar/parameters/{}", device_data.get_str("proximity_parameter").unwrap());
+    let proximity_parameter = Arc::new(format!("/avatar/parameters/{}", device_data.get_str("proximity_parameter").unwrap()));
     let min_speed = device_data.get_f64("min_speed").map(|x| x as f32 / 100.0).unwrap_or(global_config.default_min_speed);
     assert!(min_speed >= 0.0);
     let max_speed = device_data.get_f64("max_speed").map(|x| (x as f32 / 100.0).max(min_speed).max(global_config.minimum_max_speed)).unwrap_or(global_config.default_max_speed);
     let speed_scale = device_data.get_f64("speed_scale").map(|x| x as f32 / 100.0).unwrap_or(global_config.default_speed_scale);
-    let max_speed_parameter = device_data.get_str("max_speed_parameter").map(|x| format!("/avatar/parameters/{}", x)).unwrap_or(global_config.default_max_speed_parameter.clone());
+    let max_speed_parameter = device_data.get_str("max_speed_parameter").map(|x| Arc::new(format!("/avatar/parameters/{}", x))).unwrap_or(global_config.default_max_speed_parameter.clone());
     let use_velocity_control = device_data.get_bool("use_velocity_control").unwrap_or(global_config.default_use_velocity_control);
     let outer_proximity = device_data.get_f64("outer_proximity").map(|x| x as f32).unwrap_or(global_config.default_outer_proximity);
     let inner_proximity = device_data.get_f64("inner_proximity").map(|x| x as f32).unwrap_or(global_config.default_inner_proximity);
