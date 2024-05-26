@@ -24,8 +24,9 @@ lazy_static! {
 pub(crate) async fn handle_proximity_parameter(
     running: Arc<AtomicBool>,
     value: f32,
-    device: DeviceConfig
+    device: DeviceConfig,
 ) -> Result<()> {
+    println!("handle proximity parameter {}", device.proximity_parameter);
     terminator::stop(running.clone()).await?;
 
     let device_ip = Arc::new(device.device_uri.clone());
@@ -42,11 +43,12 @@ pub(crate) async fn handle_proximity_parameter(
         terminator::start(running.clone(), &device_ip).await?;
 
         for _ in 0..5 {
-            giggletech_osc::send_data(&device_ip, 0i32).await?;  
+            giggletech_osc::send_data(&device_ip, &device.motor_address, 0i32).await?;  
         }
     } else {
         if !device.use_velocity_control {
-            giggletech_osc::send_data(&device_ip,
+            println!("no v control");
+            giggletech_osc::send_data(&device_ip,   &device.motor_address,
                 data_processing::process_pat(value, &device)).await?;
         } else {
             let delta_t = match last_signal_time {
@@ -54,7 +56,7 @@ pub(crate) async fn handle_proximity_parameter(
                 Some(t_prev) => Instant::now().duration_since(t_prev),
             };
 
-            giggletech_osc::send_data(&device_ip,
+            giggletech_osc::send_data(&device_ip, &device.motor_address,
                 data_processing::process_pat_advanced(value, last_val, delta_t, &device)).await?;
         }
 

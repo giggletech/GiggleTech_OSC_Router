@@ -30,6 +30,7 @@ pub(crate) struct DeviceConfig {
     pub speed_scale: f32,
     pub proximity_parameter: Arc<String>,
     pub max_speed_parameter: Arc<String>,
+    pub motor_address: String,
     pub use_velocity_control: bool,
     pub outer_proximity: f32,
     pub inner_proximity: f32,
@@ -177,6 +178,13 @@ fn parse_global_config(setup: YamlHashWrapper) -> GlobalConfig {
     }
 }
 
+const TX_OSC_MOTOR_ADDRESS: &str = "/avatar/parameters/motor"; 
+const TX_OSC_GIGGLESPARK: &str = "/motor"; 
+const TX_OSC_COLLAR_1: &str = "/motor";
+const TX_OSC_COLLAR_2: &str = "/motor_02";
+const TX_OSC_COLLAR_3: &str = "/motor_03";
+const TX_OSC_COLLAR_4: &str = "/motor_04";
+
 fn parse_device_config(device_data: YamlHashWrapper, global_config: &GlobalConfig) -> DeviceConfig {
     let ip = Arc::new(device_data.get_str("ip").unwrap());
     ip.as_str().parse::<IpAddr>().expect(&format!("Invalid IP address format: {}", ip));
@@ -190,6 +198,7 @@ fn parse_device_config(device_data: YamlHashWrapper, global_config: &GlobalConfi
     let outer_proximity = device_data.get_f64("outer_proximity").map(|x| x as f32).unwrap_or(global_config.default_outer_proximity);
     let inner_proximity = device_data.get_f64("inner_proximity").map(|x| x as f32).unwrap_or(global_config.default_inner_proximity);
     let velocity_scalar = device_data.get_f64("velocity_scalar").map(|x| x as f32).unwrap_or(global_config.default_velocity_scalar);
+    let motor_address = device_data.get_str("motor_address").unwrap_or(TX_OSC_MOTOR_ADDRESS.to_owned());
 
     DeviceConfig {
         device_uri: ip,
@@ -201,6 +210,7 @@ fn parse_device_config(device_data: YamlHashWrapper, global_config: &GlobalConfi
         use_velocity_control,
         outer_proximity,
         inner_proximity,
-        velocity_scalar
+        velocity_scalar,
+        motor_address,
     }
 }
