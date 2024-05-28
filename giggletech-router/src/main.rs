@@ -3,6 +3,8 @@
 // by Sideways
 // Based off OSC Async https://github.com/Frando/async-osc
 
+// Add System Tray Minimization
+
 
 use async_osc::{prelude::*, OscPacket, OscType, Result};
 use async_std::{stream::StreamExt, task::{self}, sync::Arc,};
@@ -19,28 +21,18 @@ mod handle_proximity_parameter;
 
 #[async_std::main]
 async fn main() -> Result<()> {
-
-    let (
-        headpat_device_uris,
-        min_speed,
-        mut max_speed,
-        speed_scale,
-        port_rx,
-        proximity_parameters_multi,
-        max_speed_parameter_address,
-        max_speed_low_limit,
-        timeout,
-    ) = config::load_config();
+    let (global_config, mut devices) = config::load_config();
+    let timeout = global_config.timeout;
 
     // Setup Start / Stop of Terminiator
     let running = Arc::new(AtomicBool::new(false));
 
     // Rx/Tx Socket Setup
-    let mut rx_socket = giggletech_osc::setup_rx_socket(port_rx).await?;
+    let mut rx_socket = giggletech_osc::setup_rx_socket(global_config.port_rx.to_string()).await?;
 
     // Timeout
-    for ip in &headpat_device_uris {
-        let headpat_device_ip_clone = ip.clone();
+    for device in devices.iter() {
+        let headpat_device_ip_clone = device.device_uri.clone();
         task::spawn(async move {
             osc_timeout(&headpat_device_ip_clone, timeout).await.unwrap();
         });
@@ -59,28 +51,17 @@ async fn main() -> Result<()> {
                     None => continue,
                 };
 
-                // Max Speed Setting
-                if address == max_speed_parameter_address {
-                    data_processing::print_speed_limit(value);
-                    max_speed = value.max(max_speed_low_limit);
-                } else {
-                    let index = proximity_parameters_multi.iter().position(|a| *a == address);
-
-                    match index {
-                        Some(i) => {
-    
-                            handle_proximity_parameter::handle_proximity_parameter(
-                                running.clone(), // Terminator
-                                &Arc::new(headpat_device_uris[i].clone()),
-                                value,
-                                max_speed,
-                                min_speed,
-                                speed_scale,
-                                &proximity_parameters_multi[i],
-                            )
-                            .await?
-                        }
-                        None => {}
+                for device in devices.iter_mut() {
+                    // Max Speed Setting
+                    if address == *device.max_speed_parameter {
+                        data_processing::print_speed_limit(value);
+                        device.max_speed = value.max(global_config.minimum_max_speed);
+                    } else if address == *device.proximity_parameter {
+                        handle_proximity_parameter::handle_proximity_parameter(
+                            running.clone(), // Terminator
+                            value,
+                            device.clone()
+                        ).await?
                     }
                 }
             }
