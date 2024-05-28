@@ -1,5 +1,6 @@
 target/
 tmp/
+replays/
 Cargo.lock
 .DS_Store
 SANDBOX
