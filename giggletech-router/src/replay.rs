@@ -3,6 +3,22 @@ use std::io::{self, BufRead};
 use std::path::Path;
 use std::time::{Instant, Duration};
 use regex::Regex;
+use std::sync::atomic::AtomicBool;
+use async_std::task;
+use async_std::sync::Arc;
+use async_std::task::sleep;
+
+mod config;
+use config::*;
+mod osc_timeout;
+use osc_timeout::*;
+
+mod data_processing;
+mod giggletech_osc;
+mod terminator;
+mod handle_proximity_parameter;
+
+
 
 #[derive(Debug)]
 pub struct Packet {
@@ -32,7 +48,7 @@ impl Packet {
     }
 }
 
-pub fn read_file(path: &Path) -> Vec<Packet> {
+pub fn read_packets_file(path: &Path) -> Vec<Packet> {
     let re = Regex::new(r"(?x)
         ^(?P<hours>\d{2}):
         (?P<minutes>\d{2}):
@@ -73,25 +89,68 @@ pub struct PlaybackHost {
 
 impl PlaybackHost {
     pub fn new() -> Self {
+        let (global_config, mut devices) = config::load_config();
+        let packets = read_packets_file(Path::new("replays/Lesh.txt"));
+        PlaybackHost {
+            global_config,
+            devices,
+            packets,
+            t: 0.0,
+        }
+    }
+    pub async fn run(&mut self) {
+        let running = Arc::new(AtomicBool::new(false));
+        for device in self.devices.iter() {
+            let headpat_device_ip_clone = device.device_uri.clone();
+            let timeout = self.global_config.timeout;
+            task::spawn(async move {
+                osc_timeout(&headpat_device_ip_clone, timeout).await.unwrap();
+            });
+        }
+
+        // Record the starting point
+        let start_time = Instant::now();
+
+        for packet in &self.packets {
+            // Calculate the delay
+            let now = Instant::now();
+            let target_time = start_time + packet.timestamp;
+            if target_time > now {
+                let delay = target_time - now;
+                sleep(delay).await;
+            }
+
+            // Process the packet
+            self.process_packet(packet).await;
+        }
+        
+
+        
+
+
+        // maybe a send method
+        // or maybe a bespoke for each fkn thing thing, but the thing is like we want to wait a certain duration
 
     }
 
-    pub fn play(&mut self) -> PlaybackState {
+    async fn process_packet(&self, packet: &Packet) {
+        println!("Processing packet: {:?}", packet);
+        for device in self.devices.iter() {
+            handle_proximity_parameter::handle_proximity_parameter(
+                running.clone(), // Terminator
+                value,
+                device.clone()
+            ).await?
+        }
+
+        // rn devices is hacked
+        // each device has one motor? or
 
     }
 }
 
-pub struct PlaybackState {
-    pub t: f32,
-}
-
-impl PlaybackState {
-    pub fn tick(&mut self, dt: f32, host: &PlaybackHost) {
-
-    }
-}
-
-fn main() {
-    let v = read_file(Path::new("giggletech-router/replays/Lesh.txt"));
-    dbg!(v);
+#[async_std::main]
+async fn main() {
+    let mut host = PlaybackHost::new();
+        host.run().await;
 }
