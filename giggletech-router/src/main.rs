@@ -28,7 +28,7 @@ async fn main() -> Result<()> {
     let running = Arc::new(AtomicBool::new(false));
 
     // Rx/Tx Socket Setup
-    let mut rx_socket = giggletech_osc::setup_rx_socket(global_config.port_rx.to_string()).await?;
+    let mut rx_socket = giggletech_osc::setup_rx_socket(&global_config.port_rx).await?;
 
     // Timeout
     for device in devices.iter() {

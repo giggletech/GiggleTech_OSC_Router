@@ -1,0 +1,96 @@
+# Giggle Tech OSC Router Configuration
+
+setup:
+  # Port listening for OSC (Default: 9001)
+  port_rx: 9001
+  # Minimum Speed of Haptic Motor (5-100)
+  default_min_speed: 2
+  # Maximum Speed of Haptic Motor (Recommended: 5-25)
+  default_max_speed: 25
+  # Maximum Speed Parameter
+  default_max_speed_parameter: max_speed
+  # Maximum Speed Scalar (10-100)
+  default_speed_scale: 100
+  # OSC Timeout (seconds)
+  timeout: 500
+  # Velocity Control Mode (True = Velocity / False = Proximity)
+  # Note: This mode is not tested for multiple devices. Refer to Discord for more information.
+  default_use_velocity_control: false
+  # Velocity Control Parameters
+  # Adjust these parameters to achieve the desired effect.
+  default_outer_proximity: 0
+  default_inner_proximity: 0.7
+  default_velocity_scalar: 20
+
+devices:
+    # IP Address of Headpat Device
+  - ip: 192.168.1.69
+    # Unity Proximity Parameter
+    # Specify the Unity proximity parameter
+    proximity_parameter: proximity_02
+    # IP Address of Headpat Device
+
+
+  - ip: 192.168.1.70
+    # Unity Proximity Parameter
+    # Specify the Unity proximity parameter
+    proximity_parameter: proximity_02
+    # Minimum Speed of Haptic Motor (5-100)
+    min_speed: 5
+    # Maximum Speed of Haptic Motor (Recommended: 5-25)
+    max_speed: 40
+    # Maximum Speed Scalar (10-100)
+    speed_scale: 90
+    # Maximum Speed Parameter
+    max_speed_parameter: max_speed_02
+    # Velocity Control Mode (True = Velocity / False = Proximity)
+    # Note: This mode is not tested for multiple devices. Refer to Discord for more information.
+    use_velocity_control: true
+    # Velocity Control Parameters
+    # Adjust these parameters to achieve the desired effect.
+    outer_proximity: 0.1
+    inner_proximity: 0.6
+    velocity_scalar: 25
+
+  - ip: 192.168.1.71
+    # Unity Proximity Parameter
+    # Specify the Unity proximity parameter
+    proximity_parameter: proximity_03
+    # Minimum Speed of Haptic Motor (5-100)
+    min_speed: 7
+    # Maximum Speed of Haptic Motor (Recommended: 5-25)
+    max_speed: 60
+    # Maximum Speed Scalar (10-100)
+    speed_scale: 100
+    # Maximum Speed Parameter
+    max_speed_parameter: max_speed_03
+    # Velocity Control Mode (True = Velocity / False = Proximity)
+    # Note: This mode is not tested for multiple devices. Refer to Discord for more information.
+    use_velocity_control: false
+    # Velocity Control Parameters
+    # Adjust these parameters to achieve the desired effect.
+    outer_proximity: 0.1
+    inner_proximity: 0.6
+    velocity_scalar: 25
+
+  - ip: 192.168.1.73
+    # Unity Proximity Parameter
+    # Specify the Unity proximity parameter
+    proximity_parameter: proximity_04
+    # Minimum Speed of Haptic Motor (5-100)
+    min_speed: 5
+    # Maximum Speed of Haptic Motor (Recommended: 5-25)
+    max_speed: 100
+    # Maximum Speed Scalar (10-100)
+    speed_scale: 100
+    # Maximum Speed Parameter
+    max_speed_parameter: max_speed_04
+    # Velocity Control Mode (True = Velocity / False = Proximity)
+    # Note: This mode is not tested for multiple devices. Refer to Discord for more information.
+    use_velocity_control: true
+    # Velocity Control Parameters
+    # Adjust these parameters to achieve the desired effect.
+    outer_proximity: 0.1
+    inner_proximity: 0.6
+    velocity_scalar: 25
+
