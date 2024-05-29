@@ -4,15 +4,15 @@ setup:
   # Port listening for OSC (Default: 9001)
   port_rx: 9001
   # Minimum Speed of Haptic Motor (5-100)
-  default_min_speed: 2
+  default_min_speed: 25
   # Maximum Speed of Haptic Motor (Recommended: 5-25)
-  default_max_speed: 25
+  default_max_speed: 50
   # Maximum Speed Parameter
   default_max_speed_parameter: max_speed
   # Maximum Speed Scalar (10-100)
   default_speed_scale: 100
   # OSC Timeout (seconds)
-  timeout: 500
+  timeout: 3
   # Velocity Control Mode (True = Velocity / False = Proximity)
   # Note: This mode is not tested for multiple devices. Refer to Discord for more information.
   default_use_velocity_control: false
@@ -24,14 +24,14 @@ setup:
 
 devices:
   - ip: 192.168.1.69
-    proximity_parameter: proximity_01
+    proximity_parameter: X+
     motor_address: /motor
   - ip: 192.168.1.69
-    proximity_parameter: proximity_02
+    proximity_parameter: Z+
     motor_address: /motor_02
   - ip: 192.168.1.69
-    proximity_parameter: proximity_03
+    proximity_parameter: X-
     motor_address: /motor_03
   - ip: 192.168.1.69
-    proximity_parameter: proximity_04
+    proximity_parameter: Z-
     motor_address: /motor_04

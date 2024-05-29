@@ -39,8 +39,6 @@ impl Packet {
             let axis = caps["axis"].to_string();
             let amount: f32 = caps["amount"].parse().ok()?;
 
-            dbg!("get");
-
             Some(Packet { timestamp, axis, amount })
         } else {
             None
@@ -80,6 +78,7 @@ pub struct PlaybackHost {
     global_config: GlobalConfig,
     devices: Vec<DeviceConfig>,
     packets: Vec<Packet>,
+    running: Arc<AtomicBool>,
     t: f32,
 
     // timeout: u64,
@@ -89,17 +88,17 @@ pub struct PlaybackHost {
 
 impl PlaybackHost {
     pub fn new() -> Self {
-        let (global_config, mut devices) = config::load_config();
-        let packets = read_packets_file(Path::new("replays/Lesh.txt"));
+        let (global_config, devices) = config::load_config();
+        let packets = read_packets_file(Path::new("giggletech-router/replays/Lesh.txt"));
         PlaybackHost {
             global_config,
             devices,
             packets,
+            running: Arc::new(AtomicBool::new(false)),
             t: 0.0,
         }
     }
     pub async fn run(&mut self) {
-        let running = Arc::new(AtomicBool::new(false));
         for device in self.devices.iter() {
             let headpat_device_ip_clone = device.device_uri.clone();
             let timeout = self.global_config.timeout;
@@ -110,18 +109,20 @@ impl PlaybackHost {
 
         // Record the starting point
         let start_time = Instant::now();
+        let packets_start = self.packets[0].timestamp;
 
         for packet in &self.packets {
             // Calculate the delay
             let now = Instant::now();
-            let target_time = start_time + packet.timestamp;
-            if target_time > now {
-                let delay = target_time - now;
-                sleep(delay).await;
-            }
+            let t_since_start = now - start_time;
+            let packet_t_since_start = packet.timestamp - packets_start;
 
-            // Process the packet
-            self.process_packet(packet).await;
+            if t_since_start >= packet_t_since_start {
+                self.process_packet(packet).await;
+            } else {
+                let delta = packet_t_since_start - t_since_start;
+                sleep(delta).await;
+            }
         }
         
 
@@ -134,17 +135,28 @@ impl PlaybackHost {
     }
 
     async fn process_packet(&self, packet: &Packet) {
-        println!("Processing packet: {:?}", packet);
-        for device in self.devices.iter() {
-            handle_proximity_parameter::handle_proximity_parameter(
-                running.clone(), // Terminator
-                value,
-                device.clone()
-            ).await?
+        // println!("Processing packet: {:?}", packet);
+        let device = self.devices.iter().find(|d| {
+            *d.proximity_parameter == "/avatar/parameters/".to_owned() + &packet.axis
+        });
+        if device.is_none() { 
+            return; 
         }
+        let device = device.unwrap();
+        
+        handle_proximity_parameter::handle_proximity_parameter(
+            self.running.clone(), // Terminator
+            packet.amount, // do we project into xz and normalize?
+            device.clone()
+        ).await.unwrap();
 
         // rn devices is hacked
         // each device has one motor? or
+
+        // rn each device has a motor address
+        // so i can literally map the axis into motor address here
+        // yea or i can like map axis to device basically
+        // yea i think im mapping axis to  device.motor_address when iterating through devices
 
     }
 }
@@ -153,4 +165,7 @@ impl PlaybackHost {
 async fn main() {
     let mut host = PlaybackHost::new();
         host.run().await;
+        println!("finishing up...");
+        sleep(Duration::from_secs(host.global_config.timeout + 1)).await;
+        println!("done");
 }
