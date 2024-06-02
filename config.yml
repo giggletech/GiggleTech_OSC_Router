@@ -40,7 +40,6 @@ devices:
   # Device 2
   - ip: 192.168.1.70
     proximity_parameter: proximity_02
-    min_speed: 5
     max_speed: 40
     speed_scale: 90
     max_speed_parameter: max_speed_02
@@ -56,15 +55,10 @@ devices:
     max_speed: 60
     speed_scale: 100
     max_speed_parameter: max_speed_03
-    use_velocity_control: false
-    outer_proximity: 0.1
-    inner_proximity: 0.6
-    velocity_scalar: 25
 
   # Device 4
   - ip: 192.168.1.73
     proximity_parameter: proximity_04
-    min_speed: 5
     max_speed: 100
     speed_scale: 100
     max_speed_parameter: max_speed_04
