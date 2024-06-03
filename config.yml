@@ -4,9 +4,9 @@ setup:
   # Port listening for OSC (Default: 9001)
   port_rx: 9001
   # Minimum Speed of Haptic Motor (5-100)
-  default_min_speed: 25
+  default_min_speed: 2
   # Maximum Speed of Haptic Motor (Recommended: 5-25)
-  default_max_speed: 50
+  default_max_speed: 100
   # Maximum Speed Parameter
   default_max_speed_parameter: max_speed
   # Maximum Speed Scalar (10-100)
