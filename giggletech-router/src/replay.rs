@@ -227,8 +227,8 @@ impl PlaybackState {
     // uh deadzone or anything?
     pub fn get_current(&self) -> (f32, f32) {
         //let r = self.state["IsGrabbed"]*self.state["Stretch"];
-        let r = 10.0*self.state["IsGrabbed"]*self.state["Stretch"];
-        // let r = 1.0;
+        // let r = 10.0*self.state["IsGrabbed"]*self.state["Stretch"];
+        let r = 1.0;
         let u = self.state["X+"] - self.state["X-"];
         let v = self.state["Z+"] - self.state["Z-"];
         (r*u, r*v)
@@ -336,3 +336,6 @@ async fn main() {
         sleep(Duration::from_secs(host.global_config.timeout + 1)).await;
         println!("done");
 }
+
+
+// maybe any prox of 0 runs terminator
