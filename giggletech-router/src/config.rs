@@ -29,6 +29,7 @@ pub(crate) struct DeviceConfig {
     pub device_uri: Arc<String>,
     pub min_speed: f32,
     pub max_speed: f32,
+    pub start_tx: i32,
     pub speed_scale: f32,
     pub proximity_parameter: Arc<String>,
     pub max_speed_parameter: Arc<String>,
@@ -44,6 +45,7 @@ pub(crate) struct GlobalConfig {
     pub default_min_speed: f32,
     pub default_max_speed: f32,
     pub default_speed_scale: f32,
+    pub default_start_tx: i32,
     pub default_max_speed_parameter: Arc<String>,
     pub minimum_max_speed: f32,
     pub timeout: u64,
@@ -152,6 +154,8 @@ fn parse_global_config(setup: YamlHashWrapper) -> GlobalConfig {
     let default_max_speed = setup.get_f64("default_max_speed").unwrap() as f32 / 100.0;
     let default_max_speed = default_max_speed.max(default_min_speed).max(MAX_SPEED_LOW_LIMIT_CONST);
 
+    let default_start_tx = setup.get_i64("default_start_tx").unwrap() as i32;
+
     let default_max_speed_parameter = setup.get_str("default_max_speed_parameter").unwrap_or("max_speed".to_string());
     let default_max_speed_parameter = Arc::new(format!("/avatar/parameters/{}", default_max_speed_parameter));
 
@@ -169,6 +173,7 @@ fn parse_global_config(setup: YamlHashWrapper) -> GlobalConfig {
         default_min_speed,
         default_max_speed,
         default_max_speed_parameter,
+        default_start_tx,
         minimum_max_speed: MAX_SPEED_LOW_LIMIT_CONST,
         default_speed_scale,
         timeout,
@@ -186,6 +191,7 @@ fn parse_device_config(device_data: YamlHashWrapper, global_config: &GlobalConfi
     let min_speed = device_data.get_f64("min_speed").map(|x| x as f32 / 100.0).unwrap_or(global_config.default_min_speed);
     assert!(min_speed >= 0.0);
     let max_speed = device_data.get_f64("max_speed").map(|x| (x as f32 / 100.0).max(min_speed).max(global_config.minimum_max_speed)).unwrap_or(global_config.default_max_speed);
+    let start_tx = device_data.get_i64("start_tx").map(|x| x as i32).unwrap_or(global_config.default_start_tx);
     let speed_scale = device_data.get_f64("speed_scale").map(|x| x as f32 / 100.0).unwrap_or(global_config.default_speed_scale);
     let max_speed_parameter = device_data.get_str("max_speed_parameter").map(|x| Arc::new(format!("/avatar/parameters/{}", x))).unwrap_or(global_config.default_max_speed_parameter.clone());
     let use_velocity_control = device_data.get_bool("use_velocity_control").unwrap_or(global_config.default_use_velocity_control);
@@ -198,6 +204,7 @@ fn parse_device_config(device_data: YamlHashWrapper, global_config: &GlobalConfi
         proximity_parameter,
         min_speed,
         max_speed,
+        start_tx,
         speed_scale,
         max_speed_parameter,
         use_velocity_control,

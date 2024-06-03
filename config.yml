@@ -14,6 +14,9 @@ setup:
   # Maximum Speed of Haptic Motor (Recommended: 5-25)
   default_max_speed: 25
 
+  # The minimum initial speed used when the haptic motor is started (Recommended: 5-15)
+  default_start_tx: 10
+
   # Maximum Speed Parameter
   default_max_speed_parameter: max_speed
 
@@ -41,6 +44,7 @@ devices:
   - ip: 192.168.1.70
     proximity_parameter: proximity_02
     max_speed: 40
+    start_tx: 15
     speed_scale: 90
     max_speed_parameter: max_speed_02
     use_velocity_control: true
