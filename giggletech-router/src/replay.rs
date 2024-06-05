@@ -19,6 +19,7 @@ mod giggletech_osc;
 mod terminator;
 mod handle_proximity_parameter;
 
+// todo remove or change the other thing to be this
 pub struct ParseContext {
     re_line: Regex,
     re_timestamp: Regex,
@@ -79,6 +80,7 @@ impl ParseContext {
     }
 }
 
+// todo remove or change the other thing to be this
 #[test]
 fn test_decode_line() {
     let s1 = "19:59:50.408 | RECEIVE    | ENDPOINT([::ffff:127.0.0.1]:54657) ADDRESS(/avatar/parameters/Leash_Angle) FLOAT(0.3603651)";
@@ -125,6 +127,7 @@ fn test_decode_packet() {
     assert_eq!(pc.decode_packet(ip2), Some(p2));
 }
 
+// todo remove or change the other thing to be this
 #[derive(PartialEq, Debug)]
 pub struct InPacket {
     timestamp: String,
@@ -247,6 +250,7 @@ impl PlaybackHost {
     pub fn new() -> Self {
         let (global_config, devices) = config::load_config();
         let packets = read_packets_file(Path::new("giggletech-router/replays/Lesh.txt"));
+        // let packets = read_packets_file(Path::new("giggletech-router/replays/test.txt")); // strraight up doesnt wsork idk
         PlaybackHost {
             global_config,
             devices,

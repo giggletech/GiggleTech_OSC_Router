@@ -39,15 +39,14 @@ pub(crate) async fn handle_proximity_parameter(
     let last_val = device_last_values.insert(device_ip.to_string(), value).unwrap_or(0.0);
 
     if value == 0.0 {
-        println!("Stopping pats...");
-        terminator::start(running.clone(), &device_ip).await?;
+        // println!("Stopping pats...");
+        // terminator::start(running.clone(), &device_ip).await?;
 
-        for _ in 0..5 {
-            giggletech_osc::send_data(&device_ip, &device.motor_address, 0i32).await?;  
-        }
+        // for _ in 0..5 {
+        //     giggletech_osc::send_data(&device_ip, &device.motor_address, 0i32).await?;  
+        // }
     } else {
         if !device.use_velocity_control {
-            println!("no v control");
             giggletech_osc::send_data(&device_ip,   &device.motor_address,
                 data_processing::process_pat(value, &device)).await?;
         } else {

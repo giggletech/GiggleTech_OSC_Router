@@ -31,6 +31,10 @@ regex = "1.10.4"
 name = "replay"
 path = "src/replay.rs"
 
+[[bin]]
+name = "routerv2"
+path = "src/routerv2.rs"
+
 
 
 [dev-dependencies]
