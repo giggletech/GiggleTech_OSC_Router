@@ -1,0 +1,14 @@
+Giggletech Router Change Log
+
+1.3
+Added Motor Start Speed to help avoid motor stalling at low proximity settings.
+This change only affects Proximity Mode; Velocity Mode remains unaffected.
+Contributed by EnderShadow
+
+1.2
+Added YML configuration file support.
+Contributed by EnderShadow
+
+1.1
+Introduced Velocity Control.
+Contributed by KadachiiVR
