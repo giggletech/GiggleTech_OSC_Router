@@ -47,7 +47,7 @@ pub(crate) async fn handle_proximity_parameter(
     } else {
         if !device.use_velocity_control {
             giggletech_osc::send_data(&device_ip,
-                data_processing::process_pat(value, &device)).await?;
+                data_processing::process_pat(value, &device, last_val)).await?;
         } else {
             let delta_t = match last_signal_time {
                 None => Duration::new(0, 0),
@@ -57,8 +57,6 @@ pub(crate) async fn handle_proximity_parameter(
             giggletech_osc::send_data(&device_ip,
                 data_processing::process_pat_advanced(value, last_val, delta_t, &device)).await?;
         }
-
-
     }
     Ok(())
 }
