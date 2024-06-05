@@ -44,7 +44,7 @@ devices:
   - ip: 192.168.1.70
     proximity_parameter: proximity_02
     max_speed: 40
-    start_tx: 20
+    start_tx: 30
     speed_scale: 90
     max_speed_parameter: max_speed_02
     use_velocity_control: true

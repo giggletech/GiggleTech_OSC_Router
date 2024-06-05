@@ -123,14 +123,18 @@ pub(crate) fn load_config() -> (GlobalConfig, Vec<DeviceConfig>) {
     banner_txt();
     println!("\n");
     println!(" Device Maps");
+    println!("");
     for (i, device) in devices.iter().enumerate() {
         println!("  Device {i}");
         println!("   {} => {}", device.proximity_parameter.trim_start_matches("/avatar/parameters/"), device.device_uri);
         println!("   Vibration Configuration");
-        println!("    Min Speed: {:?}%", device.min_speed * 100.0);
-        println!("    Max Speed: {:?}%", device.max_speed * 100.0);
-        println!("    Scale Factor: {:?}%", device.speed_scale * 100.0);
+        println!("    Startup TX Speed: {:.0}%", device.start_tx);
+        println!("    Min Speed: {:.0}%", device.min_speed * 100.0);
+        println!("    Max Speed: {:.0}%", device.max_speed * 100.0);
+        println!("    Scale Factor: {:.0}%", device.speed_scale * 100.0);
         println!("    Advanced Mode: {}", device.use_velocity_control);
+        println!("");
+
     }
 
     println!("\n Listening for OSC on port: {}", global_config.port_rx);
