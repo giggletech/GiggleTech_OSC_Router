@@ -15,7 +15,7 @@ setup:
   default_max_speed: 25
 
   # The minimum initial speed used when the haptic motor is started (Recommended: 5-15)
-  default_start_tx: 10
+  default_start_tx: 20
 
   # Maximum Speed Parameter
   default_max_speed_parameter: max_speed
