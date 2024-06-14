@@ -26,7 +26,7 @@ pub(crate) async fn handle_proximity_parameter(
     value: f32,
     device: DeviceConfig,
 ) -> Result<()> {
-    println!("handle proximity parameter {}", device.proximity_parameter);
+    // println!("handle proximity parameter {}, {}", device.proximity_parameter, value);
     terminator::stop(running.clone()).await?;
 
     let device_ip = Arc::new(device.device_uri.clone());

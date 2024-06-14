@@ -30,15 +30,15 @@ pub struct PlaybackState {
 impl Default for PlaybackState {
     fn default() -> Self {
         let mut m = HashMap::new();
-        m.insert("X+".to_owned(), 0.0f32);
-        m.insert("Y+".to_owned(), 0.0);
-        m.insert("Z+".to_owned(), 0.0);
-        m.insert("X-".to_owned(), 0.0);
-        m.insert("Y-".to_owned(), 0.0);
-        m.insert("Z-".to_owned(), 0.0);
-        m.insert("Angle".to_owned(), 0.0);
-        m.insert("Stretch".to_owned(), 0.0);
-        m.insert("IsGrabbed".to_owned(), 0.0); // nb this a bool im just gonna make 0.0 or 1.0
+        m.insert("Leash_X+".to_owned(), 0.0f32);
+        m.insert("Leash_Y+".to_owned(), 0.0);
+        m.insert("Leash_Z+".to_owned(), 0.0);
+        m.insert("Leash_X-".to_owned(), 0.0);
+        m.insert("Leash_Y-".to_owned(), 0.0);
+        m.insert("Leash_Z-".to_owned(), 0.0);
+        m.insert("Leash_Angle".to_owned(), 0.0);
+        m.insert("Leash_Stretch".to_owned(), 0.0);
+        m.insert("Leash_IsGrabbed".to_owned(), 0.0); // nb this a bool im just gonna make 0.0 or 1.0
         PlaybackState {
             state: m,
         }
@@ -57,8 +57,8 @@ impl PlaybackState {
         //let r = self.state["IsGrabbed"]*self.state["Stretch"];
         // let r = 10.0*self.state["IsGrabbed"]*self.state["Stretch"];
         let r = 1.0;
-        let u = self.state["X+"] - self.state["X-"];
-        let v = self.state["Z+"] - self.state["Z-"];
+        let u = self.state["Leash_X+"] - self.state["Leash_X-"];
+        let v = self.state["Leash_Z+"] - self.state["Leash_Z-"];
         (r*u, r*v)
     }
 }
@@ -122,16 +122,16 @@ impl Router {
         let zm = -(v.min(0.0));
 
         let dxp = self.devices.iter().find(|d| {
-            *d.proximity_parameter == "/avatar/parameters/X+".to_owned()
+            *d.proximity_parameter == "/avatar/parameters/Leash_X+".to_owned()
         }).unwrap();
         let dxm = self.devices.iter().find(|d| {
-            *d.proximity_parameter == "/avatar/parameters/X-".to_owned()
+            *d.proximity_parameter == "/avatar/parameters/Leash_X-".to_owned()
         }).unwrap();
         let dzp = self.devices.iter().find(|d| {
-            *d.proximity_parameter == "/avatar/parameters/Z+".to_owned()
+            *d.proximity_parameter == "/avatar/parameters/Leash_Z+".to_owned()
         }).unwrap();
         let dzm = self.devices.iter().find(|d| {
-            *d.proximity_parameter == "/avatar/parameters/Z-".to_owned()
+            *d.proximity_parameter == "/avatar/parameters/Leash_Z-".to_owned()
         }).unwrap();
 
         handle_proximity_parameter::handle_proximity_parameter(

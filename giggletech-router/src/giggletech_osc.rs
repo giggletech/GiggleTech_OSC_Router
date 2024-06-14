@@ -24,7 +24,7 @@ pub(crate) async fn setup_tx_socket(address: &str) -> Result<OscSocket> {
 
 
 pub(crate) async fn send_data(device_ip: &str, motor_address: &str, value: i32) -> Result<()> {
-    // println!("Sending Value:{} to IP: {}", value, device_ip);
+    println!("Sending Value:{} to IP: {}", value, device_ip);
     
     // Todo 
     // Move socket connection out of send_data function

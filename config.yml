@@ -24,14 +24,14 @@ setup:
 
 devices:
   - ip: 192.168.1.69
-    proximity_parameter: X+
+    proximity_parameter: Leash_X+
     motor_address: /motor
   - ip: 192.168.1.69
-    proximity_parameter: Z+
+    proximity_parameter: Leash_Z+
     motor_address: /motor_02
   - ip: 192.168.1.69
-    proximity_parameter: X-
+    proximity_parameter: Leash_X-
     motor_address: /motor_03
   - ip: 192.168.1.69
-    proximity_parameter: Z-
+    proximity_parameter: Leash_Z-
     motor_address: /motor_04
