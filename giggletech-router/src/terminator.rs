@@ -1,4 +1,30 @@
-// terminator.rs
+/*
+    terminator.rs - Control Start/Stop Worker for Device Shutdown
+
+    This module is responsible for managing a worker that sends stop signals (`0`) to devices in regular intervals 
+    when certain conditions are met (such as proximity signals stopping). It can start or stop the worker as needed.
+
+    **Key Features:**
+
+    1. **Start Worker (`start`)**:
+       - Spawns a worker task that continuously sends a stop signal (`0`) to a device every second.
+       - Ensures the worker is not started if it’s already running by checking the `AtomicBool`.
+
+    2. **Stop Worker (`stop`)**:
+       - Stops the worker by setting the `AtomicBool` to `false`, halting the periodic stop signal transmission.
+
+    3. **Worker Task**:
+       - The worker function runs in a loop, sending stop signals to the device while the worker is active.
+       - It sleeps for 1 second between each stop signal, ensuring the device continues to receive stop commands 
+         until the worker is stopped.
+
+    **Usage**:
+    - This module is used to continuously send stop signals to devices when needed, for instance, when a device 
+      should halt due to inactivity or the end of a proximity event.
+    - The worker can be started or stopped based on the system state, using the `start` and `stop` functions.
+
+*/
+
 
 
 use async_osc::{Result};

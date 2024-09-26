@@ -1,4 +1,53 @@
-// config.rs
+/*
+    config.rs - Configuration Module for Giggletech VRChat OSC System
+
+    This module is responsible for loading, parsing, and managing the configuration settings 
+    for the VRChat OSC-based system. It reads configuration from a `config.yml` file, processes 
+    both global and device-specific settings, and manages important parameters like OSC ports, 
+    speed, proximity, and velocity control. It also supports dynamic port retrieval via OSCQuery.
+
+    **Key Features:**
+    
+    1. **Loading Configuration (`load_config`)**:
+       - Reads the `config.yml` file and parses it into a structure using YAML.
+       - Extracts global and device-specific settings.
+       - Displays a banner with device information and listens for OSC messages on a defined port.
+
+    2. **Global Configuration (`GlobalConfig`)**:
+       - The global settings include defaults for min/max speeds, proximity parameters, and OSC ports.
+       - The function `parse_global_config` handles both static OSC ports and dynamic ports through OSCQuery.
+       - Key parameters include:
+         - `port_rx`: The OSC port (either a fixed value or dynamically assigned via OSCQuery).
+         - `default_min_speed` & `default_max_speed`: Speed limits used for device control.
+         - `timeout`, `velocity control`, and `proximity settings`.
+
+    3. **Device-Specific Configuration (`DeviceConfig`)**:
+       - Each device can have custom parameters, but if not specified, they inherit from global settings.
+       - The function `parse_device_config` processes each device’s configuration, allowing custom IP addresses, 
+         speed settings, and proximity parameters for each individual device.
+
+    **Dynamic Port Management with OSCQuery**:
+    - If the configuration specifies `"OSCQuery"` for `port_rx`, the module uses the `oscq_giggletech` helper 
+      to dynamically retrieve the UDP port from the OSCQuery service. If not, a static port number from the config is used.
+
+    **Usage**:
+    - After parsing the configuration, the module initializes the devices and starts listening for OSC messages 
+      on the specified port. It supports multiple devices, each with their unique or global configurations.
+    
+    **Example Configurations**:
+    ```yaml
+    setup:
+      port_rx: OSCQuery  # Uses dynamic OSCQuery port
+      default_min_speed: 0.1
+      default_max_speed: 1.0
+
+    devices:
+      - ip: "192.168.1.2"
+        min_speed: 0.2
+        max_speed: 0.8
+    ```
+*/
+
 
 use std::{net::IpAddr};
 use std::fs::File;

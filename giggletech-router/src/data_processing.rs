@@ -1,4 +1,55 @@
-// data_processing.rs
+/*
+    data_processing.rs - Processing Sensor Data for Giggletech Devices
+
+    This module is responsible for processing proximity signals from devices, generating visual 
+    representations of proximity data, and calculating motor transmission (Tx) values for headpats
+    based on proximity. It handles both basic and advanced headpat processing, adjusting motor speed
+    based on proximity and velocity signals. 
+
+    **Key Features:**
+
+    1. **Proximity Graph (`proximity_graph`)**:
+       - Converts a proximity signal into a simple string-based graph. The closer the proximity, 
+         the longer the "dash" graph, which visually represents the proximity level.
+       - Returns a string like "----->" to indicate proximity strength.
+
+    2. **Speed Limit Printer (`print_speed_limit`)**:
+       - Displays the current headpat maximum speed percentage along with an indicator of the level 
+         (e.g., "!!! SO MUCH !!!" for high speeds).
+       - Helps visualize the intensity of the motor speed.
+
+    3. **Pat Processor (`process_pat`)**:
+       - Processes the proximity signal and calculates the motor transmission (Tx) value. This value 
+         is scaled by the configured device speed scale and the constant motor scaling factor.
+       - Ensures the motor starts with enough power if transitioning from an idle state.
+       - Logs the proximity value and motor transmission for debugging.
+
+    4. **Advanced Pat Processor (`process_pat_advanced`)**:
+       - A more advanced version of the `process_pat` function, taking into account the velocity of the 
+         proximity signal change over time (`delta_t`) to calculate a velocity-based motor transmission.
+       - Used for finer control over motor behavior based on how fast the proximity signal changes 
+         (e.g., if a headpat is being applied quickly or slowly).
+       - Logs proximity, velocity, and motor transmission for debugging and visualization.
+
+    **Motor Speed Scaling**:
+    - The constant `MOTOR_SPEED_SCALE` (0.66) is used to scale the motor speed transmission. Going higher 
+      than this value may reduce the life of the motor, as it's designed for over-voltage control.
+
+    **Usage**:
+    - The module processes proximity signals in real-time, calculating motor values that are then used 
+      to control vibrational feedback devices in VRChat.
+    - Both basic and advanced pat processing functions are available, depending on the complexity of the 
+      behavior needed.
+
+    **Example Functionality**:
+    - `process_pat`: Basic proximity-based motor control.
+    - `process_pat_advanced`: Velocity-sensitive motor control based on proximity changes.
+
+    **Logging and Debugging**:
+    - Each function logs proximity values, motor Tx values, and velocity (for advanced processing) to help 
+      visualize and debug motor behavior in real-time.
+*/
+
 
 use std::time::Duration;
 

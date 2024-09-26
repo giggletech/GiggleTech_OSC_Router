@@ -1,7 +1,26 @@
 // giggletech_osc.rs
+/*
+    giggletech_osc.rs - GiggleTech OSC Module
 
-// GiggleTech OSC Module
-// Data Sender, Tx & Rx Socket Setup
+    This module handles sending and receiving OSC (Open Sound Control) messages using sockets.
+    It sets up the necessary Tx (transmit) and Rx (receive) sockets for OSC communication.
+
+    **Key Features:**
+    
+    1. **Socket Setup**:
+       - `setup_rx_socket`: Binds a socket to receive OSC messages on a specified port.
+       - `setup_tx_socket`: Sets up a socket to send OSC messages to a target address.
+    
+    2. **Sending Data**:
+       - `send_data`: Sends motor control and GiggleSpark data to a specified device IP over OSC.
+       - This function temporarily sets up a Tx socket for each request, though future optimizations 
+         may move socket setup outside the function if performance issues arise.
+
+    **Usage**:
+    - Use `setup_rx_socket` and `setup_tx_socket` to handle incoming and outgoing OSC messages.
+    - `send_data` sends OSC messages with specific values to control motor and GiggleSpark parameters.
+*/
+
 
 use async_osc::{ OscSocket, Result};
 
