@@ -59,14 +59,14 @@ mod giggletech_osc;
 mod terminator;
 mod osc_timeout;
 mod handle_proximity_parameter;
-
+mod stop_pats;
 
 #[async_std::main]
 async fn main() -> Result<()> {
     let (global_config, mut devices) = config::load_config();
     let timeout = global_config.timeout;
 
-    // Setup Start / Stop of Terminiator
+    // Setup Start / Stop of Terminator
     let running = Arc::new(AtomicBool::new(false));
 
     // Rx/Tx Socket Setup
@@ -79,6 +79,7 @@ async fn main() -> Result<()> {
             osc_timeout(&headpat_device_ip_clone, timeout).await.unwrap();
         });
     }
+
     // Listen for OSC Packets
     while let Some(packet) = rx_socket.next().await {
         let (packet, _peer_addr) = packet?;
@@ -88,6 +89,19 @@ async fn main() -> Result<()> {
             OscPacket::Bundle(_) => {}
             OscPacket::Message(message) => {
                 let (address, osc_value) = message.as_tuple();
+
+                // Handle `/avatar/change` message
+                if address == "/avatar/change" {
+                    // Check if the first OSC value is a string
+                    if let Some(OscType::String(avatar_id)) = osc_value.first() {
+                        // Print "Avatar Changed" along with the avatar ID
+                        println!("Avatar Changed: {}", avatar_id);
+                        //stop_pats::stop_pats(&device).await?;  // Pass the device config
+                    }
+                    continue; // Skip the rest of the loop as this is handled
+                }
+
+                // Handle other messages
                 let value = match osc_value.first().unwrap_or(&OscType::Nil).clone().float() {
                     Some(v) => v,
                     None => continue,
@@ -103,11 +117,15 @@ async fn main() -> Result<()> {
                             running.clone(), // Terminator
                             value,
                             device.clone()
-                        ).await?
+                        ).await?;
                     }
                 }
             }
         }
     }
+
+
+
+    
     Ok(())
 }
