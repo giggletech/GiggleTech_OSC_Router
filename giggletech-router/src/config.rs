@@ -146,37 +146,27 @@ pub(crate) fn load_config() -> (GlobalConfig, Vec<DeviceConfig>) {
     (global_config, devices)
 }
 
+
+
 fn parse_global_config(setup: YamlHashWrapper) -> GlobalConfig {
+    // Retrieve the value of `port_rx` from the YAML file
+    let port_rx_str = setup.get_str("port_rx").unwrap(); // This gets the string value from YAML
 
+    // Check if `port_rx` is "OSCQuery" or a numeric port
+    let port_rx: Arc<String> = if port_rx_str == "OSCQuery" {
+        // If it's "OSCQuery", use the port from the OSCQuery server
+        println!("\nUsing OSQ Query");
+        let udp_port = oscq_giggletech::initialize_and_get_udp_port();  // Get u16 port from OSCQuery
+        Arc::new(udp_port.to_string())  // Convert u16 to String and wrap it in Arc<String>
+    } else {
+        // Otherwise, assume it's a port number in string format, validate, and wrap it in Arc
+        assert!(u16::from_str_radix(&port_rx_str, 10).is_ok(), "Invalid port number format");
+        Arc::new(port_rx_str)  // Wrap the existing port string in Arc
+    };
 
-
-/*
-    let udp_port = oscq_giggletech::initialize_and_get_udp_port();
-    //let port_rx = udp_port;
-    let port_rx = Arc::new(setup.get_str("port_rx").unwrap());
-    // only allow valid ports
-    assert!(u16::from_str_radix(&port_rx, 10).is_ok());
-
-*/
-
-    let udp_port = oscq_giggletech::initialize_and_get_udp_port();  // This returns a u16
-    let udp_port_str = udp_port.to_string();  // Convert u16 to String
-    // Convert `udp_port` (u16) to a `String` and wrap it in `Arc`
-    let udp_port_arc = Arc::new(udp_port.to_string());  // Arc<String>
-
-    let port_rx = udp_port_arc;
-    //let port_rx = Arc::new(setup.get_str("port_rx").unwrap());  // Arc<String>
-
-    // Now you can compare the string versions
-    //assert_eq!(udp_port_str, *port_rx);
-
-
-
-
-
+    // Proceed with other config values as before
     let default_min_speed = setup.get_f64("default_min_speed").unwrap() as f32 / 100.0;
-    // negative speeds don't make sense
-    assert!(default_min_speed >= 0.0);
+    assert!(default_min_speed >= 0.0); // Ensure min speed is valid
 
     const MAX_SPEED_LOW_LIMIT_CONST: f32 = 0.05;
 
@@ -185,7 +175,9 @@ fn parse_global_config(setup: YamlHashWrapper) -> GlobalConfig {
 
     let default_start_tx = setup.get_i64("default_start_tx").unwrap() as i32;
 
-    let default_max_speed_parameter = setup.get_str("default_max_speed_parameter").unwrap_or("max_speed".to_string());
+    let default_max_speed_parameter = setup
+        .get_str("default_max_speed_parameter")
+        .unwrap_or("max_speed".to_string());
     let default_max_speed_parameter = Arc::new(format!("/avatar/parameters/{}", default_max_speed_parameter));
 
     let default_speed_scale = setup.get_f64("default_speed_scale").unwrap() as f32 / 100.0;
@@ -197,6 +189,7 @@ fn parse_global_config(setup: YamlHashWrapper) -> GlobalConfig {
     let default_inner_proximity = setup.get_f64("default_inner_proximity").unwrap() as f32;
     let default_velocity_scalar = setup.get_f64("default_velocity_scalar").unwrap() as f32;
 
+    // Return the GlobalConfig struct with the updated port_rx
     GlobalConfig {
         port_rx,
         default_min_speed,
@@ -209,9 +202,10 @@ fn parse_global_config(setup: YamlHashWrapper) -> GlobalConfig {
         default_use_velocity_control,
         default_outer_proximity,
         default_inner_proximity,
-        default_velocity_scalar
+        default_velocity_scalar,
     }
 }
+
 
 fn parse_device_config(device_data: YamlHashWrapper, global_config: &GlobalConfig) -> DeviceConfig {
     let ip = Arc::new(device_data.get_str("ip").unwrap());
