@@ -6,6 +6,8 @@ use std::io::Read;
 use std::sync::Arc;
 use yaml_rust::{YamlLoader, Yaml};
 use yaml_rust::yaml::Hash;
+mod oscq_giggletech;
+
 
 // Banner
 fn banner_txt(){
@@ -145,9 +147,32 @@ pub(crate) fn load_config() -> (GlobalConfig, Vec<DeviceConfig>) {
 }
 
 fn parse_global_config(setup: YamlHashWrapper) -> GlobalConfig {
+
+
+
+/*
+    let udp_port = oscq_giggletech::initialize_and_get_udp_port();
+    //let port_rx = udp_port;
     let port_rx = Arc::new(setup.get_str("port_rx").unwrap());
     // only allow valid ports
     assert!(u16::from_str_radix(&port_rx, 10).is_ok());
+
+*/
+
+    let udp_port = oscq_giggletech::initialize_and_get_udp_port();  // This returns a u16
+    let udp_port_str = udp_port.to_string();  // Convert u16 to String
+    // Convert `udp_port` (u16) to a `String` and wrap it in `Arc`
+    let udp_port_arc = Arc::new(udp_port.to_string());  // Arc<String>
+
+    let port_rx = udp_port_arc;
+    //let port_rx = Arc::new(setup.get_str("port_rx").unwrap());  // Arc<String>
+
+    // Now you can compare the string versions
+    //assert_eq!(udp_port_str, *port_rx);
+
+
+
+
 
     let default_min_speed = setup.get_f64("default_min_speed").unwrap() as f32 / 100.0;
     // negative speeds don't make sense
