@@ -47,10 +47,11 @@
 */
 
 
-
 use async_osc::{prelude::*, OscPacket, OscType, Result};
-use async_std::{stream::StreamExt, task::{self}, sync::Arc,};
+use async_std::{stream::StreamExt, task::{self}, sync::Arc};
 use std::sync::atomic::{AtomicBool};
+use std::sync::{Mutex};
+use std::io::{self, Write}; // For keeping the console open
 
 use crate::osc_timeout::osc_timeout;
 mod data_processing;
@@ -61,12 +62,38 @@ mod osc_timeout;
 mod handle_proximity_parameter;
 mod stop_pats;
 
-
 #[async_std::main]
-async fn main() -> Result<()> {
+async fn main() {
+    // Set a catch-all panic hook to log any panic messages
+    std::panic::set_hook(Box::new(|panic_info| {
+        println!("Application panicked: {}", panic_info);
+    }));
 
-    async_std::task::spawn(async {
-        run_web_server().await;
+    // Call the main logic and handle any errors
+    if let Err(e) = run_giggletech().await {
+        println!("Application encountered an error: {}", e);
+    }
+
+    // Keep the console open even after a crash or an error
+    println!("Press Enter to exit...");
+    let mut input = String::new();
+    io::stdin().read_line(&mut input).unwrap();
+}
+
+
+
+
+
+async fn run_giggletech() -> async_osc::Result<()> {
+    // Initialize shared state to hold logs
+    let state = State {
+        logs: Arc::new(Mutex::new(String::new())),
+    };
+
+    // Spawn the web server as a background task, passing in the shared state
+    let state_clone = state.clone();
+    async_std::task::spawn(async move {
+        run_web_server(state_clone).await;
     });
 
     let (global_config, mut devices) = config::load_config();
@@ -78,7 +105,7 @@ async fn main() -> Result<()> {
     // Rx/Tx Socket Setup
     let mut rx_socket = giggletech_osc::setup_rx_socket(global_config.port_rx.to_string()).await?;
 
-    // Timeout
+    // Timeout management
     for device in devices.iter() {
         let headpat_device_ip_clone = device.device_uri.clone();
         task::spawn(async move {
@@ -130,20 +157,71 @@ async fn main() -> Result<()> {
         }
     }
 
-
-
-    
     Ok(())
 }
 
-
 use tide::Request;
+use tide::http::mime;
+use tide::Response;
 
+#[derive(Clone)]
+struct State {
+    logs: Arc<Mutex<String>>,  // A shared buffer to store the logs
+}
 
-async fn run_web_server() {
-    let mut app = tide::new();
-    app.at("/").get(|_req: Request<()>| async move {
-        Ok("Welcome to the GiggleTech OSC Router!")
+// A helper macro to capture println! output and append it to the log buffer
+macro_rules! log_to_console {
+    ($state:expr, $($arg:tt)*) => {{
+        let log_message = format!($($arg)*);
+        println!("{}", log_message);  // Also print it to the terminal
+        let mut logs = $state.logs.lock().unwrap();
+        logs.push_str(&format!("{}\n", log_message));  // Append to the logs
+    }};
+}
+
+async fn run_web_server(state: State) {
+    let mut app = tide::with_state(state);
+
+    // Serve the homepage
+    app.at("/").get(|_req: Request<State>| async move {
+        let html_content = r#"
+        <!DOCTYPE html>
+        <html lang="en">
+        <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>GiggleTech OSC Router</title>
+            <script>
+                async function fetchConsoleLogs() {
+                    const response = await fetch('/console');
+                    const logs = await response.text();
+                    document.getElementById('console-output').innerText = logs;
+                }
+                setInterval(fetchConsoleLogs, 1000);  // Update logs every second
+            </script>
+        </head>
+        <body>
+            <h1>Welcome to the GiggleTech OSC Router!</h1>
+            <h2>Console Logs:</h2>
+            <pre id="console-output"></pre>
+        </body>
+        </html>
+        "#;
+
+        // Set Content-Type as text/html
+        let response = Response::builder(200)
+            .body(html_content)
+            .content_type(mime::HTML)
+            .build();
+
+        Ok(response)
     });
+
+    // Serve the console logs at /console
+    app.at("/console").get(|req: Request<State>| async move {
+        let logs = req.state().logs.lock().unwrap();
+        Ok(logs.clone())
+    });
+
     app.listen("127.0.0.1:8080").await.unwrap();
 }
