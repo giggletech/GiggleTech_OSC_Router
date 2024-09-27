@@ -62,9 +62,13 @@ mod handle_proximity_parameter;
 mod stop_pats;
 
 
-
 #[async_std::main]
 async fn main() -> Result<()> {
+
+    async_std::task::spawn(async {
+        run_web_server().await;
+    });
+
     let (global_config, mut devices) = config::load_config();
     let timeout = global_config.timeout;
 
@@ -130,4 +134,16 @@ async fn main() -> Result<()> {
 
     
     Ok(())
+}
+
+
+use tide::Request;
+
+
+async fn run_web_server() {
+    let mut app = tide::new();
+    app.at("/").get(|_req: Request<()>| async move {
+        Ok("Welcome to the GiggleTech OSC Router!")
+    });
+    app.listen("127.0.0.1:8080").await.unwrap();
 }
