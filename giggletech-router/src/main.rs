@@ -1,14 +1,57 @@
-// GiggleTech.io
-// OSC Router
-// by Sideways
-// Based off OSC Async https://github.com/Frando/async-osc
+/*
+    GiggleTech.io - OSC Router
+    by Sideways
+    Based on OSC Async Library: https://github.com/Frando/async-osc
 
-// Add System Tray Minimization
+    This is the main entry point for the GiggleTech OSC router, responsible for receiving and 
+    processing Open Sound Control (OSC) messages, managing devices, and adjusting device parameters 
+    such as motor speeds and proximity-based triggers.
+
+    **Key Features:**
+
+    1. **Configuration Loading (`config::load_config`)**:
+       - Loads global and device-specific configurations from the `config.yml` file.
+       - Initializes device parameters such as max speed, proximity settings, and velocity control.
+       
+    2. **Socket Setup (`giggletech_osc::setup_rx_socket`)**:
+       - Sets up the OSC receiver (Rx) socket to listen for incoming OSC messages from devices.
+       - Each device's URI and OSC-related settings are configured, allowing the system to communicate properly.
+
+    3. **Timeout Management (`osc_timeout`)**:
+       - Each device has a timeout mechanism. If no OSC signal is received within the configured timeout period, 
+         the device will stop sending motor control signals.
+       - Timeouts are handled concurrently for each device using `task::spawn` to run asynchronously.
+
+    4. **OSC Packet Listening and Processing**:
+       - The router listens for OSC packets in a loop, processing each packet as it arrives.
+       - Based on the OSC address and data, it:
+         - Updates the maximum speed for a device when a max speed parameter is received.
+         - Processes proximity signals for headpats, controlling motors or stopping them based on the value received.
+       - Utilizes functions from `data_processing` and `handle_proximity_parameter` to adjust motor speeds or handle proximity triggers.
+
+    5. **Motor and Proximity Handling**:
+       - When proximity data is received, the system adjusts the motor speed for each device accordingly.
+       - If the proximity signal is zero, the device is stopped via the `terminator`.
+
+    **System Tray and Minimization (Future Feature)**:
+       - The system tray minimization functionality is planned for future updates, allowing the OSC router to run in the background.
+
+    **Usage**:
+    - Run the application to automatically set up device communication and handle proximity/motor controls in real-time.
+    - The router listens on the specified OSC ports and adjusts device behavior based on incoming OSC messages.
+
+    **Example Workflow**:
+    1. Load configuration for devices.
+    2. Set up OSC Rx socket for listening to incoming signals.
+    3. Continuously receive and process OSC messages to control devices (e.g., motor speed for headpats).
+*/
 
 
 use async_osc::{prelude::*, OscPacket, OscType, Result};
-use async_std::{stream::StreamExt, task::{self}, sync::Arc,};
+use async_std::{stream::StreamExt, task::{self}, sync::Arc};
 use std::sync::atomic::{AtomicBool};
+use std::sync::{Mutex};
+use std::io::{self, Write}; // For keeping the console open
 
 use crate::osc_timeout::osc_timeout;
 mod data_processing;
@@ -17,26 +60,59 @@ mod giggletech_osc;
 mod terminator;
 mod osc_timeout;
 mod handle_proximity_parameter;
-
+mod stop_pats;
 
 #[async_std::main]
-async fn main() -> Result<()> {
+async fn main() {
+    // Set a catch-all panic hook to log any panic messages
+    std::panic::set_hook(Box::new(|panic_info| {
+        println!("Application panicked: {}", panic_info);
+    }));
+
+    // Call the main logic and handle any errors
+    if let Err(e) = run_giggletech().await {
+        println!("Application encountered an error: {}", e);
+    }
+
+    // Keep the console open even after a crash or an error
+    println!("Press Enter to exit...");
+    let mut input = String::new();
+    io::stdin().read_line(&mut input).unwrap();
+}
+
+
+
+
+
+async fn run_giggletech() -> async_osc::Result<()> {
+    // Initialize shared state to hold logs
+    let state = State {
+        logs: Arc::new(Mutex::new(String::new())),
+    };
+
+    // Spawn the web server as a background task, passing in the shared state
+    let state_clone = state.clone();
+    async_std::task::spawn(async move {
+        run_web_server(state_clone).await;
+    });
+
     let (global_config, mut devices) = config::load_config();
     let timeout = global_config.timeout;
 
-    // Setup Start / Stop of Terminiator
+    // Setup Start / Stop of Terminator
     let running = Arc::new(AtomicBool::new(false));
 
     // Rx/Tx Socket Setup
     let mut rx_socket = giggletech_osc::setup_rx_socket(global_config.port_rx.to_string()).await?;
 
-    // Timeout
+    // Timeout management
     for device in devices.iter() {
         let headpat_device_ip_clone = device.device_uri.clone();
         task::spawn(async move {
             osc_timeout(&headpat_device_ip_clone, timeout).await.unwrap();
         });
     }
+
     // Listen for OSC Packets
     while let Some(packet) = rx_socket.next().await {
         let (packet, _peer_addr) = packet?;
@@ -46,6 +122,19 @@ async fn main() -> Result<()> {
             OscPacket::Bundle(_) => {}
             OscPacket::Message(message) => {
                 let (address, osc_value) = message.as_tuple();
+
+                // Handle `/avatar/change` message
+                if address == "/avatar/change" {
+                    // Check if the first OSC value is a string
+                    if let Some(OscType::String(avatar_id)) = osc_value.first() {
+                        // Print "Avatar Changed" along with the avatar ID
+                        println!("Avatar Changed: {}", avatar_id);
+                        //stop_pats::stop_pats(&device).await?;  // Pass the device config
+                    }
+                    continue; // Skip the rest of the loop as this is handled
+                }
+
+                // Handle other messages
                 let value = match osc_value.first().unwrap_or(&OscType::Nil).clone().float() {
                     Some(v) => v,
                     None => continue,
@@ -61,11 +150,78 @@ async fn main() -> Result<()> {
                             running.clone(), // Terminator
                             value,
                             device.clone()
-                        ).await?
+                        ).await?;
                     }
                 }
             }
         }
     }
+
     Ok(())
+}
+
+use tide::Request;
+use tide::http::mime;
+use tide::Response;
+
+#[derive(Clone)]
+struct State {
+    logs: Arc<Mutex<String>>,  // A shared buffer to store the logs
+}
+
+// A helper macro to capture println! output and append it to the log buffer
+macro_rules! log_to_console {
+    ($state:expr, $($arg:tt)*) => {{
+        let log_message = format!($($arg)*);
+        println!("{}", log_message);  // Also print it to the terminal
+        let mut logs = $state.logs.lock().unwrap();
+        logs.push_str(&format!("{}\n", log_message));  // Append to the logs
+    }};
+}
+
+async fn run_web_server(state: State) {
+    let mut app = tide::with_state(state);
+
+    // Serve the homepage
+    app.at("/").get(|_req: Request<State>| async move {
+        let html_content = r#"
+        <!DOCTYPE html>
+        <html lang="en">
+        <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>GiggleTech OSC Router</title>
+            <script>
+                async function fetchConsoleLogs() {
+                    const response = await fetch('/console');
+                    const logs = await response.text();
+                    document.getElementById('console-output').innerText = logs;
+                }
+                setInterval(fetchConsoleLogs, 1000);  // Update logs every second
+            </script>
+        </head>
+        <body>
+            <h1>Welcome to the GiggleTech OSC Router!</h1>
+            <h2>Console Logs:</h2>
+            <pre id="console-output"></pre>
+        </body>
+        </html>
+        "#;
+
+        // Set Content-Type as text/html
+        let response = Response::builder(200)
+            .body(html_content)
+            .content_type(mime::HTML)
+            .build();
+
+        Ok(response)
+    });
+
+    // Serve the console logs at /console
+    app.at("/console").get(|req: Request<State>| async move {
+        let logs = req.state().logs.lock().unwrap();
+        Ok(logs.clone())
+    });
+
+    app.listen("127.0.0.1:8080").await.unwrap();
 }

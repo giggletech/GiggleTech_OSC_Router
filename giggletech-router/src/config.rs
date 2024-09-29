@@ -1,4 +1,53 @@
-// config.rs
+/*
+    config.rs - Configuration Module for Giggletech VRChat OSC System
+
+    This module is responsible for loading, parsing, and managing the configuration settings 
+    for the VRChat OSC-based system. It reads configuration from a `config.yml` file, processes 
+    both global and device-specific settings, and manages important parameters like OSC ports, 
+    speed, proximity, and velocity control. It also supports dynamic port retrieval via OSCQuery.
+
+    **Key Features:**
+    
+    1. **Loading Configuration (`load_config`)**:
+       - Reads the `config.yml` file and parses it into a structure using YAML.
+       - Extracts global and device-specific settings.
+       - Displays a banner with device information and listens for OSC messages on a defined port.
+
+    2. **Global Configuration (`GlobalConfig`)**:
+       - The global settings include defaults for min/max speeds, proximity parameters, and OSC ports.
+       - The function `parse_global_config` handles both static OSC ports and dynamic ports through OSCQuery.
+       - Key parameters include:
+         - `port_rx`: The OSC port (either a fixed value or dynamically assigned via OSCQuery).
+         - `default_min_speed` & `default_max_speed`: Speed limits used for device control.
+         - `timeout`, `velocity control`, and `proximity settings`.
+
+    3. **Device-Specific Configuration (`DeviceConfig`)**:
+       - Each device can have custom parameters, but if not specified, they inherit from global settings.
+       - The function `parse_device_config` processes each device’s configuration, allowing custom IP addresses, 
+         speed settings, and proximity parameters for each individual device.
+
+    **Dynamic Port Management with OSCQuery**:
+    - If the configuration specifies `"OSCQuery"` for `port_rx`, the module uses the `oscq_giggletech` helper 
+      to dynamically retrieve the UDP port from the OSCQuery service. If not, a static port number from the config is used.
+
+    **Usage**:
+    - After parsing the configuration, the module initializes the devices and starts listening for OSC messages 
+      on the specified port. It supports multiple devices, each with their unique or global configurations.
+    
+    **Example Configurations**:
+    ```yaml
+    setup:
+      port_rx: OSCQuery  # Uses dynamic OSCQuery port
+      default_min_speed: 0.1
+      default_max_speed: 1.0
+
+    devices:
+      - ip: "192.168.1.2"
+        min_speed: 0.2
+        max_speed: 0.8
+    ```
+*/
+
 
 use std::{net::IpAddr};
 use std::fs::File;
@@ -6,6 +55,8 @@ use std::io::Read;
 use std::sync::Arc;
 use yaml_rust::{YamlLoader, Yaml};
 use yaml_rust::yaml::Hash;
+mod oscq_giggletech;
+
 
 // Banner
 fn banner_txt(){
@@ -144,14 +195,27 @@ pub(crate) fn load_config() -> (GlobalConfig, Vec<DeviceConfig>) {
     (global_config, devices)
 }
 
-fn parse_global_config(setup: YamlHashWrapper) -> GlobalConfig {
-    let port_rx = Arc::new(setup.get_str("port_rx").unwrap());
-    // only allow valid ports
-    assert!(u16::from_str_radix(&port_rx, 10).is_ok());
 
+
+fn parse_global_config(setup: YamlHashWrapper) -> GlobalConfig {
+    // Retrieve the value of `port_rx` from the YAML file
+    let port_rx_str = setup.get_str("port_rx").unwrap(); // This gets the string value from YAML
+
+    // Check if `port_rx` is "OSCQuery" or a numeric port
+    let port_rx: Arc<String> = if port_rx_str == "OSCQuery" {
+        // If it's "OSCQuery", use the port from the OSCQuery server
+        println!("\nUsing OSQ Query");
+        let udp_port = oscq_giggletech::initialize_and_get_udp_port();  // Get u16 port from OSCQuery
+        Arc::new(udp_port.to_string())  // Convert u16 to String and wrap it in Arc<String>
+    } else {
+        // Otherwise, assume it's a port number in string format, validate, and wrap it in Arc
+        assert!(u16::from_str_radix(&port_rx_str, 10).is_ok(), "Invalid port number format");
+        Arc::new(port_rx_str)  // Wrap the existing port string in Arc
+    };
+
+    // Proceed with other config values as before
     let default_min_speed = setup.get_f64("default_min_speed").unwrap() as f32 / 100.0;
-    // negative speeds don't make sense
-    assert!(default_min_speed >= 0.0);
+    assert!(default_min_speed >= 0.0); // Ensure min speed is valid
 
     const MAX_SPEED_LOW_LIMIT_CONST: f32 = 0.05;
 
@@ -160,7 +224,9 @@ fn parse_global_config(setup: YamlHashWrapper) -> GlobalConfig {
 
     let default_start_tx = setup.get_i64("default_start_tx").unwrap() as i32;
 
-    let default_max_speed_parameter = setup.get_str("default_max_speed_parameter").unwrap_or("max_speed".to_string());
+    let default_max_speed_parameter = setup
+        .get_str("default_max_speed_parameter")
+        .unwrap_or("max_speed".to_string());
     let default_max_speed_parameter = Arc::new(format!("/avatar/parameters/{}", default_max_speed_parameter));
 
     let default_speed_scale = setup.get_f64("default_speed_scale").unwrap() as f32 / 100.0;
@@ -172,6 +238,7 @@ fn parse_global_config(setup: YamlHashWrapper) -> GlobalConfig {
     let default_inner_proximity = setup.get_f64("default_inner_proximity").unwrap() as f32;
     let default_velocity_scalar = setup.get_f64("default_velocity_scalar").unwrap() as f32;
 
+    // Return the GlobalConfig struct with the updated port_rx
     GlobalConfig {
         port_rx,
         default_min_speed,
@@ -184,9 +251,10 @@ fn parse_global_config(setup: YamlHashWrapper) -> GlobalConfig {
         default_use_velocity_control,
         default_outer_proximity,
         default_inner_proximity,
-        default_velocity_scalar
+        default_velocity_scalar,
     }
 }
+
 
 fn parse_device_config(device_data: YamlHashWrapper, global_config: &GlobalConfig) -> DeviceConfig {
     let ip = Arc::new(device_data.get_str("ip").unwrap());

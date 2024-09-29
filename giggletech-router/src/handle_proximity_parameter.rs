@@ -1,4 +1,27 @@
-// handle_proximity_parameter.rs
+/*
+    handle_proximity_parameter.rs - Handling Proximity Data for GiggleTech Devices
+
+    This module processes proximity sensor data and controls device actions (like motors) based on 
+    the proximity values. It tracks the last proximity signal for each device and manages sending 
+    commands to the device via OSC.
+
+    **Key Features:**
+
+    1. **Proximity Handling (`handle_proximity_parameter`)**:
+       - Receives proximity data (`value`) and determines if the device should stop or continue operating.
+       - If proximity is zero, it sends stop commands to the device.
+       - If proximity is non-zero, it processes the proximity data and sends motor control values to the device.
+
+    2. **Velocity Control**:
+       - If the device uses velocity control, the module calculates the change in proximity over time and adjusts the motor speed accordingly.
+       - Otherwise, it simply scales the motor value based on proximity.
+
+    3. **Timeout and Signal Tracking**:
+       - Updates the last signal time and last proximity value for each device, ensuring proper handling of timeouts and avoiding stale data.
+
+    **Usage**:
+    - This function is typically called when proximity data is received and determines the appropriate action (start, stop, or adjust motor) for the device.
+*/
 
 use async_osc::Result;
 use async_std::sync::{Arc, Mutex};
