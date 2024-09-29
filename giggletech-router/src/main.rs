@@ -85,16 +85,9 @@ async fn main() {
 
 
 async fn run_giggletech() -> async_osc::Result<()> {
-    // Initialize shared state to hold logs
-    let state = State {
-        logs: Arc::new(Mutex::new(String::new())),
-    };
 
-    // Spawn the web server as a background task, passing in the shared state
-    let state_clone = state.clone();
-    async_std::task::spawn(async move {
-        run_web_server(state_clone).await;
-    });
+
+
 
     let (global_config, mut devices) = config::load_config();
     let timeout = global_config.timeout;
@@ -179,49 +172,3 @@ macro_rules! log_to_console {
     }};
 }
 
-async fn run_web_server(state: State) {
-    let mut app = tide::with_state(state);
-
-    // Serve the homepage
-    app.at("/").get(|_req: Request<State>| async move {
-        let html_content = r#"
-        <!DOCTYPE html>
-        <html lang="en">
-        <head>
-            <meta charset="UTF-8">
-            <meta name="viewport" content="width=device-width, initial-scale=1.0">
-            <title>GiggleTech OSC Router</title>
-            <script>
-                async function fetchConsoleLogs() {
-                    const response = await fetch('/console');
-                    const logs = await response.text();
-                    document.getElementById('console-output').innerText = logs;
-                }
-                setInterval(fetchConsoleLogs, 1000);  // Update logs every second
-            </script>
-        </head>
-        <body>
-            <h1>Welcome to the GiggleTech OSC Router!</h1>
-            <h2>Console Logs:</h2>
-            <pre id="console-output"></pre>
-        </body>
-        </html>
-        "#;
-
-        // Set Content-Type as text/html
-        let response = Response::builder(200)
-            .body(html_content)
-            .content_type(mime::HTML)
-            .build();
-
-        Ok(response)
-    });
-
-    // Serve the console logs at /console
-    app.at("/console").get(|req: Request<State>| async move {
-        let logs = req.state().logs.lock().unwrap();
-        Ok(logs.clone())
-    });
-
-    app.listen("127.0.0.1:8080").await.unwrap();
-}
