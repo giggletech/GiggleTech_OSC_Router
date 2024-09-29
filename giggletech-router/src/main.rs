@@ -80,10 +80,6 @@ async fn main() {
     io::stdin().read_line(&mut input).unwrap();
 }
 
-
-
-
-
 async fn run_giggletech() -> async_osc::Result<()> {
 
 
@@ -151,24 +147,5 @@ async fn run_giggletech() -> async_osc::Result<()> {
     }
 
     Ok(())
-}
-
-use tide::Request;
-use tide::http::mime;
-use tide::Response;
-
-#[derive(Clone)]
-struct State {
-    logs: Arc<Mutex<String>>,  // A shared buffer to store the logs
-}
-
-// A helper macro to capture println! output and append it to the log buffer
-macro_rules! log_to_console {
-    ($state:expr, $($arg:tt)*) => {{
-        let log_message = format!($($arg)*);
-        println!("{}", log_message);  // Also print it to the terminal
-        let mut logs = $state.logs.lock().unwrap();
-        logs.push_str(&format!("{}\n", log_message));  // Append to the logs
-    }};
 }
 
