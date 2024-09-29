@@ -5,8 +5,9 @@
 # while the devices section specifies individual settings for each device.
 
 setup:
-  # Port listening for OSC (Default: 9001)
-  port_rx: 9001
+  # Port listening for OSC (Default: 9001) or use  port_rx: OSCQuery if you have mutiple apps
+  port_rx: OSCQuery 
+  #port_rx: 9001
 
   # Minimum Speed of Haptic Motor (5-100)
   default_min_speed: 5

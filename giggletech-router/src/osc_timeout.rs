@@ -1,4 +1,27 @@
-// osc_timeout.rs
+/*
+    osc_timeout.rs - Timeout Management for OSC Devices
+
+    This module is responsible for managing timeouts for devices communicating over OSC (Open Sound Control).
+    It monitors how long it's been since each device has sent a signal and, if the device exceeds the specified timeout,
+    it sends a stop signal to the device.
+
+    **Key Features:**
+
+    1. **Device Signal Tracking**:
+       - Uses a global `DEVICE_LAST_SIGNAL_TIME` hash map (wrapped in `Arc<Mutex>`) to store the last time each device sent a signal.
+       - This ensures each device's signal time is updated and shared across the system safely.
+
+    2. **Timeout Loop (`osc_timeout`)**:
+       - Runs an asynchronous loop that periodically checks how long it's been since a device last sent a signal.
+       - If the time elapsed exceeds the specified timeout duration, the module sends a stop signal (`0`) to the device via OSC.
+       - Resets the last signal time to prevent repeated stops during the timeout period.
+
+    **Usage**:
+    - The function `osc_timeout` is typically called for each device in the system, running concurrently to monitor signal activity.
+    - It ensures that devices stop operating (such as motors) if no signal is received within the timeout window, preventing runaway behavior.
+
+*/
+
 
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
