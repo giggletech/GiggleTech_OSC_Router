@@ -57,6 +57,20 @@ use yaml_rust::{YamlLoader, Yaml};
 use yaml_rust::yaml::Hash;
 mod oscq_giggletech;
 
+use std::fs::OpenOptions;
+use std::io::Write;
+use chrono::Local; // For timestamps
+
+fn log_to_file(message: &str) {
+    let now = Local::now();
+    let timestamp = now.format("%Y-%m-%d %H:%M:%S").to_string(); // Add a timestamp
+    let mut file = OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open("giggletech_osc_router_log.txt")
+        .unwrap();
+    writeln!(file, "[{}] {}", timestamp, message).unwrap();
+}
 
 // Banner
 fn banner_txt(){
@@ -260,6 +274,7 @@ fn parse_global_config(setup: YamlHashWrapper) -> GlobalConfig {
 fn parse_device_config(device_data: YamlHashWrapper, global_config: &GlobalConfig) -> DeviceConfig {
     let ip = Arc::new(device_data.get_str("ip").unwrap());
     ip.as_str().parse::<IpAddr>().expect(&format!("Invalid IP address format: {}", ip));
+
     let proximity_parameter = Arc::new(format!("/avatar/parameters/{}", device_data.get_str("proximity_parameter").unwrap()));
     let min_speed = device_data.get_f64("min_speed").map(|x| x as f32 / 100.0).unwrap_or(global_config.default_min_speed);
     assert!(min_speed >= 0.0);
@@ -271,6 +286,12 @@ fn parse_device_config(device_data: YamlHashWrapper, global_config: &GlobalConfi
     let outer_proximity = device_data.get_f64("outer_proximity").map(|x| x as f32).unwrap_or(global_config.default_outer_proximity);
     let inner_proximity = device_data.get_f64("inner_proximity").map(|x| x as f32).unwrap_or(global_config.default_inner_proximity);
     let velocity_scalar = device_data.get_f64("velocity_scalar").map(|x| x as f32).unwrap_or(global_config.default_velocity_scalar);
+
+    // Log device settings
+    log_to_file(&format!(
+        "Device IP: {}\nMin Speed: {:.0}%\nMax Speed: {:.0}%\nSpeed Scale: {:.0}%\nProximity Parameter: {}\nVelocity Control: {}\nOuter Proximity: {:.2}\nInner Proximity: {:.2}\n",
+        ip, min_speed * 100.0, max_speed * 100.0, speed_scale * 100.0, proximity_parameter, use_velocity_control, outer_proximity, inner_proximity
+    ));
 
     DeviceConfig {
         device_uri: ip,
