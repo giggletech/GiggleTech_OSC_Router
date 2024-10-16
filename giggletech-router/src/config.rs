@@ -229,7 +229,8 @@ fn parse_global_config(setup: YamlHashWrapper) -> GlobalConfig {
         .unwrap_or("max_speed".to_string());
     let default_max_speed_parameter = Arc::new(format!("/avatar/parameters/{}", default_max_speed_parameter));
 
-    let default_speed_scale = setup.get_f64("default_speed_scale").unwrap() as f32 / 100.0;
+    let default_speed_scale = (setup.get_f64("default_speed_scale").unwrap_or(100.0) as f32) / 100.0;
+
 
     let timeout = setup.get_i64("timeout").unwrap_or(0) as u64;
 

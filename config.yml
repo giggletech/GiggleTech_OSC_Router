@@ -22,7 +22,7 @@ setup:
   default_max_speed_parameter: max_speed
 
   # Maximum Speed Scalar (10-100)
-  default_speed_scale: 100
+  #default_speed_scale: 100
 
   # OSC Timeout (seconds)
   timeout: 5

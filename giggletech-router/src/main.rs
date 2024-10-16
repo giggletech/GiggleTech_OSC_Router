@@ -46,12 +46,12 @@
     3. Continuously receive and process OSC messages to control devices (e.g., motor speed for headpats).
 */
 
-
 use async_osc::{prelude::*, OscPacket, OscType, Result};
 use async_std::{stream::StreamExt, task::{self}, sync::Arc};
 use std::sync::atomic::{AtomicBool};
-use std::sync::{Mutex};
-use std::io::{self, Write}; // For keeping the console open
+use std::fs::OpenOptions;
+use std::io::{self, Write}; // For file logging and keeping the console open
+use chrono::Local; // For getting the local time
 
 use crate::osc_timeout::osc_timeout;
 mod data_processing;
@@ -62,16 +62,37 @@ mod osc_timeout;
 mod handle_proximity_parameter;
 mod stop_pats;
 
+// Function to log messages to a file with a timestamp
+fn log_to_file(message: &str) {
+    // Get the current local time
+    let now = Local::now();
+    let timestamp = now.format("%Y-%m-%d %H:%M:%S").to_string(); // Format the time as desired
+
+    // Open the log file in append mode, creating it if it doesn't exist
+    let mut file = OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open("giggletech_osc_router_log.txt")
+        .unwrap();
+
+    // Write the timestamp and the log message to the file
+    writeln!(file, "[{}] {}", timestamp, message).unwrap();
+}
+
 #[async_std::main]
 async fn main() {
     // Set a catch-all panic hook to log any panic messages
     std::panic::set_hook(Box::new(|panic_info| {
-        println!("Application panicked: {}", panic_info);
+        let message = format!("Application panicked: {}", panic_info);
+        log_to_file(&message);
     }));
+
+    log_to_file("Starting GiggleTech OSC Router...");
 
     // Call the main logic and handle any errors
     if let Err(e) = run_giggletech().await {
-        println!("Application encountered an error: {}", e);
+        let error_message = format!("Application encountered an error: {}", e);
+        log_to_file(&error_message);
     }
 
     // Keep the console open even after a crash or an error
@@ -81,12 +102,12 @@ async fn main() {
 }
 
 async fn run_giggletech() -> async_osc::Result<()> {
-
-
-
+    log_to_file("Loading configuration...");
 
     let (global_config, mut devices) = config::load_config();
     let timeout = global_config.timeout;
+
+    log_to_file("Configuration loaded successfully. Setting up sockets and timeouts.");
 
     // Setup Start / Stop of Terminator
     let running = Arc::new(AtomicBool::new(false));
@@ -98,9 +119,14 @@ async fn run_giggletech() -> async_osc::Result<()> {
     for device in devices.iter() {
         let headpat_device_ip_clone = device.device_uri.clone();
         task::spawn(async move {
-            osc_timeout(&headpat_device_ip_clone, timeout).await.unwrap();
+            if let Err(e) = osc_timeout(&headpat_device_ip_clone, timeout).await {
+                let error_message = format!("Timeout error for device {}: {}", headpat_device_ip_clone, e);
+                log_to_file(&error_message);
+            }
         });
     }
+
+    log_to_file("Listening for OSC Packets...");
 
     // Listen for OSC Packets
     while let Some(packet) = rx_socket.next().await {
@@ -116,9 +142,8 @@ async fn run_giggletech() -> async_osc::Result<()> {
                 if address == "/avatar/change" {
                     // Check if the first OSC value is a string
                     if let Some(OscType::String(avatar_id)) = osc_value.first() {
-                        // Print "Avatar Changed" along with the avatar ID
-                        println!("Avatar Changed: {}", avatar_id);
-                        //stop_pats::stop_pats(&device).await?;  // Pass the device config
+                        let log_message = format!("Avatar Changed: {}", avatar_id);
+                        log_to_file(&log_message);
                     }
                     continue; // Skip the rest of the loop as this is handled
                 }
@@ -134,12 +159,16 @@ async fn run_giggletech() -> async_osc::Result<()> {
                     if address == *device.max_speed_parameter {
                         data_processing::print_speed_limit(value);
                         device.max_speed = value.max(global_config.minimum_max_speed);
+                        //let log_message = format!("Updated max speed for device: {} to {}", device.device_uri, device.max_speed);
+                        //log_to_file(&log_message);
                     } else if address == *device.proximity_parameter {
                         handle_proximity_parameter::handle_proximity_parameter(
                             running.clone(), // Terminator
                             value,
                             device.clone()
                         ).await?;
+                        //let log_message = format!("Processed proximity parameter for device: {}", device.device_uri);
+                        //log_to_file(&log_message);
                     }
                 }
             }
@@ -148,4 +177,3 @@ async fn run_giggletech() -> async_osc::Result<()> {
 
     Ok(())
 }
-
