@@ -72,7 +72,7 @@ fn log_to_file(message: &str) {
     let mut file = OpenOptions::new()
         .create(true)
         .append(true)
-        .open("giggletech_osc_router_log.txt")
+        .open("giggletech_log.txt")
         .unwrap();
 
     // Write the timestamp and the log message to the file
