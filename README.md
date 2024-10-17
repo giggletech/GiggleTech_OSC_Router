@@ -1,6 +1,26 @@
 Giggletech Haptics Server - README
 ===================================
 
+
+Files Included
+--------------
+
+1. **config.yml**  
+   Stores all your device settings and configurations for Giggletech haptics.
+
+2. **config_multiple_devices.yml**  
+   An example configuration file for when you have multiple Giggletech devices.
+
+3. **Giggletech_OSCQuery_Installer.exe**  
+   The OSCQuery Helper, required for managing OSC communication with VRChat.
+
+4. **giggletech_server_1.3.1.exe**  
+   The main Giggletech software that manages communication between VRChat and your device(s).
+
+5. **giggletech_vrc_simulator.exe**  
+   A testing tool that allows you to test your devices without needing a VRChat avatar or setup.
+
+
 Overview
 --------
 This guide will help you set up and configure your Giggletech device, software, and server for use in VRChat and other compatible platforms. Follow the steps below to get started.
@@ -35,9 +55,6 @@ After saving, unplug and re-plug the device to apply settings. The device will b
 Step 2: Giggletech Software Setup
 ---------------------------------
 Software Package Includes:
-1. Giggletech_server_x.x.exe: Communicates with VRChat to send headpats to your Giggletech device.
-2. Giggletech_VRC_Simulator.exe: Tests system configuration by emulating VRChat.
-3. Giggletech_OSCQuery_Installer.exe: Ensures compatibility with other OSC-based programs.
 
 Install the Software:
 1. Download the latest version from the Giggletech GitHub.
