@@ -49,6 +49,9 @@
 */
 
 
+// NOTE REMOVED  from YML still here, not really used # Maximum Speed Scalar (10-100)
+//  #default_speed_scale: 100
+
 use std::{net::IpAddr};
 use std::fs::File;
 use std::io::Read;

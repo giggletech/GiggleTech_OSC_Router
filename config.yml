@@ -4,6 +4,35 @@
 # for each connected haptic device. The setup section includes global default settings,
 # while the devices section specifies individual settings for each device.
 
+
+
+devices:
+  # Device 1
+  - ip: 192.168.1.69
+    proximity_parameter: proximity_01
+
+  # Device 2
+  - ip: 192.168.1.70
+    proximity_parameter: proximity_02
+
+
+  # Device 3
+  - ip: 192.168.1.71
+    proximity_parameter: proximity_03
+
+
+  # Device 4
+  - ip: 192.168.1.73
+    proximity_parameter: proximity_04
+    max_speed: 100
+    speed_scale: 100
+    max_speed_parameter: max_speed_04
+    use_velocity_control: true
+    outer_proximity: 0.1
+    inner_proximity: 0.6
+    velocity_scalar: 25
+
+
 setup:
   # Port listening for OSC (Default: 9001) or use  port_rx: OSCQuery if you have mutiple apps
   port_rx: OSCQuery 
@@ -21,8 +50,6 @@ setup:
   # Maximum Speed Parameter
   default_max_speed_parameter: max_speed
 
-  # Maximum Speed Scalar (10-100)
-  #default_speed_scale: 100
 
   # OSC Timeout (seconds)
   timeout: 5
@@ -35,39 +62,3 @@ setup:
   default_outer_proximity: 0
   default_inner_proximity: 0.7
   default_velocity_scalar: 20
-
-devices:
-  # Device 1
-  - ip: 192.168.1.69
-    proximity_parameter: proximity_01
-
-  # Device 2
-  - ip: 192.168.1.70
-    proximity_parameter: proximity_02
-    max_speed: 40
-    start_tx: 30
-    speed_scale: 90
-    max_speed_parameter: max_speed_02
-    use_velocity_control: true
-    outer_proximity: 0.1
-    inner_proximity: 0.6
-    velocity_scalar: 25
-
-  # Device 3
-  - ip: 192.168.1.71
-    proximity_parameter: proximity_03
-    min_speed: 7
-    max_speed: 60
-    speed_scale: 100
-    max_speed_parameter: max_speed_03
-
-  # Device 4
-  - ip: 192.168.1.73
-    proximity_parameter: proximity_04
-    max_speed: 100
-    speed_scale: 100
-    max_speed_parameter: max_speed_04
-    use_velocity_control: true
-    outer_proximity: 0.1
-    inner_proximity: 0.6
-    velocity_scalar: 25
