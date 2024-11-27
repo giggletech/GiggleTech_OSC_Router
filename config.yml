@@ -15,11 +15,9 @@ devices:
   - ip: 192.168.1.70
     proximity_parameter: proximity_02
 
-
   # Device 3
   - ip: 192.168.1.71
     proximity_parameter: proximity_03
-
 
   # Device 4
   - ip: 192.168.1.73
@@ -35,7 +33,7 @@ devices:
 
 setup:
   # Port listening for OSC (Default: 9001) or use  port_rx: OSCQuery if you have mutiple apps
-  port_rx: OSCQuery 
+  port_rx: OSCQuery
   #port_rx: 9001
 
   # Minimum Speed of Haptic Motor (5-100)

@@ -159,11 +159,46 @@ impl YamlHashWrapper {
     }
 }
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+mod yaml_validator;
+
+use yaml_validator::{validate_yaml, Config};
+
+
+
+
+
 pub(crate) fn load_config() -> (GlobalConfig, Vec<DeviceConfig>) {
     let mut config_file = match File::open("./config.yml") {
         Err(why) => panic!("{}", why),
         Ok(f) => f
     };
+    println!("Validate Config File...");
+
+    // Call validate_yaml function
+    
+    match validate_yaml("./config.yml") {
+        Ok(_) => println!("Configuration file is valid."),
+        Err(e) => panic!("Configuration File Error: {}", e),
+    };
+
     let mut config_data = String::new();
     match config_file.read_to_string(&mut config_data) {
         Err(why) => panic!("{}", why),
