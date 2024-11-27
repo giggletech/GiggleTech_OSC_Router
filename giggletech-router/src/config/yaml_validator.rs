@@ -1,3 +1,74 @@
+/*!
+    # YAML Configuration Validator
+
+    This module is designed to validate and parse a YAML configuration file for a system that involves
+    both global (`setup`) and device-specific (`devices`) settings. It provides robust error handling
+    and validation to ensure the configuration file adheres to the expected structure and contains 
+    all required fields.
+
+    ## Features
+
+    1. **YAML Structure Validation:**
+       - Parses the YAML file into a generic structure using `serde_yaml::Value`.
+       - Identifies syntax issues, such as missing colons (`:`) or malformed mappings, and provides 
+         detailed error messages, including the line number and context of the problem.
+
+    2. **Field Validation:**
+       - Validates the presence of required fields in the `setup` section, including:
+         - `port_rx`
+         - `default_min_speed`
+         - `default_max_speed`
+       - Checks for invalid or missing sections (e.g., the entire `setup` section).
+
+    3. **Device Validation:**
+       - Ensures each device entry contains the required fields (e.g., `ip` and `proximity_parameter`).
+       - Supports optional parameters for devices, such as `max_speed` and `use_velocity_control`.
+
+    4. **Error Reporting:**
+       - Provides clear and actionable error messages, including:
+         - The exact line where the error occurred.
+         - The line above the error for additional context.
+         - Suggestions to check for missing `:` or incorrect formatting.
+
+    ## Usage
+
+    - Call `validate_yaml(file_path)` with the path to the YAML file to validate its structure.
+    - If the file is valid, the function returns `Ok(())`.
+    - If the file is invalid, the function returns a detailed error message as `Err(String)`.
+
+    ## Example
+
+    Given the following YAML file:
+
+    ```yaml
+    setup:
+      port_rx: OSCQuery
+      default_min_speed: 5
+      default_max_speed: 25
+
+    devices:
+      - ip: 192.168.1.69
+        proximity_parameter: proximity_01
+    ```
+
+    The `validate_yaml` function will succeed and return `Ok(())`.
+
+    For an invalid YAML file (e.g., missing `port_rx` or malformed `devices`), the function
+    will return an error message with details about the issue and its location in the file.
+
+    ## Dependencies
+
+    - `serde`: Used for serializing and deserializing YAML structures.
+    - `serde_yaml`: Provides YAML parsing and error handling.
+
+    ## Notes
+
+    - This code is designed to prevent runtime panics by validating the configuration file
+      before it is used by the application.
+    - Customize the validation logic by adding additional field checks as needed for your application.
+*/
+
+
 use serde::Deserialize;
 use serde_yaml::{self, Error};
 use std::fs;

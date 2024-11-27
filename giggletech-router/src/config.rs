@@ -178,7 +178,7 @@ pub(crate) fn load_config() -> (GlobalConfig, Vec<DeviceConfig>) {
         Err(why) => panic!("{}", why),
         Ok(f) => f
     };
-    println!("Validate Config File...");
+    //println!("Validate Config File...");
 
     // Call validate_yaml function
     
