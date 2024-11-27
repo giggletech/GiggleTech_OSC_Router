@@ -8,7 +8,7 @@
 
 devices:
   # Device 1
-  - ip: 192.168.1.69
+  - ip 192.168.1.69
     proximity_parameter: proximity_01
 
   # Device 2
