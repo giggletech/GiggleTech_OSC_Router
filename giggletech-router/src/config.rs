@@ -64,6 +64,12 @@ use std::fs::OpenOptions;
 use std::io::Write;
 use chrono::Local; // For timestamps
 
+
+mod yaml_validator;
+
+use yaml_validator::{validate_yaml, Config};
+
+
 fn log_to_file(message: &str) {
     let now = Local::now();
     let timestamp = now.format("%Y-%m-%d %H:%M:%S").to_string(); // Add a timestamp
@@ -162,24 +168,6 @@ impl YamlHashWrapper {
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-mod yaml_validator;
-
-use yaml_validator::{validate_yaml, Config};
 
 
 
@@ -286,7 +274,15 @@ fn parse_global_config(setup: YamlHashWrapper) -> GlobalConfig {
 
     let timeout = setup.get_i64("timeout").unwrap_or(0) as u64;
 
-    let default_use_velocity_control = setup.get_bool("default_use_velocity_control").unwrap();
+    let default_use_velocity_control = setup
+        .get_bool("default_use_velocity_control")
+        .or_else(|| {
+            setup
+                .get_str("default_use_velocity_control")
+                .map(|s| s.to_lowercase() == "true")
+        })
+        .unwrap_or(false); // Default to `false` if the key is missing or invalid
+
     let default_outer_proximity = setup.get_f64("default_outer_proximity").unwrap() as f32;
     let default_inner_proximity = setup.get_f64("default_inner_proximity").unwrap() as f32;
     let default_velocity_scalar = setup.get_f64("default_velocity_scalar").unwrap() as f32;

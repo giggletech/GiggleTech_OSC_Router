@@ -48,40 +48,41 @@ pub fn validate_yaml(file_path: &str) -> Result<(), String> {
     let file_content = fs::read_to_string(file_path)
         .map_err(|e| format!("Error reading file: {}", e))?;
 
-    // Attempt to parse the YAML file
-    let config: Result<Config, Error> = serde_yaml::from_str(&file_content);
-
-    match config {
-        Ok(_) => Ok(()),
-        Err(e) => {
-            // Extract error location
-            let location = e.location();
-            if let Some(loc) = location {
+    // Parse the YAML into a generic Value for manual validation
+    let raw_yaml: serde_yaml::Value = serde_yaml::from_str(&file_content)
+        .map_err(|e| {
+            if let Some(loc) = e.location() {
                 let lines: Vec<&str> = file_content.lines().collect();
-
-                // Find surrounding lines for context
                 let error_line = lines.get(loc.line() - 1).unwrap_or(&"<unable to retrieve line>");
-                let prev_line = lines.get(loc.line().saturating_sub(2)).unwrap_or(&"");
-
-                // Check for possible syntax issues in the line and surrounding context
-                let suspected_issue = if !error_line.contains(':') && error_line.trim().contains(' ') {
-                    "Possible missing colon ':' detected in this line or the line above "
-                } else {
-                    ""
-                };
-
-                Err(format!(
-                    "YAML Validation Error at line {} column {}: {}\n> {}\n{}",
+                let previous_line = lines.get(loc.line().saturating_sub(2)).unwrap_or(&"<no previous line>");
+                format!(
+                    "YAML Validation Error: Missing ':' or key-value separator at line {}.\n> {}\n> {}\nNote: Check for errors above these lines.",
                     loc.line(),
-                    loc.column(),
-                    e,
-                    error_line.trim(),
-                    suspected_issue
-                ))
+                    previous_line.trim(),
+                    error_line.trim()
+                )
             } else {
-                // Fallback if no location is available
-                Err(format!("YAML Validation Error: {}", e))
+                format!("YAML Validation Error: {}", e)
             }
+        })?;
+
+    // Validate the `setup` section
+    if let Some(setup) = raw_yaml.get("setup").and_then(|s| s.as_mapping()) {
+        // Check for required fields in `setup`
+        if !setup.contains_key(&serde_yaml::Value::String("port_rx".to_string())) {
+            return Err("YAML Validation Error: Missing 'port_rx' field in 'setup' section.".to_string());
         }
+        if !setup.contains_key(&serde_yaml::Value::String("default_min_speed".to_string())) {
+            return Err("YAML Validation Error: Missing 'default_min_speed' field in 'setup' section.".to_string());
+        }
+        if !setup.contains_key(&serde_yaml::Value::String("default_max_speed".to_string())) {
+            return Err("YAML Validation Error: Missing 'default_max_speed' field in 'setup' section.".to_string());
+        }
+        // Add more checks as needed for the setup fields
+    } else {
+        return Err("YAML Validation Error: Missing or invalid 'setup' section.".to_string());
     }
+
+    // If parsing and setup validation succeed, continue
+    Ok(())
 }
