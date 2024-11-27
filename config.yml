@@ -15,11 +15,9 @@ devices:
   - ip: 192.168.1.70
     proximity_parameter: proximity_02
 
-
   # Device 3
   - ip: 192.168.1.71
     proximity_parameter: proximity_03
-
 
   # Device 4
   - ip: 192.168.1.73
@@ -27,7 +25,7 @@ devices:
     max_speed: 100
     speed_scale: 100
     max_speed_parameter: max_speed_04
-    use_velocity_control: true
+    use_velocity_control: True
     outer_proximity: 0.1
     inner_proximity: 0.6
     velocity_scalar: 25
@@ -35,7 +33,7 @@ devices:
 
 setup:
   # Port listening for OSC (Default: 9001) or use  port_rx: OSCQuery if you have mutiple apps
-  port_rx: OSCQuery 
+  port_rx: OSCQuery
   #port_rx: 9001
 
   # Minimum Speed of Haptic Motor (5-100)
@@ -55,7 +53,7 @@ setup:
   timeout: 5
 
   # Velocity Control Mode (True = Velocity / False = Proximity)
-  default_use_velocity_control: false
+  default_use_velocity_control: True
 
   # Velocity Control Parameters
   # Adjust these parameters to achieve the desired effect.
