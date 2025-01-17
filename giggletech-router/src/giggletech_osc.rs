@@ -27,6 +27,8 @@ use async_osc::{ OscSocket, Result};
 // OSC Address Setup
 const TX_OSC_MOTOR_ADDRESS: &str = "/avatar/parameters/motor"; // legacy support
 const TX_OSC_GIGGLESPARK: &str = "/motor"; // both gigglepuck and spark use this
+const TX_OSC_INFLATION_IN: &str = "/inlet_valve"; // ---------------------------------------- Inflation Haptics Code
+const TX_OSC_INFLATION_OUT: &str = "/outlet_valve"; // ---------------------------------------- Inflation Haptics Code
 //const TX_OSC_LED_ADDRESS_2: &str = "/avatar/parameters/led";
 
 pub(crate) fn create_socket_address(host: &str, port: &str) -> String {
@@ -59,5 +61,7 @@ pub(crate) async fn send_data(device_ip: &str, value: i32) -> Result<()> {
     tx_socket.connect(tx_socket_address).await?;
     tx_socket.send((TX_OSC_MOTOR_ADDRESS, (value,))).await?;
     tx_socket.send((TX_OSC_GIGGLESPARK, (value,))).await?;
+    tx_socket.send((TX_OSC_INFLATION_IN, (value,))).await?;
+    tx_socket.send((TX_OSC_INFLATION_OUT, (value,))).await?;
     Ok(())
 }
