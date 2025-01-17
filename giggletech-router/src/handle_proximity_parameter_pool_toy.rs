@@ -80,10 +80,12 @@ pub(crate) async fn pool_toy_logic(
 
         println!("{}", value);
 
+        let signal_out = (value.clamp(0.0, 1.0) * 255.0).round() as i32;
+
+        println!("{}", signal_out);
 
 
-
-        giggletech_osc::send_data(&device_ip, 0i32).await?;  
+        giggletech_osc::send_data(&device_ip, signal_out).await?;  
 
     }
     Ok(())
