@@ -13,7 +13,7 @@ devices:
 
     # Device 1
   - ip: 192.168.1.169
-    proximity_parameter: proximity_04
+    proximity_parameter: pool_toy
     max_speed: 100
 
   # Device 2

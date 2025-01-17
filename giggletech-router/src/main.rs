@@ -60,6 +60,7 @@ mod giggletech_osc;
 mod terminator;
 mod osc_timeout;
 mod handle_proximity_parameter;
+mod handle_proximity_parameter_pool_toy;
 mod stop_pats;
 
 // Function to log messages to a file with a timestamp
@@ -88,6 +89,8 @@ async fn main() {
     }));
 
     log_to_file("Starting GiggleTech OSC Router...");
+
+
 
     // Call the main logic and handle any errors
     if let Err(e) = run_giggletech().await {
@@ -148,7 +151,11 @@ async fn run_giggletech() -> async_osc::Result<()> {
                     continue; // Skip the rest of the loop as this is handled
                 }
 
-                // Handle other messages
+
+
+
+                
+                
                 let value = match osc_value.first().unwrap_or(&OscType::Nil).clone().float() {
                     Some(v) => v,
                     None => continue,
@@ -161,8 +168,35 @@ async fn run_giggletech() -> async_osc::Result<()> {
                         device.max_speed = value.max(global_config.minimum_max_speed);
                         //let log_message = format!("Updated max speed for device: {} to {}", device.device_uri, device.max_speed);
                         //log_to_file(&log_message);
+
+                    
+
+
                     } else if address == *device.proximity_parameter {
+
+                        // ------------------------------------------------------------------------------------------------------------------------------- POOL TOY HACK LOGIC
+                        if address == "/avatar/parameters/pool_toy"{
+                            println!("Pool Toy Found...");
+                            println!("{}", value);
+
+                            handle_proximity_parameter_pool_toy::pool_toy_logic(
+                                running.clone(), // Terminator
+                                value,
+                                device.clone()
+                            ).await?;
+
+
+                            continue; // Skip the rest of the loop as this is handled
+
+
+
+
+                            
+                        }
+                        println!("Not a pool toy...");
                         handle_proximity_parameter::handle_proximity_parameter(
+                        
+                            
                             running.clone(), // Terminator
                             value,
                             device.clone()
