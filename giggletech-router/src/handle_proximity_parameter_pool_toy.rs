@@ -1,51 +1,13 @@
-/*
-    handle_proximity_parameter.rs - Handling Proximity Data for GiggleTech Devices
-
-    This module processes proximity sensor data and controls device actions (like motors) based on 
-    the proximity values. It tracks the last proximity signal for each device and manages sending 
-    commands to the device via OSC.
-
-    **Key Features:**
-
-    1. **Proximity Handling (`handle_proximity_parameter`)**:
-       - Receives proximity data (`value`) and determines if the device should stop or continue operating.
-       - If proximity is zero, it sends stop commands to the device.
-       - If proximity is non-zero, it processes the proximity data and sends motor control values to the device.
-
-    2. **Velocity Control**:
-       - If the device uses velocity control, the module calculates the change in proximity over time and adjusts the motor speed accordingly.
-       - Otherwise, it simply scales the motor value based on proximity.
-
-    3. **Timeout and Signal Tracking**:
-       - Updates the last signal time and last proximity value for each device, ensuring proper handling of timeouts and avoiding stale data.
-
-    **Usage**:
-    - This function is typically called when proximity data is received and determines the appropriate action (start, stop, or adjust motor) for the device.
-*/
-
-use async_osc::Result;
-use async_std::sync::{Arc, Mutex,};
-use std::{
-    sync::atomic::{AtomicBool},
-    time::{Instant, Duration}, collections::HashMap,
-};
-
-
+use async_std::task::sleep;
+use async_std::sync::Mutex;
+use std::sync::{Arc, atomic::{AtomicBool}};
+use std::time::{Duration, Instant};
+use std::collections::HashMap;
+use lazy_static::lazy_static;
 use crate::osc_timeout;
 use crate::terminator;
 use crate::giggletech_osc;
-use crate::data_processing;
-use lazy_static::lazy_static;
 use crate::config::DeviceConfig;
-
-
-
-struct BladderSystem {
-    tfull: f64,   // Time to fully inflate the bladder (seconds)
-    tempty: f64,  // Time to fully deflate the bladder (seconds)
-    current_fill: f64, // Current bladder fullness (0.0 = empty, 1.0 = full)
-}
-
 
 lazy_static! {
     pub static ref DEVICE_LAST_VALUE: Arc<Mutex<HashMap<String, f32>>> =
@@ -55,19 +17,18 @@ lazy_static! {
 pub(crate) async fn pool_toy_logic(
     running: Arc<AtomicBool>,
     value: f32,
-    device: DeviceConfig
-) -> Result<()> {
+    device: DeviceConfig,
+) -> Result<(), async_osc::Error> {
     terminator::stop(running.clone()).await?;
 
     let device_ip = Arc::new(device.device_uri.clone());
-
-    // Update Last Signal Time for timeout clock 
     let mut device_last_signal_times = osc_timeout::DEVICE_LAST_SIGNAL_TIME.lock().unwrap();
-    // let last_signal_time: Option<Instant> = device_last_signal_times.get(&device_ip.to_string()).copied();
-    let last_signal_time = device_last_signal_times.insert(device_ip.to_string(), Instant::now());
     let mut device_last_values = DEVICE_LAST_VALUE.lock().await;
-    let last_val = device_last_values.insert(device_ip.to_string(), value).unwrap_or(0.0);
-
+    
+    let bladder_level = Arc::new(Mutex::new(0.0));
+    let tfull = 10.0;
+    let tempty = 5.0;
+    let step_duration = Duration::from_millis(100);
     
     if value == 0.0 {
         println!("Stopping pats...");
@@ -77,16 +38,29 @@ pub(crate) async fn pool_toy_logic(
             giggletech_osc::send_data(&device_ip, 0i32).await?;  
         }
     } else {
-
-        println!("{}", value);
-
         let signal_out = (value.clamp(0.0, 1.0) * 255.0).round() as i32;
-
         println!("{}", signal_out);
-
-
-        giggletech_osc::send_data(&device_ip, signal_out).await?;  
-
+        giggletech_osc::send_data(&device_ip, signal_out).await?;
+        
+        // Adjust bladder level dynamically without blocking
+        let bladder_level_clone = Arc::clone(&bladder_level);
+        let par_belly = value as f64;
+        async_std::task::spawn(async move {
+            let mut bladder = bladder_level_clone.lock().await;
+            while (par_belly - *bladder).abs() > 0.01 {
+                let change_rate = if par_belly > *bladder {
+                    1.0 / tfull
+                } else {
+                    -1.0 / tempty
+                };
+                
+                let step_change = change_rate * step_duration.as_secs_f64();
+                *bladder = (*bladder + step_change).clamp(0.0, 1.0);
+                println!("Bladder adjusting: Target = {:.2}, Current = {:.2}", par_belly, *bladder);
+                sleep(step_duration).await;
+            }
+            println!("Bladder adjusted to: {:.2}", *bladder);
+        });
     }
     Ok(())
 }
