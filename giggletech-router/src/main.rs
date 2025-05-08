@@ -52,6 +52,7 @@ use std::sync::atomic::{AtomicBool};
 use std::fs::OpenOptions;
 use std::io::{self, Write}; // For file logging and keeping the console open
 use chrono::Local; // For getting the local time
+use std::path::Path; // Added for checking file existence
 
 use crate::osc_timeout::osc_timeout;
 mod data_processing;
@@ -81,6 +82,8 @@ fn log_to_file(message: &str) {
 
 #[async_std::main]
 async fn main() {
+
+    
     // Set a catch-all panic hook to log any panic messages
     std::panic::set_hook(Box::new(|panic_info| {
         let message = format!("Application panicked: {}", panic_info);
@@ -103,6 +106,13 @@ async fn main() {
 
 async fn run_giggletech() -> async_osc::Result<()> {
     log_to_file("Loading configuration...");
+
+    // Check if config.yml exists
+    if !Path::new("config.yml").exists() {
+        log_to_file("Configuration file (config.yml) not found.");
+        // Optionally, you might want to return an error here if the config is critical
+        // return Err(async_osc::Error::Other("Configuration file not found".into()));
+    }
 
     let (global_config, mut devices) = config::load_config();
     let timeout = global_config.timeout;
