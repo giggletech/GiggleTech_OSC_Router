@@ -23,7 +23,7 @@
 
     3. **Device-Specific Configuration (`DeviceConfig`)**:
        - Each device can have custom parameters, but if not specified, they inherit from global settings.
-       - The function `parse_device_config` processes each device’s configuration, allowing custom IP addresses, 
+       - The function `parse_device_config` processes each device's configuration, allowing custom IP addresses, 
          speed settings, and proximity parameters for each individual device.
 
     **Dynamic Port Management with OSCQuery**:
@@ -243,10 +243,20 @@ fn parse_global_config(setup: YamlHashWrapper) -> GlobalConfig {
 
     // Check if `port_rx` is "OSCQuery" or a numeric port
     let port_rx: Arc<String> = if port_rx_str == "OSCQuery" {
-        // If it's "OSCQuery", use the port from the OSCQuery server
-        println!("\nUsing OSQ Query");
-        let udp_port = oscq_giggletech::initialize_and_get_udp_port();  // Get u16 port from OSCQuery
-        Arc::new(udp_port.to_string())  // Convert u16 to String and wrap it in Arc<String>
+        // If it's "OSCQuery", try to use the port from the OSCQuery server
+        println!("\nAttempting to use OSCQuery...");
+        match std::panic::catch_unwind(|| {
+            oscq_giggletech::initialize_and_get_udp_port()
+        }) {
+            Ok(udp_port) => {
+                println!("OSCQuery initialized successfully. UDP port: {}", udp_port);
+                Arc::new(udp_port.to_string())
+            }
+            Err(_) => {
+                println!("OSCQuery initialization failed. Falling back to default port 9001.");
+                Arc::new("9001".to_string())
+            }
+        }
     } else {
         // Otherwise, assume it's a port number in string format, validate, and wrap it in Arc
         assert!(u16::from_str_radix(&port_rx_str, 10).is_ok(), "Invalid port number format");

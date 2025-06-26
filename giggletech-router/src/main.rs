@@ -53,6 +53,7 @@ use std::fs::OpenOptions;
 use std::io::{self, Write}; // For file logging and keeping the console open
 use chrono::Local; // For getting the local time
 use std::path::Path; // Added for checking file existence
+use std::time::Duration;
 
 use crate::osc_timeout::osc_timeout;
 mod data_processing;
@@ -118,6 +119,9 @@ async fn run_giggletech() -> async_osc::Result<()> {
     let timeout = global_config.timeout;
 
     log_to_file("Configuration loaded successfully. Setting up sockets and timeouts.");
+
+    // Test device connectivity
+    test_device_connectivity(&devices).await;
 
     // Setup Start / Stop of Terminator
     let running = Arc::new(AtomicBool::new(false));
@@ -186,4 +190,52 @@ async fn run_giggletech() -> async_osc::Result<()> {
     }
 
     Ok(())
+}
+
+// Simple ping test function that doesn't crash
+async fn ping_device(device_ip: &str) -> bool {
+    // Use simple ping (ICMP) test
+    match async_std::process::Command::new("ping")
+        .args(&["-n", "1", "-w", "1000", device_ip])
+        .output()
+        .await {
+        Ok(output) => {
+            let success = output.status.success();
+            if success {
+                println!("    ✓ Ping successful for {}", device_ip);
+            } else {
+                println!("    ✗ Ping failed for {}", device_ip);
+            }
+            success
+        }
+        Err(e) => {
+            println!("    ✗ Ping command failed: {}", e);
+            false
+        }
+    }
+}
+
+// Test all devices and log results
+async fn test_device_connectivity(devices: &[crate::config::DeviceConfig]) {
+    println!("\n=== Testing Device Connectivity ===");
+    log_to_file("Starting device connectivity test...");
+    
+    for (i, device) in devices.iter().enumerate() {
+        let device_ip = &device.device_uri;
+        
+        println!("  Testing Device {}: {}", i + 1, device_ip);
+        
+        // Test the device
+        let is_reachable = ping_device(device_ip).await;
+        
+        let status = if is_reachable { "ONLINE" } else { "OFFLINE" };
+        let message = format!("Device {}: {} - {}", i + 1, device_ip, status);
+        
+        println!("  Result: {}", message);
+        log_to_file(&message);
+        println!(); // Add blank line for readability
+    }
+    
+    println!("=== Connectivity Test Complete ===\n");
+    log_to_file("Device connectivity test completed.");
 }
