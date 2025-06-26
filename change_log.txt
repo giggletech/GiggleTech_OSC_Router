@@ -1,27 +1,11 @@
 Giggletech Router Change Log
 
 1.4
-- Fixed NetworkUnreachable panic issue when devices are offline
-  * Added graceful error handling in terminator.rs to prevent crashes when sending stop signals to unreachable devices
-  * Added error handling in osc_timeout.rs to prevent crashes during timeout operations
-  * Added error handling in handle_proximity_parameter.rs for all send_data calls
-  * Added error handling in stop_pats.rs for stop signal operations
-  * All network errors are now logged instead of causing application crashes
-
-- Added device connectivity testing feature
-  * Implemented ping test on application startup to check device online/offline status
-  * Added detailed logging of device connectivity results
-  * Application now shows which devices are reachable before starting OSC operations
-
-- Improved OSCQuery error handling
-  * Added fallback to default port (9001) when OSCQuery initialization fails
-  * Prevents crashes when OSCQuery configuration files are missing
-
-- Enhanced error logging and debugging
-  * All network failures are now logged with detailed error messages
-  * Application continues running even when some devices are unreachable
-  * Better user feedback for connectivity issues
-
+- Fixed NetworkUnreachable panic issue when devices are offline with graceful error handling
+- Added device connectivity testing with ping tests on startup to check device online/offline status
+- Implemented Connection Manager for efficient socket handling with automatic cleanup and statistics
+- Enhanced error handling throughout application with proper logging to giggletech_log.txt
+- Improved OSCQuery error handling with fallback to default port when initialization fails
 
 1.3
 Added Motor Start Speed to help avoid motor stalling at low proximity settings.
