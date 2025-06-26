@@ -142,6 +142,17 @@ async fn run_giggletech() -> async_osc::Result<()> {
 
     log_to_file("Configuration loaded successfully. Setting up sockets and timeouts.");
 
+    // Start connection manager
+    giggletech_osc::start_connection_manager().await;
+
+    // Start statistics monitoring task
+    async_std::task::spawn(async {
+        loop {
+            async_std::task::sleep(Duration::from_secs(300)).await; // Print stats every 5 minutes
+            giggletech_osc::print_connection_stats().await;
+        }
+    });
+
     // Test device connectivity
     test_device_connectivity(&devices).await;
 

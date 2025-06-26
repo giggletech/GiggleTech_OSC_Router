@@ -22,7 +22,6 @@ Giggletech Router Change Log
   * Application continues running even when some devices are unreachable
   * Better user feedback for connectivity issues
 
-Contributed by Assistant
 
 1.3
 Added Motor Start Speed to help avoid motor stalling at low proximity settings.
