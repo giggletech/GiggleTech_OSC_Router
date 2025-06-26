@@ -71,14 +71,20 @@ fn log_to_file(message: &str) {
     let timestamp = now.format("%Y-%m-%d %H:%M:%S").to_string(); // Format the time as desired
 
     // Open the log file in append mode, creating it if it doesn't exist
-    let mut file = OpenOptions::new()
+    match OpenOptions::new()
         .create(true)
         .append(true)
-        .open("giggletech_log.txt")
-        .unwrap();
-
-    // Write the timestamp and the log message to the file
-    writeln!(file, "[{}] {}", timestamp, message).unwrap();
+        .open("giggletech_log.txt") {
+        Ok(mut file) => {
+            // Write the timestamp and the log message to the file
+            if let Err(e) = writeln!(file, "[{}] {}", timestamp, message) {
+                eprintln!("Failed to write to log file: {}", e);
+            }
+        }
+        Err(e) => {
+            eprintln!("Failed to open log file: {}", e);
+        }
+    }
 }
 
 #[async_std::main]
@@ -110,12 +116,28 @@ async fn run_giggletech() -> async_osc::Result<()> {
 
     // Check if config.yml exists
     if !Path::new("config.yml").exists() {
-        log_to_file("Configuration file (config.yml) not found.");
-        // Optionally, you might want to return an error here if the config is critical
-        // return Err(async_osc::Error::Other("Configuration file not found".into()));
+        let error_msg = "Configuration file (config.yml) not found.";
+        log_to_file(error_msg);
+        eprintln!("{}", error_msg);
+        return Err(async_osc::Error::Io(std::io::Error::new(
+            std::io::ErrorKind::NotFound,
+            error_msg
+        )));
     }
 
-    let (global_config, mut devices) = config::load_config();
+    let (global_config, mut devices) = match config::load_config() {
+        Ok(config) => config,
+        Err(e) => {
+            let error_msg = format!("Config file error: {}", e);
+            log_to_file(&error_msg);
+            eprintln!("{}", error_msg);
+            return Err(async_osc::Error::Io(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                error_msg
+            )));
+        }
+    };
+    
     let timeout = global_config.timeout;
 
     log_to_file("Configuration loaded successfully. Setting up sockets and timeouts.");

@@ -38,13 +38,38 @@ lazy_static! {
 pub async fn osc_timeout(device_ip: &str, timeout: u64) -> Result<()> {
     loop {
         async_std::task::sleep(Duration::from_secs(1)).await;
-        let elapsed_time = Instant::now().duration_since(*DEVICE_LAST_SIGNAL_TIME.lock().unwrap().get(device_ip).unwrap_or(&Instant::now()));
-        //println!("Device Ip {} Elapsed Time {:?}", device_ip, elapsed_time);
+        
+        // Handle mutex lock safely
+        let elapsed_time = match DEVICE_LAST_SIGNAL_TIME.lock() {
+            Ok(guard) => {
+                let now = Instant::now();
+                let last_time = guard.get(device_ip).unwrap_or(&now);
+                let elapsed = now.duration_since(*last_time);
+                elapsed
+            }
+            Err(_) => {
+                eprintln!("Warning: Mutex poisoned for device {}, skipping timeout check", device_ip);
+                continue;
+            }
+        };
+        
         if elapsed_time >= Duration::from_secs(timeout) {
-            //println!("Timeout");
-            giggletech_osc::send_data(device_ip, 0i32).await?;
-            let mut device_last_signal_times = DEVICE_LAST_SIGNAL_TIME.lock().unwrap();
-            device_last_signal_times.insert(device_ip.to_string(), Instant::now());
+            match giggletech_osc::send_data(device_ip, 0i32).await {
+                Ok(_) => {
+                    // Successfully sent timeout signal
+                }
+                Err(e) => {
+                    // Log the error but don't panic - just continue monitoring
+                    eprintln!("Timeout: Failed to send stop signal to {}: {}", device_ip, e);
+                }
+            }
+            
+            // Update the last signal time safely
+            if let Ok(mut device_last_signal_times) = DEVICE_LAST_SIGNAL_TIME.lock() {
+                device_last_signal_times.insert(device_ip.to_string(), Instant::now());
+            } else {
+                eprintln!("Warning: Failed to update signal time for device {}", device_ip);
+            }
         }
     }
 }
