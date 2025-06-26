@@ -53,6 +53,7 @@ use std::fs::OpenOptions;
 use std::io::{self, Write}; // For file logging and keeping the console open
 use chrono::Local; // For getting the local time
 use std::path::Path; // Added for checking file existence
+use std::time::Duration;
 
 use crate::osc_timeout::osc_timeout;
 mod data_processing;
@@ -70,14 +71,20 @@ fn log_to_file(message: &str) {
     let timestamp = now.format("%Y-%m-%d %H:%M:%S").to_string(); // Format the time as desired
 
     // Open the log file in append mode, creating it if it doesn't exist
-    let mut file = OpenOptions::new()
+    match OpenOptions::new()
         .create(true)
         .append(true)
-        .open("giggletech_log.txt")
-        .unwrap();
-
-    // Write the timestamp and the log message to the file
-    writeln!(file, "[{}] {}", timestamp, message).unwrap();
+        .open("giggletech_log.txt") {
+        Ok(mut file) => {
+            // Write the timestamp and the log message to the file
+            if let Err(e) = writeln!(file, "[{}] {}", timestamp, message) {
+                eprintln!("Failed to write to log file: {}", e);
+            }
+        }
+        Err(e) => {
+            eprintln!("Failed to open log file: {}", e);
+        }
+    }
 }
 
 #[async_std::main]
@@ -109,15 +116,45 @@ async fn run_giggletech() -> async_osc::Result<()> {
 
     // Check if config.yml exists
     if !Path::new("config.yml").exists() {
-        log_to_file("Configuration file (config.yml) not found.");
-        // Optionally, you might want to return an error here if the config is critical
-        // return Err(async_osc::Error::Other("Configuration file not found".into()));
+        let error_msg = "Configuration file (config.yml) not found.";
+        log_to_file(error_msg);
+        eprintln!("{}", error_msg);
+        return Err(async_osc::Error::Io(std::io::Error::new(
+            std::io::ErrorKind::NotFound,
+            error_msg
+        )));
     }
 
-    let (global_config, mut devices) = config::load_config();
+    let (global_config, mut devices) = match config::load_config() {
+        Ok(config) => config,
+        Err(e) => {
+            let error_msg = format!("Config file error: {}", e);
+            log_to_file(&error_msg);
+            eprintln!("{}", error_msg);
+            return Err(async_osc::Error::Io(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                error_msg
+            )));
+        }
+    };
+    
     let timeout = global_config.timeout;
 
     log_to_file("Configuration loaded successfully. Setting up sockets and timeouts.");
+
+    // Start connection manager
+    giggletech_osc::start_connection_manager().await;
+
+    // Start statistics monitoring task
+    async_std::task::spawn(async {
+        loop {
+            async_std::task::sleep(Duration::from_secs(300)).await; // Print stats every 5 minutes
+            giggletech_osc::print_connection_stats().await;
+        }
+    });
+
+    // Test device connectivity
+    test_device_connectivity(&devices).await;
 
     // Setup Start / Stop of Terminator
     let running = Arc::new(AtomicBool::new(false));
@@ -186,4 +223,52 @@ async fn run_giggletech() -> async_osc::Result<()> {
     }
 
     Ok(())
+}
+
+// Simple ping test function that doesn't crash
+async fn ping_device(device_ip: &str) -> bool {
+    // Use simple ping (ICMP) test
+    match async_std::process::Command::new("ping")
+        .args(&["-n", "1", "-w", "1000", device_ip])
+        .output()
+        .await {
+        Ok(output) => {
+            let success = output.status.success();
+            if success {
+                println!("    ✓ Ping successful for {}", device_ip);
+            } else {
+                println!("    ✗ Ping failed for {}", device_ip);
+            }
+            success
+        }
+        Err(e) => {
+            println!("    ✗ Ping command failed: {}", e);
+            false
+        }
+    }
+}
+
+// Test all devices and log results
+async fn test_device_connectivity(devices: &[crate::config::DeviceConfig]) {
+    println!("\n=== Testing Device Connectivity ===");
+    log_to_file("Starting device connectivity test...");
+    
+    for (i, device) in devices.iter().enumerate() {
+        let device_ip = &device.device_uri;
+        
+        println!("  Testing Device {}: {}", i + 1, device_ip);
+        
+        // Test the device
+        let is_reachable = ping_device(device_ip).await;
+        
+        let status = if is_reachable { "ONLINE" } else { "OFFLINE" };
+        let message = format!("Device {}: {} - {}", i + 1, device_ip, status);
+        
+        println!("  Result: {}", message);
+        log_to_file(&message);
+        println!(); // Add blank line for readability
+    }
+    
+    println!("=== Connectivity Test Complete ===\n");
+    log_to_file("Device connectivity test completed.");
 }

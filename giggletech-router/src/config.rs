@@ -23,7 +23,7 @@
 
     3. **Device-Specific Configuration (`DeviceConfig`)**:
        - Each device can have custom parameters, but if not specified, they inherit from global settings.
-       - The function `parse_device_config` processes each device’s configuration, allowing custom IP addresses, 
+       - The function `parse_device_config` processes each device's configuration, allowing custom IP addresses, 
          speed settings, and proximity parameters for each individual device.
 
     **Dynamic Port Management with OSCQuery**:
@@ -173,49 +173,76 @@ impl YamlHashWrapper {
 
 
 
-pub(crate) fn load_config() -> (GlobalConfig, Vec<DeviceConfig>) {
+pub(crate) fn load_config() -> Result<(GlobalConfig, Vec<DeviceConfig>), String> {
     let mut config_file = match File::open("./config.yml") {
-        Err(why) => panic!("{}", why),
+        Err(why) => return Err(format!("Failed to open config.yml: {}", why)),
         Ok(f) => f
     };
-    //println!("Validate Config File...");
 
     // Call validate_yaml function
-    
     match validate_yaml("./config.yml") {
         Ok(_) => println!("Configuration file is valid."),
-        Err(e) => panic!("Configuration File Error: {}", e),
+        Err(e) => return Err(format!("Configuration File Error: {}", e)),
     };
 
     let mut config_data = String::new();
     match config_file.read_to_string(&mut config_data) {
-        Err(why) => panic!("{}", why),
-        // don't care how many bytes were read
+        Err(why) => return Err(format!("Failed to read config.yml: {}", why)),
         Ok(_) => {}
     }
 
     let config = match YamlLoader::load_from_str(&config_data) {
-        Err(why) => panic!("{}", why),
+        Err(why) => return Err(format!("Failed to parse YAML: {}", why)),
         Ok(yaml_data) => yaml_data
     };
-    assert_eq!(config.len(), 1, "Only 1 element should be in the yaml file");
-    let map = config.first().unwrap().as_hash().expect("Expected config to be a map at the top level");
-    let setup = map.get(&Yaml::String("setup".to_string())).expect("Missing setup section").as_hash().expect("Setup section must be a map");
+    
+    if config.len() != 1 {
+        return Err("Only 1 element should be in the yaml file".to_string());
+    }
+    
+    let map = match config.first().unwrap().as_hash() {
+        Some(hash) => hash,
+        None => return Err("Expected config to be a map at the top level".to_string()),
+    };
+    
+    let setup = match map.get(&Yaml::String("setup".to_string())) {
+        Some(setup_yaml) => match setup_yaml.as_hash() {
+            Some(setup_hash) => setup_hash,
+            None => return Err("Setup section must be a map".to_string()),
+        },
+        None => return Err("Missing setup section".to_string()),
+    };
+    
     let setup = YamlHashWrapper {yaml_hash: setup.clone()};
     let global_config = parse_global_config(setup);
 
-    let devices = map.get(&Yaml::String("devices".to_string())).expect("Missing devices section").as_vec().expect("Devices section must be a list");
-    let devices: Vec<DeviceConfig> = devices.iter().map(|dev| {
-        let device_data = YamlHashWrapper {yaml_hash: dev.as_hash().unwrap().clone()};
-        parse_device_config(device_data, &global_config)
-    }).collect();
+    let devices = match map.get(&Yaml::String("devices".to_string())) {
+        Some(devices_yaml) => match devices_yaml.as_vec() {
+            Some(devices_vec) => devices_vec,
+            None => return Err("Devices section must be a list".to_string()),
+        },
+        None => return Err("Missing devices section".to_string()),
+    };
+    
+    let mut device_configs = Vec::new();
+    for (i, dev) in devices.iter().enumerate() {
+        let device_hash = match dev.as_hash() {
+            Some(hash) => hash,
+            None => return Err(format!("Device {} is not a valid map", i + 1)),
+        };
+        let device_data = YamlHashWrapper {yaml_hash: device_hash.clone()};
+        match parse_device_config(device_data, &global_config) {
+            Ok(device_config) => device_configs.push(device_config),
+            Err(e) => return Err(format!("Error parsing device {}: {}", i + 1, e)),
+        }
+    }
 
     println!("\n");
     banner_txt();
     println!("\n");
     println!(" Device Maps");
     println!("");
-    for (i, device) in devices.iter().enumerate() {
+    for (i, device) in device_configs.iter().enumerate() {
         println!("  Device {i}");
         println!("   {} => {}", device.proximity_parameter.trim_start_matches("/avatar/parameters/"), device.device_uri);
         println!("   Vibration Configuration");
@@ -225,44 +252,61 @@ pub(crate) fn load_config() -> (GlobalConfig, Vec<DeviceConfig>) {
         println!("    Scale Factor: {:.0}%", device.speed_scale * 100.0);
         println!("    Advanced Mode: {}", device.use_velocity_control);
         println!("");
-
     }
 
     println!("\n Listening for OSC on port: {}", global_config.port_rx);
     println!(" Timeout: {}s", global_config.timeout);
     println!("\nWaiting for pats...");
 
-    (global_config, devices)
+    Ok((global_config, device_configs))
 }
 
 
 
 fn parse_global_config(setup: YamlHashWrapper) -> GlobalConfig {
-    // Retrieve the value of `port_rx` from the YAML file
-    let port_rx_str = setup.get_str("port_rx").unwrap(); // This gets the string value from YAML
+    // Retrieve the value of `port_rx` from the YAML file with fallback
+    let port_rx_str = setup.get_str("port_rx").unwrap_or_else(|| {
+        println!("Warning: port_rx not found in config, using default port 9001");
+        "9001".to_string()
+    });
 
     // Check if `port_rx` is "OSCQuery" or a numeric port
     let port_rx: Arc<String> = if port_rx_str == "OSCQuery" {
-        // If it's "OSCQuery", use the port from the OSCQuery server
-        println!("\nUsing OSQ Query");
-        let udp_port = oscq_giggletech::initialize_and_get_udp_port();  // Get u16 port from OSCQuery
-        Arc::new(udp_port.to_string())  // Convert u16 to String and wrap it in Arc<String>
+        // If it's "OSCQuery", try to use the port from the OSCQuery server
+        println!("\nAttempting to use OSCQuery...");
+        match std::panic::catch_unwind(|| {
+            oscq_giggletech::initialize_and_get_udp_port()
+        }) {
+            Ok(udp_port) => {
+                println!("OSCQuery initialized successfully. UDP port: {}", udp_port);
+                Arc::new(udp_port.to_string())
+            }
+            Err(_) => {
+                println!("OSCQuery initialization failed. Falling back to default port 9001.");
+                Arc::new("9001".to_string())
+            }
+        }
     } else {
         // Otherwise, assume it's a port number in string format, validate, and wrap it in Arc
-        assert!(u16::from_str_radix(&port_rx_str, 10).is_ok(), "Invalid port number format");
-        Arc::new(port_rx_str)  // Wrap the existing port string in Arc
+        match u16::from_str_radix(&port_rx_str, 10) {
+            Ok(_) => Arc::new(port_rx_str),
+            Err(_) => {
+                println!("Warning: Invalid port number '{}', using default port 9001", port_rx_str);
+                Arc::new("9001".to_string())
+            }
+        }
     };
 
-    // Proceed with other config values as before
-    let default_min_speed = setup.get_f64("default_min_speed").unwrap() as f32 / 100.0;
+    // Proceed with other config values with proper fallbacks
+    let default_min_speed = setup.get_f64("default_min_speed").unwrap_or(5.0) as f32 / 100.0;
     assert!(default_min_speed >= 0.0); // Ensure min speed is valid
 
     const MAX_SPEED_LOW_LIMIT_CONST: f32 = 0.05;
 
-    let default_max_speed = setup.get_f64("default_max_speed").unwrap() as f32 / 100.0;
+    let default_max_speed = setup.get_f64("default_max_speed").unwrap_or(25.0) as f32 / 100.0;
     let default_max_speed = default_max_speed.max(default_min_speed).max(MAX_SPEED_LOW_LIMIT_CONST);
 
-    let default_start_tx = setup.get_i64("default_start_tx").unwrap() as i32;
+    let default_start_tx = setup.get_i64("default_start_tx").unwrap_or(20) as i32;
 
     let default_max_speed_parameter = setup
         .get_str("default_max_speed_parameter")
@@ -271,8 +315,7 @@ fn parse_global_config(setup: YamlHashWrapper) -> GlobalConfig {
 
     let default_speed_scale = (setup.get_f64("default_speed_scale").unwrap_or(100.0) as f32) / 100.0;
 
-
-    let timeout = setup.get_i64("timeout").unwrap_or(0) as u64;
+    let timeout = setup.get_i64("timeout").unwrap_or(5) as u64;
 
     let default_use_velocity_control = setup
         .get_bool("default_use_velocity_control")
@@ -283,9 +326,9 @@ fn parse_global_config(setup: YamlHashWrapper) -> GlobalConfig {
         })
         .unwrap_or(false); // Default to `false` if the key is missing or invalid
 
-    let default_outer_proximity = setup.get_f64("default_outer_proximity").unwrap() as f32;
-    let default_inner_proximity = setup.get_f64("default_inner_proximity").unwrap() as f32;
-    let default_velocity_scalar = setup.get_f64("default_velocity_scalar").unwrap() as f32;
+    let default_outer_proximity = setup.get_f64("default_outer_proximity").unwrap_or(0.0) as f32;
+    let default_inner_proximity = setup.get_f64("default_inner_proximity").unwrap_or(0.7) as f32;
+    let default_velocity_scalar = setup.get_f64("default_velocity_scalar").unwrap_or(20.0) as f32;
 
     // Return the GlobalConfig struct with the updated port_rx
     GlobalConfig {
@@ -305,13 +348,33 @@ fn parse_global_config(setup: YamlHashWrapper) -> GlobalConfig {
 }
 
 
-fn parse_device_config(device_data: YamlHashWrapper, global_config: &GlobalConfig) -> DeviceConfig {
-    let ip = Arc::new(device_data.get_str("ip").unwrap());
-    ip.as_str().parse::<IpAddr>().expect(&format!("Invalid IP address format: {}", ip));
+fn parse_device_config(device_data: YamlHashWrapper, global_config: &GlobalConfig) -> Result<DeviceConfig, String> {
+    let ip = match device_data.get_str("ip") {
+        Some(ip_str) => {
+            match ip_str.parse::<IpAddr>() {
+                Ok(_) => Arc::new(ip_str),
+                Err(_) => {
+                    return Err(format!("Invalid IP address format: {}", ip_str));
+                }
+            }
+        }
+        None => {
+            return Err("Missing 'ip' field in device configuration".to_string());
+        }
+    };
 
-    let proximity_parameter = Arc::new(format!("/avatar/parameters/{}", device_data.get_str("proximity_parameter").unwrap()));
+    let proximity_parameter = match device_data.get_str("proximity_parameter") {
+        Some(param) => Arc::new(format!("/avatar/parameters/{}", param)),
+        None => {
+            return Err("Missing 'proximity_parameter' field in device configuration".to_string());
+        }
+    };
+
     let min_speed = device_data.get_f64("min_speed").map(|x| x as f32 / 100.0).unwrap_or(global_config.default_min_speed);
-    assert!(min_speed >= 0.0);
+    if min_speed < 0.0 {
+        return Err("Min speed cannot be negative".to_string());
+    }
+    
     let max_speed = device_data.get_f64("max_speed").map(|x| (x as f32 / 100.0).max(min_speed).max(global_config.minimum_max_speed)).unwrap_or(global_config.default_max_speed);
     let start_tx = device_data.get_i64("start_tx").map(|x| x as i32).unwrap_or(global_config.default_start_tx);
     let speed_scale = device_data.get_f64("speed_scale").map(|x| x as f32 / 100.0).unwrap_or(global_config.default_speed_scale);
@@ -327,7 +390,7 @@ fn parse_device_config(device_data: YamlHashWrapper, global_config: &GlobalConfi
         ip, min_speed * 100.0, max_speed * 100.0, speed_scale * 100.0, proximity_parameter, use_velocity_control, outer_proximity, inner_proximity
     ));
 
-    DeviceConfig {
+    Ok(DeviceConfig {
         device_uri: ip,
         proximity_parameter,
         min_speed,
@@ -339,5 +402,5 @@ fn parse_device_config(device_data: YamlHashWrapper, global_config: &GlobalConfi
         outer_proximity,
         inner_proximity,
         velocity_scalar
-    }
+    })
 }
