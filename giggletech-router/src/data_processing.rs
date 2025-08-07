@@ -96,8 +96,8 @@ pub fn process_pat_advanced(proximity_signal: f32, prev_signal: f32, delta_t: Du
     let graph_str = proximity_graph(proximity_signal);
     let mut headpat_tx: i32 = 0;
     let mut vel: f32 = 0.0;
-    if proximity_signal > device.outer_proximity && proximity_signal < device.inner_proximity && prev_signal > 0.0 && proximity_signal > prev_signal {
-        vel = f32::max(0.0, (proximity_signal - prev_signal) / delta_t.as_secs_f32() * device.velocity_scalar);
+    if proximity_signal > device.outer_proximity && proximity_signal < device.inner_proximity && prev_signal > 0.0 {
+        vel = f32::max(0.0, f32::abs(proximity_signal - prev_signal) / delta_t.as_secs_f32() * device.velocity_scalar);
         headpat_tx = (((device.max_speed - device.min_speed) * vel * device.min_speed) * MOTOR_SPEED_SCALE * device.speed_scale * 255.0).round() as i32;
     }
     eprintln!("{} Prox: {:5} Vel: {:5} Motor Tx: {:3} |{:11}|", device.proximity_parameter.trim_start_matches("/avatar/parameters/") , format!("{:.2}", proximity_signal), format!("{:.2}", vel), headpat_tx, graph_str);
