@@ -262,6 +262,8 @@ pub fn run() {
             .build()
             .expect("Failed to create tray icon"),
         );
+
+        ui_state.show_output(event_loop);
       }
 
       Event::UserEvent(UserEvent::LogUpdated) => {
