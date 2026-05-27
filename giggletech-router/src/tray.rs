@@ -122,6 +122,25 @@ header {
   font-size: 0.9rem;
 }
 .device-card input:focus { outline: none; border-color: #a855f7; }
+.speed-slider-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 4px;
+}
+.speed-slider-row input[type="range"] {
+  flex: 1;
+  height: 6px;
+  accent-color: #a855f7;
+  cursor: pointer;
+}
+.speed-value {
+  min-width: 38px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: #c4b5fd;
+  text-align: right;
+}
 .device-row { display: flex; gap: 14px; align-items: flex-start; }
 .device-fields { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 10px; }
 .test-slider-col {
@@ -212,6 +231,7 @@ header {
 <script>
 let activePanel = 'home';
 let editorDevices = [];
+let editorSpeedDefaults = { min: 5, max: 25 };
 
 function showPanel(name) {
   activePanel = name;
@@ -257,6 +277,13 @@ function renderDevices() {
             <input type="text" value="${escapeHtml(d.proximity_parameter)}" placeholder="proximity_01"
               oninput="editorDevices[${i}].proximity_parameter=this.value">
           </label>
+          <label>Max speed
+            <div class="speed-slider-row">
+              <input type="range" min="${editorSpeedDefaults.min}" max="100" value="${d.max_speed}"
+                oninput="onMaxSpeedChange(${i}, this)">
+              <span class="speed-value" id="max-speed-val-${i}">${d.max_speed}%</span>
+            </div>
+          </label>
           <div class="device-actions">
             <button type="button" class="btn btn-danger" onclick="removeDevice(${i})">Remove</button>
           </div>
@@ -277,8 +304,7 @@ function renderDevices() {
 function sliderValueFromEvent(trackEl, ev) {
   const rect = trackEl.getBoundingClientRect();
   const y = (ev.clientY ?? (ev.touches && ev.touches[0] && ev.touches[0].clientY) ?? rect.bottom) - rect.top;
-  const raw = 1 - Math.max(0, Math.min(1, y / rect.height));
-  return Math.max(0.08, raw);
+  return 1 - Math.max(0, Math.min(1, y / rect.height));
 }
 
 function setSliderVisual(trackEl, value) {
@@ -307,17 +333,24 @@ function beginSliderDrag(index, trackEl, e) {
   }
 
   let lastSent = -1;
+  let dragEnded = false;
   const sendLevel = (ev) => {
+    if (dragEnded) return;
     const value = sliderValueFromEvent(trackEl, ev);
     setSliderVisual(trackEl, value);
     const rounded = Math.round(value * 100);
     if (rounded !== lastSent) {
       lastSent = rounded;
-      window.ipc.postMessage('device-motor:' + JSON.stringify({ ip: ip, value: value }));
+      if (rounded === 0) {
+        window.ipc.postMessage('device-stop:' + ip);
+      } else {
+        window.ipc.postMessage('device-motor:' + JSON.stringify({ ip: ip, value: value }));
+      }
     }
   };
 
   const endDrag = (ev) => {
+    dragEnded = true;
     try { trackEl.releasePointerCapture(ev.pointerId); } catch (_) {}
     trackEl.removeEventListener('pointermove', sendLevel);
     trackEl.removeEventListener('pointerup', endDrag);
@@ -332,8 +365,19 @@ function beginSliderDrag(index, trackEl, e) {
   trackEl.addEventListener('pointercancel', endDrag);
 }
 
+function onMaxSpeedChange(index, input) {
+  const value = parseInt(input.value, 10);
+  editorDevices[index].max_speed = value;
+  const label = document.getElementById('max-speed-val-' + index);
+  if (label) label.textContent = value + '%';
+}
+
 function addDevice() {
-  editorDevices.push({ ip: '', proximity_parameter: 'proximity_01' });
+  editorDevices.push({
+    ip: '',
+    proximity_parameter: 'proximity_01',
+    max_speed: editorSpeedDefaults.max
+  });
   renderDevices();
 }
 
@@ -344,11 +388,17 @@ function removeDevice(index) {
 
 function saveConfig() {
   setConfigStatus('Saving...', false);
-  window.ipc.postMessage('save-config:' + JSON.stringify({ devices: editorDevices }));
+  window.ipc.postMessage('save-config:' + JSON.stringify({
+    devices: editorDevices,
+    min_speed: editorSpeedDefaults.min,
+    max_speed_cap: editorSpeedDefaults.max
+  }));
 }
 
 window.onConfigLoaded = function(state) {
   editorDevices = state.devices || [];
+  if (state.min_speed != null) editorSpeedDefaults.min = state.min_speed;
+  if (state.max_speed_cap != null) editorSpeedDefaults.max = state.max_speed_cap;
   renderDevices();
   setConfigStatus('Loaded from config.yml', false);
 };

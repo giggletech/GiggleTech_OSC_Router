@@ -15,18 +15,32 @@
 
 use async_osc::Result;
 use async_std::sync::Arc;
+use std::sync::atomic::AtomicBool;
+
 use crate::giggletech_osc;
 use crate::config::DeviceConfig;
+use crate::terminator;
+
+/// Same stop sequence as proximity-off: halt terminator, five immediate stops, then periodic stop worker.
+pub async fn stop_device_with_terminator(
+    device_ip: &str,
+    running: Arc<AtomicBool>,
+) -> Result<()> {
+    terminator::stop(running.clone()).await?;
+
+    for _ in 0..5 {
+        giggletech_osc::send_data(device_ip, 0i32).await?;
+    }
+
+    terminator::start(running.clone(), &Arc::new(device_ip.to_string())).await?;
+    Ok(())
+}
 
 pub async fn stop_pats(device: DeviceConfig) -> Result<()> {
-    let device_ip = Arc::new(device.device_uri.clone());  // Use the device URI
+    let device_ip = device.device_uri.clone();
+    let running = Arc::new(AtomicBool::new(false));
 
     crate::log_ui::log_line("Stopping pats...");
 
-    // Send stop signal 5 times to ensure the motor stops
-    for _ in 0..5 {
-        giggletech_osc::send_data(&device_ip, 0i32).await?;  // Send stop signal
-    }
-
-    Ok(())
+    stop_device_with_terminator(&device_ip, running).await
 }

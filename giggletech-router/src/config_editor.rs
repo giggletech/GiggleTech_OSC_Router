@@ -14,11 +14,15 @@ pub const CONFIG_PATH: &str = "config.yml";
 pub struct EditorDevice {
   pub ip: String,
   pub proximity_parameter: String,
+  /// Motor max speed limit as a percentage (e.g. 5–100).
+  pub max_speed: u32,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EditorState {
   pub devices: Vec<EditorDevice>,
+  pub min_speed: u32,
+  pub max_speed_cap: u32,
 }
 
 pub fn load_editor_json() -> Result<String, String> {
@@ -28,6 +32,9 @@ pub fn load_editor_json() -> Result<String, String> {
 
 pub fn load_editor_state() -> Result<EditorState, String> {
   let cfg = load_config(CONFIG_PATH)?;
+  let default_max = cfg.setup.default_max_speed;
+  let min_speed = cfg.setup.default_min_speed;
+
   Ok(EditorState {
     devices: cfg
       .devices
@@ -35,8 +42,11 @@ pub fn load_editor_state() -> Result<EditorState, String> {
       .map(|d| EditorDevice {
         ip: d.ip,
         proximity_parameter: strip_proximity_prefix(d.proximity_parameter),
+        max_speed: d.max_speed.unwrap_or(default_max).max(min_speed),
       })
       .collect(),
+    min_speed,
+    max_speed_cap: default_max.max(min_speed),
   })
 }
 
@@ -66,6 +76,21 @@ pub fn save_editor_state(state: &EditorState) -> Result<(), String> {
   }
 
   let mut cfg = load_config(CONFIG_PATH)?;
+  let min_speed = cfg.setup.default_min_speed;
+  let default_max = cfg.setup.default_max_speed;
+
+  for (i, device) in state.devices.iter().enumerate() {
+    if device.max_speed < min_speed {
+      return Err(format!(
+        "Device {}: max speed must be at least {}%.",
+        i + 1,
+        min_speed
+      ));
+    }
+    if device.max_speed > 100 {
+      return Err(format!("Device {}: max speed cannot exceed 100%.", i + 1));
+    }
+  }
   let existing = cfg.devices.clone();
 
   cfg.devices = state
@@ -77,12 +102,21 @@ pub fn save_editor_state(state: &EditorState) -> Result<(), String> {
         let mut device = existing[i].clone();
         device.ip = ed.ip.trim().to_string();
         device.proximity_parameter = normalize_proximity_parameter(&ed.proximity_parameter);
+        device.max_speed = if ed.max_speed == default_max {
+          None
+        } else {
+          Some(ed.max_speed)
+        };
         device
       } else {
         Device {
           ip: ed.ip.trim().to_string(),
           proximity_parameter: normalize_proximity_parameter(&ed.proximity_parameter),
-          max_speed: None,
+          max_speed: if ed.max_speed == default_max {
+            None
+          } else {
+            Some(ed.max_speed)
+          },
           speed_scale: None,
           max_speed_parameter: None,
           use_velocity_control: None,

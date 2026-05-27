@@ -35,6 +35,7 @@ use crate::osc_timeout;
 use crate::terminator;
 use crate::giggletech_osc;
 use crate::data_processing;
+use crate::stop_pats;
 use lazy_static::lazy_static;
 use crate::config::DeviceConfig;
 
@@ -62,11 +63,7 @@ pub(crate) async fn handle_proximity_parameter(
 
     if value == 0.0 {
         crate::log_ui::log_line("Stopping pats...");
-        terminator::start(running.clone(), &device_ip).await?;
-
-        for _ in 0..5 {
-            giggletech_osc::send_data(&device_ip, 0i32).await?;  
-        }
+        stop_pats::stop_device_with_terminator(device_ip.as_str(), running.clone()).await?;
     } else {
         if !device.use_velocity_control {
             giggletech_osc::send_data(&device_ip,
