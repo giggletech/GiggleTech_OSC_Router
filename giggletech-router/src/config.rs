@@ -60,42 +60,33 @@ use yaml_rust::{YamlLoader, Yaml};
 use yaml_rust::yaml::Hash;
 mod oscq_giggletech;
 
-use std::fs::OpenOptions;
-use std::io::Write;
-use chrono::Local; // For timestamps
-
-
 mod yaml_validator;
 
 use yaml_validator::{validate_yaml, Config};
 
 
 fn log_to_file(message: &str) {
-    let now = Local::now();
-    let timestamp = now.format("%Y-%m-%d %H:%M:%S").to_string(); // Add a timestamp
-    let mut file = OpenOptions::new()
-        .create(true)
-        .append(true)
-        .open("giggletech_log.txt")
-        .unwrap();
-    writeln!(file, "[{}] {}", timestamp, message).unwrap();
+    crate::log_ui::app_log(message);
 }
 
 // Banner
-fn banner_txt(){
+fn banner_txt() {
     // https://fsymbols.com/generators/carty/
-    println!("");
-    println!("  ██████  ██  ██████   ██████  ██      ███████     ████████ ███████  ██████ ██   ██ ");
-    println!(" ██       ██ ██       ██       ██      ██             ██    ██      ██      ██   ██ ");
-    println!(" ██   ███ ██ ██   ███ ██   ███ ██      █████          ██    █████   ██      ███████ ");
-    println!(" ██    ██ ██ ██    ██ ██    ██ ██      ██             ██    ██      ██      ██   ██ ");
-    println!("  ██████  ██  ██████   ██████  ███████ ███████        ██    ███████  ██████ ██   ██ ");
-    println!("");
-    println!(" █▀█ █▀ █▀▀   █▀█ █▀█ █ █ ▀█▀ █▀▀ █▀█");
-    println!(" █▄█ ▄█ █▄▄   █▀▄ █▄█ █▄█  █  ██▄ █▀▄");
-    println!("");
-    println!(" v1.4.0");
-                                                                                
+    for line in &[
+        "",
+        "  ██████  ██  ██████   ██████  ██      ███████     ████████ ███████  ██████ ██   ██ ",
+        " ██       ██ ██       ██       ██      ██             ██    ██      ██      ██   ██ ",
+        " ██   ███ ██ ██   ███ ██   ███ ██      █████          ██    █████   ██      ███████ ",
+        " ██    ██ ██ ██    ██ ██    ██ ██      ██             ██    ██      ██      ██   ██ ",
+        "  ██████  ██  ██████   ██████  ███████ ███████        ██    ███████  ██████ ██   ██ ",
+        "",
+        " █▀█ █▀ █▀▀   █▀█ █▀█ █ █ ▀█▀ █▀▀ █▀█",
+        " █▄█ ▄█ █▄▄   █▀▄ █▄█ █▄█  █  ██▄ █▀▄",
+        "",
+        " v1.4.0",
+    ] {
+        crate::log_ui::log_line(line);
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -181,7 +172,7 @@ pub(crate) fn load_config() -> Result<(GlobalConfig, Vec<DeviceConfig>), String>
 
     // Call validate_yaml function
     match validate_yaml("./config.yml") {
-        Ok(_) => println!("Configuration file is valid."),
+        Ok(_) => crate::log_ui::log_line("Configuration file is valid."),
         Err(e) => return Err(format!("Configuration File Error: {}", e)),
     };
 
@@ -237,26 +228,33 @@ pub(crate) fn load_config() -> Result<(GlobalConfig, Vec<DeviceConfig>), String>
         }
     }
 
-    println!("\n");
+    crate::log_ui::log_line("");
     banner_txt();
-    println!("\n");
-    println!(" Device Maps");
-    println!("");
+    crate::log_ui::log_line("");
+    crate::log_ui::log_line(" Device Maps");
+    crate::log_ui::log_line("");
     for (i, device) in device_configs.iter().enumerate() {
-        println!("  Device {i}");
-        println!("   {} => {}", device.proximity_parameter.trim_start_matches("/avatar/parameters/"), device.device_uri);
-        println!("   Vibration Configuration");
-        println!("    Startup TX Speed: {:.0}%", device.start_tx);
-        println!("    Min Speed: {:.0}%", device.min_speed * 100.0);
-        println!("    Max Speed: {:.0}%", device.max_speed * 100.0);
-        println!("    Scale Factor: {:.0}%", device.speed_scale * 100.0);
-        println!("    Advanced Mode: {}", device.use_velocity_control);
-        println!("");
+        crate::log_ui::log_line(&format!("  Device {i}"));
+        crate::log_ui::log_line(&format!(
+            "   {} => {}",
+            device.proximity_parameter.trim_start_matches("/avatar/parameters/"),
+            device.device_uri
+        ));
+        crate::log_ui::log_line("   Vibration Configuration");
+        crate::log_ui::log_line(&format!("    Startup TX Speed: {:.0}%", device.start_tx));
+        crate::log_ui::log_line(&format!("    Min Speed: {:.0}%", device.min_speed * 100.0));
+        crate::log_ui::log_line(&format!("    Max Speed: {:.0}%", device.max_speed * 100.0));
+        crate::log_ui::log_line(&format!("    Scale Factor: {:.0}%", device.speed_scale * 100.0));
+        crate::log_ui::log_line(&format!("    Advanced Mode: {}", device.use_velocity_control));
+        crate::log_ui::log_line("");
     }
 
-    println!("\n Listening for OSC on port: {}", global_config.port_rx);
-    println!(" Timeout: {}s", global_config.timeout);
-    println!("\nWaiting for pats...");
+    crate::log_ui::log_line(&format!(
+        "\n Listening for OSC on port: {}",
+        global_config.port_rx
+    ));
+    crate::log_ui::log_line(&format!(" Timeout: {}s", global_config.timeout));
+    crate::log_ui::log_line("\nWaiting for pats...");
 
     Ok((global_config, device_configs))
 }
@@ -266,23 +264,28 @@ pub(crate) fn load_config() -> Result<(GlobalConfig, Vec<DeviceConfig>), String>
 fn parse_global_config(setup: YamlHashWrapper) -> GlobalConfig {
     // Retrieve the value of `port_rx` from the YAML file with fallback
     let port_rx_str = setup.get_str("port_rx").unwrap_or_else(|| {
-        println!("Warning: port_rx not found in config, using default port 9001");
+        crate::log_ui::log_line("Warning: port_rx not found in config, using default port 9001");
         "9001".to_string()
     });
 
     // Check if `port_rx` is "OSCQuery" or a numeric port
     let port_rx: Arc<String> = if port_rx_str == "OSCQuery" {
         // If it's "OSCQuery", try to use the port from the OSCQuery server
-        println!("\nAttempting to use OSCQuery...");
+        crate::log_ui::log_line("\nAttempting to use OSCQuery...");
         match std::panic::catch_unwind(|| {
             oscq_giggletech::initialize_and_get_udp_port()
         }) {
             Ok(udp_port) => {
-                println!("OSCQuery initialized successfully. UDP port: {}", udp_port);
+                crate::log_ui::log_line(&format!(
+                    "OSCQuery initialized successfully. UDP port: {}",
+                    udp_port
+                ));
                 Arc::new(udp_port.to_string())
             }
             Err(_) => {
-                println!("OSCQuery initialization failed. Falling back to default port 9001.");
+                crate::log_ui::log_line(
+                    "OSCQuery initialization failed. Falling back to default port 9001.",
+                );
                 Arc::new("9001".to_string())
             }
         }
@@ -291,7 +294,10 @@ fn parse_global_config(setup: YamlHashWrapper) -> GlobalConfig {
         match u16::from_str_radix(&port_rx_str, 10) {
             Ok(_) => Arc::new(port_rx_str),
             Err(_) => {
-                println!("Warning: Invalid port number '{}', using default port 9001", port_rx_str);
+                crate::log_ui::log_line(&format!(
+                    "Warning: Invalid port number '{}', using default port 9001",
+                    port_rx_str
+                ));
                 Arc::new("9001".to_string())
             }
         }

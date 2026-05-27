@@ -61,7 +61,7 @@ pub(crate) async fn handle_proximity_parameter(
     let last_val = device_last_values.insert(device_ip.to_string(), value).unwrap_or(0.0);
 
     if value == 0.0 {
-        println!("Stopping pats...");
+        crate::log_ui::log_line("Stopping pats...");
         terminator::start(running.clone(), &device_ip).await?;
 
         for _ in 0..5 {

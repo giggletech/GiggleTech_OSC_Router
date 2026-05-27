@@ -1,0 +1,49 @@
+# Giggle Tech OSC Router Configuration
+
+# This configuration file defines the setup for the OSC router and the specific parameters
+# for each connected haptic device. The setup section includes global default settings,
+# while the devices section specifies individual settings for each device.
+
+
+
+devices:                                      
+  # Device 1
+  - ip: 192.168.1.69 # <----------------------------Replace with your Device IP 
+
+    proximity_parameter: proximity_01                                    
+  
+# Device 2
+  - ip: 192.168.1.113
+    proximity_parameter: proximity_02
+
+
+
+setup:
+  # Port listening for OSC (Default: 9001) or use  port_rx: OSCQuery if you have mutiple apps
+  #port_rx: OSCQuery 
+  port_rx: 9001
+
+  # Minimum Speed of Haptic Motor (5-100)
+  default_min_speed: 5
+
+  # Maximum Speed of Haptic Motor (Recommended: 5-25)
+  default_max_speed: 25
+
+  # The minimum initial speed used when the haptic motor is started (Recommended: 5-15)
+  default_start_tx: 20
+
+  # Maximum Speed Parameter
+  default_max_speed_parameter: max_speed
+
+
+  # OSC Timeout (seconds)
+  timeout: 5
+
+  # Velocity Control Mode (True = Velocity / False = Proximity)
+  default_use_velocity_control: false
+
+  # Velocity Control Parameters
+  # Adjust these parameters to achieve the desired effect.
+  default_outer_proximity: 0
+  default_inner_proximity: 0.7
+  default_velocity_scalar: 20

@@ -21,7 +21,7 @@ use crate::config::DeviceConfig;
 pub async fn stop_pats(device: DeviceConfig) -> Result<()> {
     let device_ip = Arc::new(device.device_uri.clone());  // Use the device URI
 
-    println!("Stopping pats...");
+    crate::log_ui::log_line("Stopping pats...");
 
     // Send stop signal 5 times to ensure the motor stops
     for _ in 0..5 {

@@ -71,7 +71,7 @@ pub fn print_speed_limit(headpat_max_rx: f32) {
         51..=75 => "!  ",
         _ => "   ",
     };
-    println!("Speed Limit: {}% {}", headpat_max_rx_print, max_meter);
+    crate::log_ui::log_line(&format!("Speed Limit: {}% {}", headpat_max_rx_print, max_meter));
 }
 
 // Pat Processor
@@ -87,7 +87,13 @@ pub fn process_pat(proximity_signal: f32, device: &DeviceConfig, prev_signal: f3
     };
 
     let proximity_signal = format!("{:.2}", proximity_signal);
-    eprintln!("{} Prox: {:5} Motor Tx: {:3} |{:11}|", device.proximity_parameter.trim_start_matches("/avatar/parameters/") , proximity_signal, headpat_tx, graph_str);
+    crate::log_ui::log_line(&format!(
+        "{} Prox: {:5} Motor Tx: {:3} |{:11}|",
+        device.proximity_parameter.trim_start_matches("/avatar/parameters/"),
+        proximity_signal,
+        headpat_tx,
+        graph_str
+    ));
 
     headpat_tx
 }
@@ -100,7 +106,14 @@ pub fn process_pat_advanced(proximity_signal: f32, prev_signal: f32, delta_t: Du
         vel = f32::max(0.0, f32::abs(proximity_signal - prev_signal) / delta_t.as_secs_f32() * device.velocity_scalar);
         headpat_tx = (((device.max_speed - device.min_speed) * vel * device.min_speed) * MOTOR_SPEED_SCALE * device.speed_scale * 255.0).round() as i32;
     }
-    eprintln!("{} Prox: {:5} Vel: {:5} Motor Tx: {:3} |{:11}|", device.proximity_parameter.trim_start_matches("/avatar/parameters/") , format!("{:.2}", proximity_signal), format!("{:.2}", vel), headpat_tx, graph_str);
+    crate::log_ui::log_line(&format!(
+        "{} Prox: {:5} Vel: {:5} Motor Tx: {:3} |{:11}|",
+        device.proximity_parameter.trim_start_matches("/avatar/parameters/"),
+        format!("{:.2}", proximity_signal),
+        format!("{:.2}", vel),
+        headpat_tx,
+        graph_str
+    ));
 
     return headpat_tx;
 }

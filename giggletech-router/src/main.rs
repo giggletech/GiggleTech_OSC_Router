@@ -49,10 +49,8 @@
 use async_osc::{prelude::*, OscPacket, OscType, Result};
 use async_std::{stream::StreamExt, task::{self}, sync::Arc};
 use std::sync::atomic::{AtomicBool};
-use std::fs::OpenOptions;
-use std::io::{self, Write}; // For file logging and keeping the console open
-use chrono::Local; // For getting the local time
-use std::path::Path; // Added for checking file existence
+use std::io;
+use std::path::Path;
 use std::time::Duration;
 
 use crate::osc_timeout::osc_timeout;
@@ -64,33 +62,15 @@ mod osc_timeout;
 mod handle_proximity_parameter;
 mod stop_pats;
 
-// Function to log messages to a file with a timestamp
-fn log_to_file(message: &str) {
-    // Get the current local time
-    let now = Local::now();
-    let timestamp = now.format("%Y-%m-%d %H:%M:%S").to_string(); // Format the time as desired
+#[cfg(windows)]
+mod tray;
+mod log_ui;
 
-    // Open the log file in append mode, creating it if it doesn't exist
-    match OpenOptions::new()
-        .create(true)
-        .append(true)
-        .open("giggletech_log.txt") {
-        Ok(mut file) => {
-            // Write the timestamp and the log message to the file
-            if let Err(e) = writeln!(file, "[{}] {}", timestamp, message) {
-                eprintln!("Failed to write to log file: {}", e);
-            }
-        }
-        Err(e) => {
-            eprintln!("Failed to open log file: {}", e);
-        }
-    }
+fn log_to_file(message: &str) {
+    log_ui::app_log(message);
 }
 
-#[async_std::main]
-async fn main() {
-
-    
+fn main() {
     // Set a catch-all panic hook to log any panic messages
     std::panic::set_hook(Box::new(|panic_info| {
         let message = format!("Application panicked: {}", panic_info);
@@ -99,16 +79,57 @@ async fn main() {
 
     log_to_file("Starting GiggleTech OSC Router...");
 
-    // Call the main logic and handle any errors
-    if let Err(e) = run_giggletech().await {
-        let error_message = format!("Application encountered an error: {}", e);
-        log_to_file(&error_message);
+    let no_tray = std::env::args().any(|a| a == "--no-tray");
+
+    #[cfg(windows)]
+    if !no_tray {
+        run_with_tray();
+        return;
     }
 
-    // Keep the console open even after a crash or an error
-    println!("Press Enter to exit...");
-    let mut input = String::new();
-    io::stdin().read_line(&mut input).unwrap();
+    run_console_mode();
+}
+
+#[cfg(windows)]
+fn run_with_tray() {
+    log_ui::set_console_mirror(false);
+
+    // Hide the allocator console; output goes to the GiggleTech window instead.
+    unsafe {
+        use winapi::um::wincon::GetConsoleWindow;
+        use winapi::um::winuser::{ShowWindow, SW_HIDE};
+        let hwnd = GetConsoleWindow();
+        if !hwnd.is_null() {
+            ShowWindow(hwnd, SW_HIDE);
+        }
+    }
+
+    std::thread::spawn(|| {
+        async_std::task::block_on(async {
+            if let Err(e) = run_giggletech().await {
+                let error_message = format!("Application encountered an error: {}", e);
+                log_to_file(&error_message);
+            }
+        });
+    });
+
+    tray::run();
+}
+
+fn run_console_mode() {
+    log_ui::set_console_mirror(true);
+
+    async_std::task::block_on(async {
+        if let Err(e) = run_giggletech().await {
+            let error_message = format!("Application encountered an error: {}", e);
+            log_to_file(&error_message);
+            eprintln!("{}", error_message);
+        }
+
+        println!("Press Enter to exit...");
+        let mut input = String::new();
+        io::stdin().read_line(&mut input).unwrap();
+    });
 }
 
 async fn run_giggletech() -> async_osc::Result<()> {
@@ -118,7 +139,6 @@ async fn run_giggletech() -> async_osc::Result<()> {
     if !Path::new("config.yml").exists() {
         let error_msg = "Configuration file (config.yml) not found.";
         log_to_file(error_msg);
-        eprintln!("{}", error_msg);
         return Err(async_osc::Error::Io(std::io::Error::new(
             std::io::ErrorKind::NotFound,
             error_msg
@@ -130,7 +150,6 @@ async fn run_giggletech() -> async_osc::Result<()> {
         Err(e) => {
             let error_msg = format!("Config file error: {}", e);
             log_to_file(&error_msg);
-            eprintln!("{}", error_msg);
             return Err(async_osc::Error::Io(std::io::Error::new(
                 std::io::ErrorKind::InvalidData,
                 error_msg
@@ -235,14 +254,14 @@ async fn ping_device(device_ip: &str) -> bool {
         Ok(output) => {
             let success = output.status.success();
             if success {
-                println!("    ✓ Ping successful for {}", device_ip);
+                log_ui::log_line(&format!("    ✓ Ping successful for {}", device_ip));
             } else {
-                println!("    ✗ Ping failed for {}", device_ip);
+                log_ui::log_line(&format!("    ✗ Ping failed for {}", device_ip));
             }
             success
         }
         Err(e) => {
-            println!("    ✗ Ping command failed: {}", e);
+            log_ui::log_line(&format!("    ✗ Ping command failed: {}", e));
             false
         }
     }
@@ -250,13 +269,13 @@ async fn ping_device(device_ip: &str) -> bool {
 
 // Test all devices and log results
 async fn test_device_connectivity(devices: &[crate::config::DeviceConfig]) {
-    println!("\n=== Testing Device Connectivity ===");
+    log_ui::log_line("\n=== Testing Device Connectivity ===");
     log_to_file("Starting device connectivity test...");
     
     for (i, device) in devices.iter().enumerate() {
         let device_ip = &device.device_uri;
         
-        println!("  Testing Device {}: {}", i + 1, device_ip);
+        log_ui::log_line(&format!("  Testing Device {}: {}", i + 1, device_ip));
         
         // Test the device
         let is_reachable = ping_device(device_ip).await;
@@ -264,11 +283,11 @@ async fn test_device_connectivity(devices: &[crate::config::DeviceConfig]) {
         let status = if is_reachable { "ONLINE" } else { "OFFLINE" };
         let message = format!("Device {}: {} - {}", i + 1, device_ip, status);
         
-        println!("  Result: {}", message);
+        log_ui::log_line(&format!("  Result: {}", message));
         log_to_file(&message);
-        println!(); // Add blank line for readability
+        log_ui::log_line("");
     }
     
-    println!("=== Connectivity Test Complete ===\n");
+    log_ui::log_line("=== Connectivity Test Complete ===\n");
     log_to_file("Device connectivity test completed.");
 }

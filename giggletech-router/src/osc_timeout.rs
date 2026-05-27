@@ -48,7 +48,10 @@ pub async fn osc_timeout(device_ip: &str, timeout: u64) -> Result<()> {
                 elapsed
             }
             Err(_) => {
-                eprintln!("Warning: Mutex poisoned for device {}, skipping timeout check", device_ip);
+                crate::log_ui::app_log(&format!(
+                    "Warning: Mutex poisoned for device {}, skipping timeout check",
+                    device_ip
+                ));
                 continue;
             }
         };
@@ -60,7 +63,10 @@ pub async fn osc_timeout(device_ip: &str, timeout: u64) -> Result<()> {
                 }
                 Err(e) => {
                     // Log the error but don't panic - just continue monitoring
-                    eprintln!("Timeout: Failed to send stop signal to {}: {}", device_ip, e);
+                    crate::log_ui::app_log(&format!(
+                        "Timeout: Failed to send stop signal to {}: {}",
+                        device_ip, e
+                    ));
                 }
             }
             
@@ -68,7 +74,10 @@ pub async fn osc_timeout(device_ip: &str, timeout: u64) -> Result<()> {
             if let Ok(mut device_last_signal_times) = DEVICE_LAST_SIGNAL_TIME.lock() {
                 device_last_signal_times.insert(device_ip.to_string(), Instant::now());
             } else {
-                eprintln!("Warning: Failed to update signal time for device {}", device_ip);
+                crate::log_ui::app_log(&format!(
+                    "Warning: Failed to update signal time for device {}",
+                    device_ip
+                ));
             }
         }
     }

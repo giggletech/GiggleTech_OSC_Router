@@ -79,7 +79,10 @@ impl ConnectionManager {
         let after_count = connections.len();
         
         if before_count != after_count {
-            println!("Cleaned up {} stale connections", before_count - after_count);
+            crate::log_ui::log_line(&format!(
+                "Cleaned up {} stale connections",
+                before_count - after_count
+            ));
         }
     }
 
@@ -121,7 +124,7 @@ pub(crate) async fn setup_tx_socket(address: std::string::String) -> Result<OscS
 
 // Start connection manager cleanup task
 pub(crate) async fn start_connection_manager() {
-    println!("Starting connection manager with automatic cleanup...");
+    crate::log_ui::log_line("Starting connection manager with automatic cleanup...");
     async_std::task::spawn(async {
         loop {
             async_std::task::sleep(Duration::from_secs(60)).await; // Cleanup every minute
@@ -194,12 +197,14 @@ pub(crate) async fn get_connection_stats() -> HashMap<String, (u32, u32, u32)> {
 pub(crate) async fn print_connection_stats() {
     let stats = get_connection_stats().await;
     if !stats.is_empty() {
-        println!("\n=== Connection Statistics ===");
+        crate::log_ui::log_line("\n=== Connection Statistics ===");
         for (device_ip, (total, success, errors)) in stats {
             let success_rate = if total > 0 { (success as f32 / total as f32) * 100.0 } else { 0.0 };
-            println!("  {}: {} total, {} success, {} errors ({:.1}% success rate)", 
-                device_ip, total, success, errors, success_rate);
+            crate::log_ui::log_line(&format!(
+                "  {}: {} total, {} success, {} errors ({:.1}% success rate)",
+                device_ip, total, success, errors, success_rate
+            ));
         }
-        println!("=============================\n");
+        crate::log_ui::log_line("=============================\n");
     }
 }
