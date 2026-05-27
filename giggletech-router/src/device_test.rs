@@ -97,8 +97,15 @@ fn command_worker(
 ) {
   while let Ok(first) = rx.recv() {
     let mut last = first;
+    let mut stop_requested = matches!(last, TestCommand::Stop);
     while let Ok(next) = rx.try_recv() {
+      if matches!(next, TestCommand::Stop) {
+        stop_requested = true;
+      }
       last = next;
+    }
+    if stop_requested {
+      last = TestCommand::Stop;
     }
 
     let result = async_std::task::block_on(async {

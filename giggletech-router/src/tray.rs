@@ -426,6 +426,8 @@ const PING_POLL_MS = 5000;
 let pingPollTimer = null;
 let pingInFlight = false;
 let pendingRemoveIndex = null;
+let activeTestDrag = null;
+let testSliderSafetyReady = false;
 const SPEED_SLIDER_STEPS = 1000;
 const SPEED_SLIDER_LOW_MAX = 50;
 const SPEED_SLIDER_SPLIT = 0.75;
@@ -464,6 +466,7 @@ function escapeHtml(s) {
 }
 
 function renderDevices() {
+  endActiveTestDrag();
   const list = document.getElementById('device-list');
   if (!editorDevices.length) {
     list.innerHTML = '<p class="hint">No devices yet. Click Add Device.</p>';
@@ -592,11 +595,53 @@ function setSliderVisual(trackEl, value) {
   trackEl.classList.toggle('active', value > 0);
 }
 
+function endActiveTestDrag() {
+  if (!activeTestDrag) return;
+  const drag = activeTestDrag;
+  activeTestDrag = null;
+  drag.dragEnded = true;
+  if (drag.pendingSend !== null) {
+    cancelAnimationFrame(drag.pendingSend);
+    drag.pendingSend = null;
+  }
+  if (drag.onMove) drag.trackEl.removeEventListener('pointermove', drag.onMove);
+  if (drag.onLostCapture) {
+    drag.trackEl.removeEventListener('lostpointercapture', drag.onLostCapture);
+  }
+  try {
+    if (drag.trackEl && drag.pointerId != null) {
+      drag.trackEl.releasePointerCapture(drag.pointerId);
+    }
+  } catch (_) {}
+  if (drag.trackEl) setSliderVisual(drag.trackEl, 0);
+  if (drag.ip) window.ipc.postMessage('device-stop:' + drag.ip);
+}
+
+function setupTestSliderSafety() {
+  if (testSliderSafetyReady) return;
+  testSliderSafetyReady = true;
+  window.addEventListener('pointerup', (e) => {
+    if (activeTestDrag && activeTestDrag.pointerId === e.pointerId) {
+      endActiveTestDrag();
+    }
+  }, true);
+  window.addEventListener('pointercancel', (e) => {
+    if (activeTestDrag && activeTestDrag.pointerId === e.pointerId) {
+      endActiveTestDrag();
+    }
+  }, true);
+  window.addEventListener('blur', () => endActiveTestDrag(), true);
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) endActiveTestDrag();
+  });
+}
+
 function bindDeviceSliders() {
   document.querySelectorAll('.test-slider-track').forEach((trackEl) => {
     const index = parseInt(trackEl.dataset.index, 10);
     trackEl.onpointerdown = (e) => {
       e.preventDefault();
+      endActiveTestDrag();
       trackEl.setPointerCapture(e.pointerId);
       beginSliderDrag(index, trackEl, e);
     };
@@ -607,48 +652,51 @@ function beginSliderDrag(index, trackEl, e) {
   const ip = (editorDevices[index] && editorDevices[index].ip || '').trim();
   if (!ip) {
     setConfigStatus('Enter an IP address before testing.', true);
-    trackEl.releasePointerCapture(e.pointerId);
+    try { trackEl.releasePointerCapture(e.pointerId); } catch (_) {}
     return;
   }
 
-  let lastSent = -1;
-  let dragEnded = false;
-  let pendingSend = null;
+  const drag = {
+    pointerId: e.pointerId,
+    trackEl,
+    ip,
+    dragEnded: false,
+    pendingSend: null,
+    lastSent: -1,
+    onMove: null,
+    onLostCapture: null,
+  };
+  activeTestDrag = drag;
+
   const postMotor = (value) => {
     window.ipc.postMessage('device-motor:' + JSON.stringify({ ip: ip, value: value }));
   };
-  const sendLevel = (ev) => {
-    if (dragEnded) return;
-    const value = sliderValueFromEvent(trackEl, ev);
-    setSliderVisual(trackEl, value);
-    // 5% steps — fewer device updates, smoother feel
-    const stepped = Math.round(value * 20);
-    if (stepped === lastSent) return;
-    lastSent = stepped;
-    if (stepped === 0) return;
-    const motorValue = stepped / 20;
-    if (pendingSend !== null) cancelAnimationFrame(pendingSend);
-    pendingSend = requestAnimationFrame(() => {
-      pendingSend = null;
+
+  const queueMotor = (motorValue) => {
+    if (drag.dragEnded || activeTestDrag !== drag) return;
+    if (drag.pendingSend !== null) cancelAnimationFrame(drag.pendingSend);
+    drag.pendingSend = requestAnimationFrame(() => {
+      drag.pendingSend = null;
+      if (drag.dragEnded || activeTestDrag !== drag) return;
       postMotor(motorValue);
     });
   };
 
-  const endDrag = (ev) => {
-    dragEnded = true;
-    if (pendingSend !== null) cancelAnimationFrame(pendingSend);
-    try { trackEl.releasePointerCapture(ev.pointerId); } catch (_) {}
-    trackEl.removeEventListener('pointermove', sendLevel);
-    trackEl.removeEventListener('pointerup', endDrag);
-    trackEl.removeEventListener('pointercancel', endDrag);
-    setSliderVisual(trackEl, 0);
-    window.ipc.postMessage('device-stop:' + ip);
+  drag.onMove = (ev) => {
+    if (drag.dragEnded || activeTestDrag !== drag) return;
+    const value = sliderValueFromEvent(trackEl, ev);
+    setSliderVisual(trackEl, value);
+    const stepped = Math.round(value * 20);
+    if (stepped === drag.lastSent) return;
+    drag.lastSent = stepped;
+    queueMotor(stepped / 20);
   };
 
-  sendLevel(e);
-  trackEl.addEventListener('pointermove', sendLevel);
-  trackEl.addEventListener('pointerup', endDrag);
-  trackEl.addEventListener('pointercancel', endDrag);
+  drag.onLostCapture = () => endActiveTestDrag();
+
+  drag.onMove(e);
+  trackEl.addEventListener('pointermove', drag.onMove);
+  trackEl.addEventListener('lostpointercapture', drag.onLostCapture);
 }
 
 function onMaxSpeedChange(index, input) {
@@ -744,6 +792,7 @@ function setupConfigScroll() {
 }
 
 setupConfigScroll();
+setupTestSliderSafety();
 window.ipc.postMessage('load-config');
 </script>
 </body>
