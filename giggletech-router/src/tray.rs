@@ -426,53 +426,27 @@ const PING_POLL_MS = 5000;
 let pingPollTimer = null;
 let pingInFlight = false;
 let pendingRemoveIndex = null;
-const MAX_SPEED_FULL = 100;
 const SPEED_SLIDER_STEPS = 1000;
+const SPEED_SLIDER_LOW_MAX = 50;
+const SPEED_SLIDER_SPLIT = 0.75;
 
-function speedCurveBounds() {
-  return {
-    min: editorSpeedDefaults.min,
-    sweet: editorSpeedDefaults.max,
-    full: MAX_SPEED_FULL
-  };
-}
-
-function easeOutCubic(u) {
-  return 1 - Math.pow(1 - u, 3);
-}
-
-function easeOutCubicInverse(y) {
-  if (y <= 0) return 0;
-  if (y >= 1) return 1;
-  return 1 - Math.pow(1 - y, 1 / 3);
-}
-
-/** Slider 0..1 → max speed %: first half is min→sweet (linear), second half sweet→100 (ease-out). */
+/** Slider 0..1 → max speed %: first ¾ is 0–50, last ¼ is 50–100. */
 function sliderPosToSpeed(t) {
-  const { min, sweet, full } = speedCurveBounds();
   t = Math.max(0, Math.min(1, t));
-  if (t <= 0.5) {
-    const span = sweet - min;
-    return span <= 0 ? min : min + span * (t / 0.5);
+  if (t <= SPEED_SLIDER_SPLIT) {
+    return SPEED_SLIDER_LOW_MAX * (t / SPEED_SLIDER_SPLIT);
   }
-  const span = full - sweet;
-  if (span <= 0) return sweet;
-  const u = easeOutCubic((t - 0.5) / 0.5);
-  return sweet + span * u;
+  const u = (t - SPEED_SLIDER_SPLIT) / (1 - SPEED_SLIDER_SPLIT);
+  return SPEED_SLIDER_LOW_MAX + (100 - SPEED_SLIDER_LOW_MAX) * u;
 }
 
 function speedToSliderPos(speed) {
-  const { min, sweet, full } = speedCurveBounds();
-  speed = Math.max(min, Math.min(full, speed));
-  if (speed <= sweet) {
-    const span = sweet - min;
-    if (span <= 0) return 0;
-    return 0.5 * (speed - min) / span;
+  speed = Math.max(0, Math.min(100, speed));
+  if (speed <= SPEED_SLIDER_LOW_MAX) {
+    return SPEED_SLIDER_SPLIT * (speed / SPEED_SLIDER_LOW_MAX);
   }
-  const span = full - sweet;
-  if (span <= 0) return 1;
-  const u = easeOutCubicInverse((speed - sweet) / span);
-  return 0.5 + 0.5 * u;
+  return SPEED_SLIDER_SPLIT
+    + (1 - SPEED_SLIDER_SPLIT) * ((speed - SPEED_SLIDER_LOW_MAX) / (100 - SPEED_SLIDER_LOW_MAX));
 }
 
 function setConfigStatus(msg, isError) {
@@ -524,7 +498,7 @@ function renderDevices() {
                 oninput="onMaxSpeedChange(${i}, this)" onchange="saveConfig(true)">
               <span class="speed-value" id="max-speed-val-${i}">${d.max_speed}%</span>
             </div>
-            <span class="hint">${editorSpeedDefaults.min}–${editorSpeedDefaults.max}% uses left half of slider</span>
+            <span class="hint">0–50% uses first ¾ of slider; 50–100% uses last ¼</span>
           </label>
           <div class="device-actions">
             ${pendingRemoveIndex === i
