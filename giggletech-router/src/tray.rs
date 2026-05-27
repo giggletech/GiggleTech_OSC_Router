@@ -19,6 +19,7 @@ use wry::http::Request;
 use wry::WebViewBuilder;
 
 use crate::config_editor;
+use crate::device_test;
 use crate::log_ui;
 
 const AUTO_START_VALUE_NAME: &str = "GiggleTechOSCRouter";
@@ -121,6 +122,7 @@ header {
   font-size: 0.9rem;
 }
 .device-card input:focus { outline: none; border-color: #a855f7; }
+.device-actions { display: flex; gap: 8px; flex-wrap: wrap; }
 .btn-row { display: flex; gap: 8px; flex-wrap: wrap; }
 .btn {
   padding: 9px 14px;
@@ -213,7 +215,10 @@ function renderDevices() {
         <input type="text" value="${escapeHtml(d.proximity_parameter)}" placeholder="proximity_01"
           oninput="editorDevices[${i}].proximity_parameter=this.value">
       </label>
-      <button type="button" class="btn btn-danger" onclick="removeDevice(${i})">Remove</button>
+      <div class="device-actions">
+        <button type="button" class="btn btn-primary" onclick="testDevice(${i})">Test</button>
+        <button type="button" class="btn btn-danger" onclick="removeDevice(${i})">Remove</button>
+      </div>
     </div>
   `).join('');
 }
@@ -226,6 +231,16 @@ function addDevice() {
 function removeDevice(index) {
   editorDevices.splice(index, 1);
   renderDevices();
+}
+
+function testDevice(index) {
+  const d = editorDevices[index];
+  if (!d || !d.ip.trim()) {
+    setConfigStatus('Enter an IP address before testing.', true);
+    return;
+  }
+  setConfigStatus('Testing device ' + d.ip.trim() + '...', false);
+  window.ipc.postMessage('test-device:' + d.ip.trim());
 }
 
 function saveConfig() {
@@ -250,14 +265,14 @@ window.onConfigError = function(msg) {
 
 function setLogs(lines) {
   const el = document.getElementById('log');
-  el.textContent = lines.join('\n');
-  if (activePanel === 'logs') el.scrollTop = el.scrollHeight;
+  el.textContent = lines.slice().reverse().join('\n');
+  el.scrollTop = 0;
 }
 
 function appendLog(line) {
   const el = document.getElementById('log');
-  el.textContent += (el.textContent ? '\n' : '') + line;
-  if (activePanel === 'logs') el.scrollTop = el.scrollHeight;
+  el.textContent = el.textContent ? line + '\n' + el.textContent : line;
+  el.scrollTop = 0;
 }
 </script>
 </body>
@@ -405,6 +420,11 @@ fn handle_config_ipc(webview: &wry::WebView, msg: &str) {
         let _ = webview.evaluate_script(&format!("window.onConfigError({});", err));
       }
     }
+  } else if let Some(ip) = msg.strip_prefix("test-device:") {
+    device_test::spawn_device_test(ip.to_string());
+    let _ = webview.evaluate_script(
+      "setConfigStatus('Test started — check Output for results.', false);",
+    );
   }
 }
 
