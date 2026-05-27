@@ -28,6 +28,7 @@ use crate::log_ui;
 
 const AUTO_START_VALUE_NAME: &str = "GiggleTechOSCRouter";
 const RUN_KEY: &str = r"Software\Microsoft\Windows\CurrentVersion\Run";
+const LOGO_PLACEHOLDER: &str = "{{LOGO_URI}}";
 
 const OUTPUT_HTML: &str = r#"<!DOCTYPE html>
 <html lang="en">
@@ -35,9 +36,9 @@ const OUTPUT_HTML: &str = r#"<!DOCTYPE html>
 <meta charset="utf-8">
 <style>
 * { box-sizing: border-box; margin: 0; padding: 0; }
-html, body { height: 100%; min-height: 100vh; overflow-x: hidden; }
+html, body { height: 100%; min-height: 100vh; overflow-x: hidden; background: #000; }
 body {
-  background: #0f0f14;
+  background: #000;
   color: #e8e8f0;
   font-family: "Segoe UI", system-ui, sans-serif;
   display: flex;
@@ -45,17 +46,26 @@ body {
   overflow: hidden;
 }
 header {
-  background: linear-gradient(135deg, #c026d3 0%, #7c3aed 100%);
-  padding: 16px 20px;
   flex-shrink: 0;
-  box-shadow: 0 2px 16px rgba(192, 38, 211, 0.4);
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
+  align-items: stretch;
+  min-height: 112px;
+  background: #000;
 }
-.header-text h1 { font-size: 1.5rem; font-weight: 600; }
-.header-text p { font-size: 0.85rem; opacity: 0.92; margin-top: 2px; }
+.header-logo {
+  display: block;
+  height: 104px;
+  width: auto;
+  max-width: min(840px, 110vw);
+  object-fit: contain;
+  object-position: left center;
+  flex-shrink: 0;
+  padding: 8px 16px 8px 20px;
+}
+.header-fill {
+  flex: 1;
+  background: #000;
+}
 #main {
   flex: 1 1 0;
   min-height: 0;
@@ -82,60 +92,90 @@ header {
   overscroll-behavior: contain;
   -webkit-overflow-scrolling: touch;
   direction: rtl;
+  scrollbar-width: thin;
+  scrollbar-color: #3f3f4e #000;
 }
-#config-scroll .section-title,
+#config-scroll::-webkit-scrollbar {
+  width: 10px;
+}
+#config-scroll::-webkit-scrollbar-track {
+  background: #000;
+}
+#config-scroll::-webkit-scrollbar-thumb {
+  background: #3f3f4e;
+  border-radius: 5px;
+  border: 2px solid #000;
+}
+#config-scroll::-webkit-scrollbar-thumb:hover {
+  background: #5b5b70;
+}
+#config-scroll::-webkit-scrollbar-corner {
+  background: #000;
+}
 #device-list,
 #device-list .device-card {
   direction: ltr;
-}
-#config-scroll .section-title {
-  position: sticky;
-  top: 0;
-  z-index: 1;
-  background: #0f0f14;
-  padding-bottom: 8px;
-  padding-left: 14px;
-  padding-right: 4px;
 }
 #config-wrap .btn-row,
 #config-wrap > .hint {
   flex-shrink: 0;
 }
 #log-section {
-  /* Longest pat line ~56ch; advanced mode ~68ch */
   flex: 1 1 68ch;
-  min-width: 68ch;
+  min-width: min(68ch, 100%);
   max-width: 42%;
   min-height: 0;
   display: flex;
   flex-direction: column;
   padding: 14px;
-  background: #0c0c10;
-  overflow-x: hidden;
+  background: #000;
+  overflow: hidden;
 }
-.section-title {
-  flex-shrink: 0;
-  font-size: 0.75rem;
-  font-weight: 600;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: #8888a0;
-  padding: 0 0 8px;
-}
-#log {
+#log-scroll {
   flex: 1;
+  min-width: 0;
   min-height: 0;
   overflow-x: hidden;
   overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+  scrollbar-color: #3f3f4e #000;
+}
+#log-scroll::-webkit-scrollbar {
+  width: 10px;
+}
+#log-scroll::-webkit-scrollbar-track {
+  background: #000;
+}
+#log-scroll::-webkit-scrollbar-thumb {
+  background: #3f3f4e;
+  border-radius: 5px;
+  border: 2px solid #000;
+}
+#log-scroll::-webkit-scrollbar-thumb:hover {
+  background: #5b5b70;
+}
+#log-scroll::-webkit-scrollbar-corner {
+  background: #000;
+}
+#log {
+  display: block;
+  box-sizing: border-box;
+  width: calc(100% - 16px);
+  max-width: calc(100% - 16px);
+  margin: 0 16px 0 0;
+  min-height: 100%;
   font-family: "Cascadia Code", "Consolas", monospace;
   font-size: 12px;
   line-height: 1.45;
-  padding: 10px 12px;
+  padding: 10px 12px 10px 4px;
   background: #16161e;
   border-radius: 10px;
   border: 1px solid #2a2a36;
-  white-space: pre;
-  word-break: normal;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 #config-status {
   flex-shrink: 0;
@@ -144,7 +184,6 @@ header {
   border-radius: 8px;
   display: none;
 }
-#config-status.ok { display: block; background: #14532d; color: #86efac; }
 #config-status.err { display: block; background: #450a0a; color: #fca5a5; }
 #device-list {
   display: flex;
@@ -394,27 +433,24 @@ header {
 </head>
 <body>
 <header>
-  <div class="header-text">
-    <h1>GiggleTech</h1>
-    <p>OSC Router</p>
-  </div>
+  <img class="header-logo" src="{{LOGO_URI}}" alt="GiggleTech">
+  <div class="header-fill" aria-hidden="true"></div>
 </header>
 <div id="main">
   <div id="config-wrap">
     <div id="config-status"></div>
     <div id="config-scroll">
-      <div class="section-title">Devices</div>
       <div id="device-list"></div>
     </div>
     <div class="btn-row">
       <button type="button" class="btn btn-secondary" onclick="addDevice()">+ Add Device</button>
       <button type="button" class="btn btn-primary" onclick="saveConfig()">Save config.yml</button>
     </div>
-    <p class="hint">Saving reloads the router automatically.</p>
   </div>
   <section id="log-section">
-    <div class="section-title">Output</div>
-    <pre id="log"></pre>
+    <div id="log-scroll">
+      <pre id="log"></pre>
+    </div>
   </section>
 </div>
 <script>
@@ -453,8 +489,49 @@ function speedToSliderPos(speed) {
 
 function setConfigStatus(msg, isError) {
   const el = document.getElementById('config-status');
+  if (!el) return;
+  if (!isError) {
+    el.textContent = '';
+    el.className = '';
+    return;
+  }
   el.textContent = msg;
-  el.className = isError ? 'err' : 'ok';
+  el.className = 'err';
+}
+
+function clearConfigStatus() {
+  setConfigStatus('', false);
+}
+
+function isValidIp(ip) {
+  const s = (ip || '').trim();
+  if (!s) return false;
+  const v4 = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/;
+  const m = s.match(v4);
+  if (m) return m.slice(1, 5).every((o) => Number(o) <= 255);
+  if (s.includes(':')) return /^[0-9a-fA-F:.]+$/.test(s);
+  return false;
+}
+
+function editorValidationOk() {
+  if (!editorDevices.length) return false;
+  for (const d of editorDevices) {
+    if (!d.ip.trim() || !isValidIp(d.ip)) return false;
+    if (!(d.proximity_parameter || '').trim()) return false;
+    if (d.max_speed < editorSpeedDefaults.min || d.max_speed > 100) return false;
+  }
+  return true;
+}
+
+function maybeClearConfigError() {
+  const el = document.getElementById('config-status');
+  if (!el || el.className !== 'err') return;
+  const msg = el.textContent || '';
+  if (msg.includes('Enter an IP')) {
+    if (editorDevices.some((d) => isValidIp(d.ip))) clearConfigStatus();
+    return;
+  }
+  if (editorValidationOk()) clearConfigStatus();
 }
 
 function escapeHtml(s) {
@@ -479,7 +556,7 @@ function renderDevices() {
           <div class="device-name-row">
             <input type="text" class="device-name-input" value="${escapeHtml(d.name || '')}"
               placeholder="${i === 0 ? 'Headpats' : 'Device ' + (i + 1)}"
-              oninput="editorDevices[${i}].name=this.value"
+              oninput="editorDevices[${i}].name=this.value; maybeClearConfigError()"
               aria-label="Device name">
             <span class="device-status unknown" id="device-status-${i}">—</span>
             <button type="button" class="btn btn-secondary btn-sm" onclick="pingDevice(${i})">Ping</button>
@@ -487,11 +564,11 @@ function renderDevices() {
           <div class="device-fields">
             <label>IP address
               <input type="text" value="${escapeHtml(d.ip)}"
-                oninput="editorDevices[${i}].ip=this.value; onDeviceIpChange(${i})">
+                oninput="editorDevices[${i}].ip=this.value; onDeviceIpChange(${i}); maybeClearConfigError()">
             </label>
             <label>Proximity parameter
               <input type="text" value="${escapeHtml(d.proximity_parameter)}" placeholder="proximity_01"
-                oninput="editorDevices[${i}].proximity_parameter=this.value">
+                oninput="editorDevices[${i}].proximity_parameter=this.value; maybeClearConfigError()">
             </label>
           </div>
           <label class="max-speed-block">Max speed
@@ -501,7 +578,6 @@ function renderDevices() {
                 oninput="onMaxSpeedChange(${i}, this)" onchange="saveConfig(true)">
               <span class="speed-value" id="max-speed-val-${i}">${d.max_speed}%</span>
             </div>
-            <span class="hint">0–50% uses first ¾ of slider; 50–100% uses last ¼</span>
           </label>
           <div class="device-actions">
             ${pendingRemoveIndex === i
@@ -736,7 +812,6 @@ function cancelRemoveDevice() {
 }
 
 function saveConfig(quiet) {
-  if (!quiet) setConfigStatus('Saving...', false);
   window.ipc.postMessage('save-config:' + JSON.stringify({
     devices: editorDevices,
     min_speed: editorSpeedDefaults.min,
@@ -750,14 +825,14 @@ window.onConfigLoaded = function(state) {
   if (state.min_speed != null) editorSpeedDefaults.min = state.min_speed;
   if (state.max_speed_cap != null) editorSpeedDefaults.max = state.max_speed_cap;
   renderDevices();
-  setConfigStatus('Loaded from config.yml', false);
+  clearConfigStatus();
   startDevicePingLoop();
 };
 
 window.onConfigSaved = function(opts) {
   opts = opts || {};
+  clearConfigStatus();
   if (!opts.quiet) {
-    setConfigStatus('Saved to config.yml', false);
     window.ipc.postMessage('load-config');
   }
 };
@@ -768,19 +843,21 @@ window.onConfigError = function(msg) {
 
 function setLogs(lines) {
   const el = document.getElementById('log');
+  const scroll = document.getElementById('log-scroll');
   el.textContent = lines.slice().reverse().join('\n');
-  el.scrollTop = 0;
+  if (scroll) scroll.scrollTop = 0;
 }
 
 function appendLog(line) {
   const el = document.getElementById('log');
+  const scroll = document.getElementById('log-scroll');
   el.textContent = el.textContent ? line + '\n' + el.textContent : line;
-  el.scrollTop = 0;
+  if (scroll) scroll.scrollTop = 0;
 }
 
-function setupConfigScroll() {
-  const wrap = document.getElementById('config-wrap');
-  const scroll = document.getElementById('config-scroll');
+function setupPaneScroll(wrapId, scrollId) {
+  const wrap = document.getElementById(wrapId);
+  const scroll = document.getElementById(scrollId);
   if (!wrap || !scroll) return;
   wrap.addEventListener('wheel', (e) => {
     const max = scroll.scrollHeight - scroll.clientHeight;
@@ -791,12 +868,22 @@ function setupConfigScroll() {
   }, { passive: false, capture: true });
 }
 
-setupConfigScroll();
+setupPaneScroll('config-wrap', 'config-scroll');
+setupPaneScroll('log-section', 'log-scroll');
 setupTestSliderSafety();
 window.ipc.postMessage('load-config');
 </script>
 </body>
 </html>"#;
+
+fn output_html() -> String {
+  use base64::{engine::general_purpose::STANDARD, Engine};
+  let uri = format!(
+    "data:image/png;base64,{}",
+    STANDARD.encode(include_bytes!("assets/Giggletech_Black.png"))
+  );
+  OUTPUT_HTML.replace(LOGO_PLACEHOLDER, &uri)
+}
 
 enum UserEvent {
   TrayIconEvent(tray_icon::TrayIconEvent),
@@ -846,7 +933,7 @@ impl UiState {
       .expect("Failed to create output window");
 
     let webview = WebViewBuilder::new()
-      .with_html(OUTPUT_HTML)
+      .with_html(output_html())
       .with_ipc_handler(move |request: Request<String>| {
         let _ = ipc_proxy.send_event(UserEvent::ConfigIpc(request.body().clone()));
       })
