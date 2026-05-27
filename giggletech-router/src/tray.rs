@@ -18,7 +18,11 @@ use winreg::RegKey;
 use wry::http::Request;
 use wry::WebViewBuilder;
 
+use serde::Deserialize;
+use tao::event_loop::EventLoopProxy;
+
 use crate::config_editor;
+use crate::device_ping;
 use crate::device_test;
 use crate::log_ui;
 
@@ -31,7 +35,7 @@ const OUTPUT_HTML: &str = r#"<!DOCTYPE html>
 <meta charset="utf-8">
 <style>
 * { box-sizing: border-box; margin: 0; padding: 0; }
-html, body { height: 100%; overflow-x: hidden; }
+html, body { height: 100%; min-height: 100vh; overflow-x: hidden; }
 body {
   background: #0f0f14;
   color: #e8e8f0;
@@ -53,15 +57,15 @@ header {
 .header-text h1 { font-size: 1.5rem; font-weight: 600; }
 .header-text p { font-size: 0.85rem; opacity: 0.92; margin-top: 2px; }
 #main {
-  flex: 1;
+  flex: 1 1 0;
   min-height: 0;
   display: flex;
   flex-direction: row;
   overflow: hidden;
 }
 #config-wrap {
-  flex: 1.25 1 32rem;
-  min-width: 32rem;
+  flex: 1.25 1 0;
+  min-width: 36rem;
   min-height: 0;
   display: flex;
   flex-direction: column;
@@ -69,6 +73,33 @@ header {
   gap: 12px;
   overflow: hidden;
   border-right: 1px solid #2a2a36;
+}
+#config-scroll {
+  flex: 1 1 0;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  direction: rtl;
+}
+#config-scroll .section-title,
+#device-list,
+#device-list .device-card {
+  direction: ltr;
+}
+#config-scroll .section-title {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: #0f0f14;
+  padding-bottom: 8px;
+  padding-left: 14px;
+  padding-right: 4px;
+}
+#config-wrap .btn-row,
+#config-wrap > .hint {
+  flex-shrink: 0;
 }
 #log-section {
   /* Longest pat line ~56ch; advanced mode ~68ch */
@@ -107,6 +138,7 @@ header {
   word-break: normal;
 }
 #config-status {
+  flex-shrink: 0;
   font-size: 0.85rem;
   padding: 8px 12px;
   border-radius: 8px;
@@ -114,17 +146,89 @@ header {
 }
 #config-status.ok { display: block; background: #14532d; color: #86efac; }
 #config-status.err { display: block; background: #450a0a; color: #fca5a5; }
-#device-list { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; min-height: 0; }
+#device-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-left: 14px;
+  padding-right: 4px;
+}
 .device-card {
   background: #16161e;
   border: 1px solid #2a2a36;
   border-radius: 10px;
+  overflow: hidden;
+}
+.device-card-layout {
+  display: flex;
+  flex-direction: row;
+  align-items: stretch;
+  min-height: 220px;
+}
+.device-main {
+  flex: 1;
+  min-width: 0;
   padding: 14px;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 12px;
 }
 .device-card h3 { font-size: 0.9rem; color: #c4b5fd; }
+.device-name-input {
+  width: 100%;
+  font-size: 0.95rem;
+  font-weight: 600;
+  font-family: inherit;
+  color: #c4b5fd;
+  background: transparent;
+  border: none;
+  border-bottom: 1px dashed #3f3f4e;
+  padding: 4px 0 6px;
+  margin: 0 0 4px;
+}
+.device-name-input:focus {
+  outline: none;
+  border-bottom-color: #a855f7;
+  border-bottom-style: solid;
+}
+.device-name-input::placeholder { color: #6b6b80; font-weight: 500; }
+.device-name-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.device-name-row .device-name-input {
+  flex: 1;
+  min-width: 8rem;
+  margin-bottom: 0;
+}
+.device-status {
+  flex-shrink: 0;
+  font-size: 0.8rem;
+  font-weight: 600;
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid #3f3f4e;
+  background: #0f0f14;
+}
+.device-status.online {
+  color: #86efac;
+  border-color: #166534;
+  background: #14532d;
+}
+.device-status.offline {
+  color: #fca5a5;
+  border-color: #7f1d1d;
+  background: #450a0a;
+}
+.device-status.unknown {
+  color: #8888a0;
+}
+.btn-sm {
+  padding: 6px 12px;
+  font-size: 0.8rem;
+}
 .device-card label { display: flex; flex-direction: column; gap: 4px; font-size: 0.8rem; color: #a1a1b5; }
 .device-card input {
   padding: 8px 10px;
@@ -134,30 +238,79 @@ header {
   color: #e8e8f0;
   font-size: 0.9rem;
 }
-.device-card input:focus { outline: none; border-color: #a855f7; }
+.device-card input:not([type="range"]):focus { outline: none; border-color: #a855f7; }
+.max-speed-block {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 4px;
+}
 .speed-slider-row {
   display: flex;
   align-items: center;
-  gap: 10px;
-  margin-top: 4px;
+  gap: 16px;
+  width: 100%;
 }
 .speed-slider-row input[type="range"] {
   flex: 1;
-  height: 6px;
-  accent-color: #a855f7;
+  min-width: 0;
+  width: 100%;
+  height: 40px;
+  margin: 0;
+  padding: 0;
+  border: none;
+  -webkit-appearance: none;
+  appearance: none;
+  background: transparent;
   cursor: pointer;
+  touch-action: none;
+}
+.speed-slider-row input[type="range"]:focus,
+.speed-slider-row input[type="range"]:focus-visible {
+  outline: none;
+  border: none;
+  box-shadow: none;
+}
+.speed-slider-row input[type="range"]::-webkit-slider-runnable-track {
+  height: 20px;
+  border-radius: 10px;
+  background: #2a2a36;
+  border: 1px solid #3f3f4e;
+}
+.speed-slider-row input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 40px;
+  height: 40px;
+  margin-top: -11px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #e879f9, #7c3aed);
+  border: 3px solid #f3e8ff;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.45);
+}
+.speed-slider-row input[type="range"]::-moz-range-track {
+  height: 20px;
+  border-radius: 10px;
+  background: #2a2a36;
+  border: 1px solid #3f3f4e;
+}
+.speed-slider-row input[type="range"]::-moz-range-thumb {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #e879f9, #7c3aed);
+  border: 3px solid #f3e8ff;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.45);
 }
 .speed-value {
-  min-width: 38px;
-  font-size: 0.9rem;
+  flex-shrink: 0;
+  min-width: 56px;
+  font-size: 1.15rem;
   font-weight: 600;
   color: #c4b5fd;
   text-align: right;
 }
-.device-row { display: flex; gap: 16px; align-items: flex-start; }
 .device-fields {
-  flex: 1;
-  min-width: 14rem;
   display: flex;
   flex-direction: column;
   gap: 12px;
@@ -168,17 +321,27 @@ header {
   line-height: 1.35;
 }
 .test-slider-col {
+  flex: 0 0 72px;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 6px;
-  flex-shrink: 0;
+  gap: 8px;
+  padding: 12px 10px;
+  border-left: 1px solid #2a2a36;
+  background: #0f0f14;
+  align-self: stretch;
 }
-.test-slider-label { font-size: 0.75rem; color: #a1a1b5; font-weight: 600; }
+.test-slider-label {
+  flex-shrink: 0;
+  font-size: 0.75rem;
+  color: #a1a1b5;
+  font-weight: 600;
+}
 .test-slider-track {
   position: relative;
-  width: 44px;
-  height: 128px;
+  flex: 1;
+  width: 100%;
+  min-height: 0;
   background: #0f0f14;
   border: 2px solid #3f3f4e;
   border-radius: 10px;
@@ -186,7 +349,10 @@ header {
   touch-action: none;
   user-select: none;
 }
-.test-slider-track.active { border-color: #c026d3; box-shadow: 0 0 12px rgba(192, 38, 211, 0.35); }
+.test-slider-track.active {
+  border-color: #c026d3;
+  box-shadow: 0 0 12px rgba(192, 38, 211, 0.35);
+}
 .test-slider-fill {
   position: absolute;
   bottom: 0;
@@ -196,15 +362,17 @@ header {
   background: linear-gradient(to top, #7c3aed, #e879f9);
   border-radius: 0 0 8px 8px;
   pointer-events: none;
+  transition: height 0.05s ease-out;
 }
 .test-slider-hint {
+  flex-shrink: 0;
   font-size: 0.65rem;
   color: #6b6b80;
   text-align: center;
   line-height: 1.2;
-  max-width: 52px;
 }
-.device-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 4px; }
+.device-actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-top: 4px; }
+.device-actions .btn[disabled] { opacity: 0.55; cursor: default; }
 .btn-row { display: flex; gap: 8px; flex-wrap: wrap; }
 .btn {
   padding: 9px 14px;
@@ -234,7 +402,10 @@ header {
 <div id="main">
   <div id="config-wrap">
     <div id="config-status"></div>
-    <div id="device-list"></div>
+    <div id="config-scroll">
+      <div class="section-title">Devices</div>
+      <div id="device-list"></div>
+    </div>
     <div class="btn-row">
       <button type="button" class="btn btn-secondary" onclick="addDevice()">+ Add Device</button>
       <button type="button" class="btn btn-primary" onclick="saveConfig()">Save config.yml</button>
@@ -249,6 +420,60 @@ header {
 <script>
 let editorDevices = [];
 let editorSpeedDefaults = { min: 5, max: 25 };
+let devicePingStatus = {};
+let pingDebounceTimer = null;
+const PING_POLL_MS = 5000;
+let pingPollTimer = null;
+let pingInFlight = false;
+let pendingRemoveIndex = null;
+const MAX_SPEED_FULL = 100;
+const SPEED_SLIDER_STEPS = 1000;
+
+function speedCurveBounds() {
+  return {
+    min: editorSpeedDefaults.min,
+    sweet: editorSpeedDefaults.max,
+    full: MAX_SPEED_FULL
+  };
+}
+
+function easeOutCubic(u) {
+  return 1 - Math.pow(1 - u, 3);
+}
+
+function easeOutCubicInverse(y) {
+  if (y <= 0) return 0;
+  if (y >= 1) return 1;
+  return 1 - Math.pow(1 - y, 1 / 3);
+}
+
+/** Slider 0..1 → max speed %: first half is min→sweet (linear), second half sweet→100 (ease-out). */
+function sliderPosToSpeed(t) {
+  const { min, sweet, full } = speedCurveBounds();
+  t = Math.max(0, Math.min(1, t));
+  if (t <= 0.5) {
+    const span = sweet - min;
+    return span <= 0 ? min : min + span * (t / 0.5);
+  }
+  const span = full - sweet;
+  if (span <= 0) return sweet;
+  const u = easeOutCubic((t - 0.5) / 0.5);
+  return sweet + span * u;
+}
+
+function speedToSliderPos(speed) {
+  const { min, sweet, full } = speedCurveBounds();
+  speed = Math.max(min, Math.min(full, speed));
+  if (speed <= sweet) {
+    const span = sweet - min;
+    if (span <= 0) return 0;
+    return 0.5 * (speed - min) / span;
+  }
+  const span = full - sweet;
+  if (span <= 0) return 1;
+  const u = easeOutCubicInverse((speed - sweet) / span);
+  return 0.5 + 0.5 * u;
+}
 
 function setConfigStatus(msg, isError) {
   const el = document.getElementById('config-status');
@@ -272,25 +497,41 @@ function renderDevices() {
   }
   list.innerHTML = editorDevices.map((d, i) => `
     <div class="device-card">
-      <h3>Device ${i + 1}</h3>
-      <div class="device-row">
-        <div class="device-fields">
-          <label>IP address
-            <input type="text" value="${escapeHtml(d.ip)}" oninput="editorDevices[${i}].ip=this.value">
-          </label>
-          <label>Proximity parameter
-            <input type="text" value="${escapeHtml(d.proximity_parameter)}" placeholder="proximity_01"
-              oninput="editorDevices[${i}].proximity_parameter=this.value">
-          </label>
-          <label>Max speed
+      <div class="device-card-layout">
+        <div class="device-main">
+          <div class="device-name-row">
+            <input type="text" class="device-name-input" value="${escapeHtml(d.name || '')}"
+              placeholder="${i === 0 ? 'Headpats' : 'Device ' + (i + 1)}"
+              oninput="editorDevices[${i}].name=this.value"
+              aria-label="Device name">
+            <span class="device-status unknown" id="device-status-${i}">—</span>
+            <button type="button" class="btn btn-secondary btn-sm" onclick="pingDevice(${i})">Ping</button>
+          </div>
+          <div class="device-fields">
+            <label>IP address
+              <input type="text" value="${escapeHtml(d.ip)}"
+                oninput="editorDevices[${i}].ip=this.value; onDeviceIpChange(${i})">
+            </label>
+            <label>Proximity parameter
+              <input type="text" value="${escapeHtml(d.proximity_parameter)}" placeholder="proximity_01"
+                oninput="editorDevices[${i}].proximity_parameter=this.value">
+            </label>
+          </div>
+          <label class="max-speed-block">Max speed
             <div class="speed-slider-row">
-              <input type="range" min="${editorSpeedDefaults.min}" max="100" value="${d.max_speed}"
+              <input type="range" min="0" max="${SPEED_SLIDER_STEPS}"
+                value="${Math.round(speedToSliderPos(d.max_speed) * SPEED_SLIDER_STEPS)}"
                 oninput="onMaxSpeedChange(${i}, this)" onchange="saveConfig(true)">
               <span class="speed-value" id="max-speed-val-${i}">${d.max_speed}%</span>
             </div>
+            <span class="hint">${editorSpeedDefaults.min}–${editorSpeedDefaults.max}% uses left half of slider</span>
           </label>
           <div class="device-actions">
-            <button type="button" class="btn btn-danger" onclick="removeDevice(${i})">Remove</button>
+            ${pendingRemoveIndex === i
+              ? `<button type="button" class="btn btn-danger" disabled>Remove</button>
+                 <button type="button" class="btn btn-primary btn-sm" onclick="confirmRemoveDevice(${i})">Confirm</button>
+                 <button type="button" class="btn btn-secondary btn-sm" onclick="cancelRemoveDevice()">Cancel</button>`
+              : `<button type="button" class="btn btn-danger" onclick="requestRemoveDevice(${i})">Remove</button>`}
           </div>
         </div>
         <div class="test-slider-col">
@@ -304,7 +545,66 @@ function renderDevices() {
     </div>
   `).join('');
   bindDeviceSliders();
+  updatePingBadges();
 }
+
+function pingStatusLabel(st) {
+  if (st === 'online') return 'Online';
+  if (st === 'offline') return 'Offline';
+  return '—';
+}
+
+function updatePingBadges() {
+  editorDevices.forEach((d, i) => {
+    const el = document.getElementById('device-status-' + i);
+    if (!el) return;
+    const ip = (d.ip || '').trim();
+    const st = ip ? (devicePingStatus[ip] || 'unknown') : 'unknown';
+    el.className = 'device-status ' + st;
+    el.textContent = pingStatusLabel(st);
+  });
+}
+
+function requestDevicePing(ips) {
+  const list = ips.map(ip => (ip || '').trim()).filter(Boolean);
+  if (!list.length) return;
+  pingInFlight = true;
+  window.ipc.postMessage('ping-devices:' + JSON.stringify({ ips: list }));
+}
+
+function startDevicePingLoop() {
+  if (pingPollTimer) clearInterval(pingPollTimer);
+  pingAllDevices();
+  pingPollTimer = setInterval(() => {
+    if (!pingInFlight) pingAllDevices();
+  }, PING_POLL_MS);
+}
+
+function pingAllDevices() {
+  requestDevicePing(editorDevices.map(d => d.ip));
+}
+
+function pingDevice(index) {
+  const ip = (editorDevices[index] && editorDevices[index].ip || '').trim();
+  if (!ip) {
+    setConfigStatus('Enter an IP address to ping.', true);
+    return;
+  }
+  requestDevicePing([ip]);
+}
+
+function onDeviceIpChange(index) {
+  if (pingDebounceTimer) clearTimeout(pingDebounceTimer);
+  pingDebounceTimer = setTimeout(() => pingDevice(index), 700);
+}
+
+window.onDevicePingResults = function(payload) {
+  pingInFlight = false;
+  (payload.results || []).forEach(r => {
+    if (r.ip) devicePingStatus[r.ip] = r.online ? 'online' : 'offline';
+  });
+  updatePingBadges();
+};
 
 function sliderValueFromEvent(trackEl, ev) {
   const rect = trackEl.getBoundingClientRect();
@@ -378,14 +678,16 @@ function beginSliderDrag(index, trackEl, e) {
 }
 
 function onMaxSpeedChange(index, input) {
-  const value = parseInt(input.value, 10);
-  editorDevices[index].max_speed = value;
+  const t = parseInt(input.value, 10) / SPEED_SLIDER_STEPS;
+  const speed = Math.round(sliderPosToSpeed(t));
+  editorDevices[index].max_speed = speed;
   const label = document.getElementById('max-speed-val-' + index);
-  if (label) label.textContent = value + '%';
+  if (label) label.textContent = speed + '%';
 }
 
 function addDevice() {
   editorDevices.push({
+    name: editorDevices.length === 0 ? 'Headpats' : '',
     ip: '',
     proximity_parameter: 'proximity_01',
     max_speed: editorSpeedDefaults.max
@@ -393,8 +695,21 @@ function addDevice() {
   renderDevices();
 }
 
-function removeDevice(index) {
+function requestRemoveDevice(index) {
+  if (!editorDevices[index]) return;
+  pendingRemoveIndex = index;
+  renderDevices();
+}
+
+function confirmRemoveDevice(index) {
+  if (pendingRemoveIndex !== index) return;
   editorDevices.splice(index, 1);
+  pendingRemoveIndex = null;
+  renderDevices();
+}
+
+function cancelRemoveDevice() {
+  pendingRemoveIndex = null;
   renderDevices();
 }
 
@@ -414,6 +729,7 @@ window.onConfigLoaded = function(state) {
   if (state.max_speed_cap != null) editorSpeedDefaults.max = state.max_speed_cap;
   renderDevices();
   setConfigStatus('Loaded from config.yml', false);
+  startDevicePingLoop();
 };
 
 window.onConfigSaved = function(opts) {
@@ -440,6 +756,20 @@ function appendLog(line) {
   el.scrollTop = 0;
 }
 
+function setupConfigScroll() {
+  const wrap = document.getElementById('config-wrap');
+  const scroll = document.getElementById('config-scroll');
+  if (!wrap || !scroll) return;
+  wrap.addEventListener('wheel', (e) => {
+    const max = scroll.scrollHeight - scroll.clientHeight;
+    if (max <= 0) return;
+    scroll.scrollTop = Math.max(0, Math.min(max, scroll.scrollTop + e.deltaY));
+    e.preventDefault();
+    e.stopPropagation();
+  }, { passive: false, capture: true });
+}
+
+setupConfigScroll();
 window.ipc.postMessage('load-config');
 </script>
 </body>
@@ -450,6 +780,12 @@ enum UserEvent {
   MenuEvent(tray_icon::menu::MenuEvent),
   LogUpdated,
   ConfigIpc(String),
+  PingResults(String),
+}
+
+#[derive(Debug, Deserialize)]
+struct PingDevicesRequest {
+  ips: Vec<String>,
 }
 
 struct OutputWindow {
@@ -481,8 +817,8 @@ impl UiState {
   ) {
     let window = WindowBuilder::new()
       .with_title("GiggleTech")
-      .with_inner_size(LogicalSize::new(1280.0, 600.0))
-      .with_min_inner_size(LogicalSize::new(1120.0, 420.0))
+      .with_inner_size(LogicalSize::new(1360.0, 620.0))
+      .with_min_inner_size(LogicalSize::new(1180.0, 440.0))
       .build(event_loop)
       .expect("Failed to create output window");
 
@@ -566,7 +902,11 @@ fn push_new_logs(webview: &wry::WebView, synced: &mut usize) {
   *synced = lines.len();
 }
 
-fn handle_config_ipc(webview: &wry::WebView, msg: &str) {
+fn handle_config_ipc(
+  webview: &wry::WebView,
+  event_proxy: &EventLoopProxy<UserEvent>,
+  msg: &str,
+) {
   if msg == "load-config" {
     match config_editor::load_editor_json() {
       Ok(json) => {
@@ -596,6 +936,20 @@ fn handle_config_ipc(webview: &wry::WebView, msg: &str) {
     }
   } else if let Some(ip) = msg.strip_prefix("device-stop:") {
     device_test::stop_device(ip.trim().to_string());
+  } else if let Some(json) = msg.strip_prefix("ping-devices:") {
+    let req: PingDevicesRequest = match serde_json::from_str(json) {
+      Ok(r) => r,
+      Err(_) => return,
+    };
+    let proxy = event_proxy.clone();
+    std::thread::spawn(move || {
+      let results = async_std::task::block_on(device_ping::ping_hosts(&req.ips));
+      let payload = match serde_json::to_string(&serde_json::json!({ "results": results })) {
+        Ok(p) => p,
+        Err(_) => return,
+      };
+      let _ = proxy.send_event(UserEvent::PingResults(payload));
+    });
   }
 }
 
@@ -668,7 +1022,16 @@ pub fn run() {
 
       Event::UserEvent(UserEvent::ConfigIpc(msg)) => {
         if let Some(output) = &ui_state.output {
-          handle_config_ipc(&output.webview, &msg);
+          handle_config_ipc(&output.webview, &ipc_proxy, &msg);
+        }
+      }
+
+      Event::UserEvent(UserEvent::PingResults(json)) => {
+        if let Some(output) = &ui_state.output {
+          let _ = output.webview.evaluate_script(&format!(
+            "window.onDevicePingResults({});",
+            json
+          ));
         }
       }
 

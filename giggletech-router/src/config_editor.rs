@@ -10,8 +10,22 @@ use crate::log_ui;
 
 pub const CONFIG_PATH: &str = "config.yml";
 
+const DEFAULT_FIRST_DEVICE_NAME: &str = "Headpats";
+
+fn effective_device_name(index: usize, name: &str) -> String {
+  let trimmed = name.trim();
+  if index == 0 && trimmed.is_empty() {
+    DEFAULT_FIRST_DEVICE_NAME.to_string()
+  } else {
+    trimmed.to_string()
+  }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EditorDevice {
+  /// Display name in the config UI (optional).
+  #[serde(default)]
+  pub name: String,
   pub ip: String,
   pub proximity_parameter: String,
   /// Motor max speed limit as a percentage (e.g. 5–100).
@@ -39,7 +53,9 @@ pub fn load_editor_state() -> Result<EditorState, String> {
     devices: cfg
       .devices
       .into_iter()
-      .map(|d| EditorDevice {
+      .enumerate()
+      .map(|(i, d)| EditorDevice {
+        name: effective_device_name(i, &d.name.unwrap_or_default()),
         ip: d.ip,
         proximity_parameter: strip_proximity_prefix(d.proximity_parameter),
         max_speed: d.max_speed.unwrap_or(default_max).max(min_speed),
@@ -109,6 +125,7 @@ pub fn save_editor_state(state: &EditorState, quiet: bool) -> Result<(), String>
     .map(|(i, ed)| {
       if i < existing.len() {
         let mut device = existing[i].clone();
+        device.name = name_for_yaml(&effective_device_name(i, &ed.name));
         device.ip = ed.ip.trim().to_string();
         device.proximity_parameter = normalize_proximity_parameter(&ed.proximity_parameter);
         device.max_speed = if ed.max_speed == default_max {
@@ -119,6 +136,7 @@ pub fn save_editor_state(state: &EditorState, quiet: bool) -> Result<(), String>
         device
       } else {
         Device {
+          name: name_for_yaml(&effective_device_name(i, &ed.name)),
           ip: ed.ip.trim().to_string(),
           proximity_parameter: normalize_proximity_parameter(&ed.proximity_parameter),
           max_speed: if ed.max_speed == default_max {
@@ -148,6 +166,15 @@ pub fn save_editor_state(state: &EditorState, quiet: bool) -> Result<(), String>
     crate::router::request_restart();
   }
   Ok(())
+}
+
+fn name_for_yaml(name: &str) -> Option<String> {
+  let name = name.trim();
+  if name.is_empty() {
+    None
+  } else {
+    Some(name.to_string())
+  }
 }
 
 fn strip_proximity_prefix(s: String) -> String {

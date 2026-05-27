@@ -11,6 +11,8 @@ pub struct Config {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Device {
+    #[serde(default)]
+    pub name: Option<String>,
     pub ip: String,
     pub proximity_parameter: String,
     #[serde(default)]

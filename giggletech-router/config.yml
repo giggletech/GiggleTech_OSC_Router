@@ -1,7 +1,8 @@
 devices:
-- ip: 192.168.1.69
+- name: Headpats
+  ip: 192.168.1.69
   proximity_parameter: proximity_01
-  max_speed: 72
+  max_speed: 20
   speed_scale: null
   max_speed_parameter: null
   use_velocity_control: null

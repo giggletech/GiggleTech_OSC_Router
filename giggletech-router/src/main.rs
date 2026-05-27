@@ -8,6 +8,7 @@ use std::io;
 
 mod config;
 mod config_editor;
+mod device_ping;
 mod device_test;
 mod data_processing;
 mod giggletech_osc;
@@ -96,38 +97,21 @@ pub(crate) async fn test_device_connectivity(devices: &[config::DeviceConfig]) {
 
         log_ui::log_line(&format!("  Testing Device {}: {}", i + 1, device_ip));
 
-        let is_reachable = ping_device(device_ip).await;
+        let is_reachable = device_ping::ping_host(device_ip).await;
 
         let status = if is_reachable { "ONLINE" } else { "OFFLINE" };
         let message = format!("Device {}: {} - {}", i + 1, device_ip, status);
 
         log_ui::log_line(&format!("  Result: {}", message));
+        if is_reachable {
+            log_ui::log_line(&format!("    ✓ Ping successful for {}", device_ip));
+        } else {
+            log_ui::log_line(&format!("    ✗ Ping failed for {}", device_ip));
+        }
         log_to_file(&message);
         log_ui::log_line("");
     }
 
     log_ui::log_line("=== Connectivity Test Complete ===\n");
     log_to_file("Device connectivity test completed.");
-}
-
-async fn ping_device(device_ip: &str) -> bool {
-    match async_std::process::Command::new("ping")
-        .args(&["-n", "1", "-w", "1000", device_ip])
-        .output()
-        .await
-    {
-        Ok(output) => {
-            let success = output.status.success();
-            if success {
-                log_ui::log_line(&format!("    ✓ Ping successful for {}", device_ip));
-            } else {
-                log_ui::log_line(&format!("    ✗ Ping failed for {}", device_ip));
-            }
-            success
-        }
-        Err(e) => {
-            log_ui::log_line(&format!("    ✗ Ping command failed: {}", e));
-            false
-        }
-    }
 }
