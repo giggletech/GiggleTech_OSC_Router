@@ -122,7 +122,47 @@ header {
   font-size: 0.9rem;
 }
 .device-card input:focus { outline: none; border-color: #a855f7; }
-.device-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.device-row { display: flex; gap: 14px; align-items: flex-start; }
+.device-fields { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 10px; }
+.test-slider-col {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+.test-slider-label { font-size: 0.75rem; color: #a1a1b5; font-weight: 600; }
+.test-slider-track {
+  position: relative;
+  width: 44px;
+  height: 128px;
+  background: #0f0f14;
+  border: 2px solid #3f3f4e;
+  border-radius: 10px;
+  cursor: pointer;
+  touch-action: none;
+  user-select: none;
+}
+.test-slider-track.active { border-color: #c026d3; box-shadow: 0 0 12px rgba(192, 38, 211, 0.35); }
+.test-slider-fill {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 0%;
+  background: linear-gradient(to top, #7c3aed, #e879f9);
+  border-radius: 0 0 8px 8px;
+  pointer-events: none;
+  transition: height 0.05s ease-out;
+}
+.test-slider-hint {
+  font-size: 0.65rem;
+  color: #6b6b80;
+  text-align: center;
+  line-height: 1.2;
+  max-width: 52px;
+}
+.device-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 4px; }
 .btn-row { display: flex; gap: 8px; flex-wrap: wrap; }
 .btn {
   padding: 9px 14px;
@@ -208,19 +248,88 @@ function renderDevices() {
   list.innerHTML = editorDevices.map((d, i) => `
     <div class="device-card">
       <h3>Device ${i + 1}</h3>
-      <label>IP address
-        <input type="text" value="${escapeHtml(d.ip)}" oninput="editorDevices[${i}].ip=this.value">
-      </label>
-      <label>Proximity parameter
-        <input type="text" value="${escapeHtml(d.proximity_parameter)}" placeholder="proximity_01"
-          oninput="editorDevices[${i}].proximity_parameter=this.value">
-      </label>
-      <div class="device-actions">
-        <button type="button" class="btn btn-primary" onclick="testDevice(${i})">Test</button>
-        <button type="button" class="btn btn-danger" onclick="removeDevice(${i})">Remove</button>
+      <div class="device-row">
+        <div class="device-fields">
+          <label>IP address
+            <input type="text" value="${escapeHtml(d.ip)}" oninput="editorDevices[${i}].ip=this.value">
+          </label>
+          <label>Proximity parameter
+            <input type="text" value="${escapeHtml(d.proximity_parameter)}" placeholder="proximity_01"
+              oninput="editorDevices[${i}].proximity_parameter=this.value">
+          </label>
+          <div class="device-actions">
+            <button type="button" class="btn btn-danger" onclick="removeDevice(${i})">Remove</button>
+          </div>
+        </div>
+        <div class="test-slider-col">
+          <span class="test-slider-label">Test</span>
+          <div class="test-slider-track" data-index="${i}">
+            <div class="test-slider-fill"></div>
+          </div>
+          <span class="test-slider-hint">Hold & drag up</span>
+        </div>
       </div>
     </div>
   `).join('');
+  bindDeviceSliders();
+}
+
+function sliderValueFromEvent(trackEl, ev) {
+  const rect = trackEl.getBoundingClientRect();
+  const y = (ev.clientY ?? (ev.touches && ev.touches[0] && ev.touches[0].clientY) ?? rect.bottom) - rect.top;
+  const raw = 1 - Math.max(0, Math.min(1, y / rect.height));
+  return Math.max(0.08, raw);
+}
+
+function setSliderVisual(trackEl, value) {
+  const fill = trackEl.querySelector('.test-slider-fill');
+  if (fill) fill.style.height = Math.round(value * 100) + '%';
+  trackEl.classList.toggle('active', value > 0);
+}
+
+function bindDeviceSliders() {
+  document.querySelectorAll('.test-slider-track').forEach((trackEl) => {
+    const index = parseInt(trackEl.dataset.index, 10);
+    trackEl.onpointerdown = (e) => {
+      e.preventDefault();
+      trackEl.setPointerCapture(e.pointerId);
+      beginSliderDrag(index, trackEl, e);
+    };
+  });
+}
+
+function beginSliderDrag(index, trackEl, e) {
+  const ip = (editorDevices[index] && editorDevices[index].ip || '').trim();
+  if (!ip) {
+    setConfigStatus('Enter an IP address before testing.', true);
+    trackEl.releasePointerCapture(e.pointerId);
+    return;
+  }
+
+  let lastSent = -1;
+  const sendLevel = (ev) => {
+    const value = sliderValueFromEvent(trackEl, ev);
+    setSliderVisual(trackEl, value);
+    const rounded = Math.round(value * 100);
+    if (rounded !== lastSent) {
+      lastSent = rounded;
+      window.ipc.postMessage('device-motor:' + JSON.stringify({ ip: ip, value: value }));
+    }
+  };
+
+  const endDrag = (ev) => {
+    try { trackEl.releasePointerCapture(ev.pointerId); } catch (_) {}
+    trackEl.removeEventListener('pointermove', sendLevel);
+    trackEl.removeEventListener('pointerup', endDrag);
+    trackEl.removeEventListener('pointercancel', endDrag);
+    setSliderVisual(trackEl, 0);
+    window.ipc.postMessage('device-stop:' + ip);
+  };
+
+  sendLevel(e);
+  trackEl.addEventListener('pointermove', sendLevel);
+  trackEl.addEventListener('pointerup', endDrag);
+  trackEl.addEventListener('pointercancel', endDrag);
 }
 
 function addDevice() {
@@ -231,16 +340,6 @@ function addDevice() {
 function removeDevice(index) {
   editorDevices.splice(index, 1);
   renderDevices();
-}
-
-function testDevice(index) {
-  const d = editorDevices[index];
-  if (!d || !d.ip.trim()) {
-    setConfigStatus('Enter an IP address before testing.', true);
-    return;
-  }
-  setConfigStatus('Testing device ' + d.ip.trim() + '...', false);
-  window.ipc.postMessage('test-device:' + d.ip.trim());
 }
 
 function saveConfig() {
@@ -420,11 +519,12 @@ fn handle_config_ipc(webview: &wry::WebView, msg: &str) {
         let _ = webview.evaluate_script(&format!("window.onConfigError({});", err));
       }
     }
-  } else if let Some(ip) = msg.strip_prefix("test-device:") {
-    device_test::spawn_device_test(ip.to_string());
-    let _ = webview.evaluate_script(
-      "setConfigStatus('Test started — check Output for results.', false);",
-    );
+  } else if let Some(json) = msg.strip_prefix("device-motor:") {
+    if let Ok(payload) = serde_json::from_str::<device_test::MotorPayload>(json) {
+      device_test::set_device_motor(payload.ip, payload.value);
+    }
+  } else if let Some(ip) = msg.strip_prefix("device-stop:") {
+    device_test::stop_device(ip.trim().to_string());
   }
 }
 
