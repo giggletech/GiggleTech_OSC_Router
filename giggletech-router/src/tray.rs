@@ -261,6 +261,11 @@ header {
   border-color: #7f1d1d;
   background: #450a0a;
 }
+.device-status.checking {
+  color: #c4b5fd;
+  border-color: #5b21b6;
+  background: #2e1065;
+}
 .device-status.unknown {
   color: #8888a0;
 }
@@ -559,7 +564,7 @@ function renderDevices() {
               oninput="editorDevices[${i}].name=this.value; maybeClearConfigError()"
               aria-label="Device name">
             <span class="device-status unknown" id="device-status-${i}">—</span>
-            <button type="button" class="btn btn-secondary btn-sm" onclick="pingDevice(${i})">Ping</button>
+            <button type="button" class="btn btn-secondary btn-sm" onclick="pingDevice(${i}, true)">Ping</button>
           </div>
           <div class="device-fields">
             <label>IP address
@@ -604,6 +609,7 @@ function renderDevices() {
 function pingStatusLabel(st) {
   if (st === 'online') return 'Online';
   if (st === 'offline') return 'Offline';
+  if (st === 'checking') return 'Checking…';
   return '—';
 }
 
@@ -618,10 +624,16 @@ function updatePingBadges() {
   });
 }
 
-function requestDevicePing(ips) {
+function requestDevicePing(ips, manual) {
   const list = ips.map(ip => (ip || '').trim()).filter(Boolean);
   if (!list.length) return;
   pingInFlight = true;
+  list.forEach(ip => {
+    if (manual || devicePingStatus[ip] !== 'online') {
+      devicePingStatus[ip] = 'checking';
+    }
+  });
+  updatePingBadges();
   window.ipc.postMessage('ping-devices:' + JSON.stringify({ ips: list }));
 }
 
@@ -634,16 +646,16 @@ function startDevicePingLoop() {
 }
 
 function pingAllDevices() {
-  requestDevicePing(editorDevices.map(d => d.ip));
+  requestDevicePing(editorDevices.map(d => d.ip), false);
 }
 
-function pingDevice(index) {
+function pingDevice(index, manual) {
   const ip = (editorDevices[index] && editorDevices[index].ip || '').trim();
   if (!ip) {
     setConfigStatus('Enter an IP address to ping.', true);
     return;
   }
-  requestDevicePing([ip]);
+  requestDevicePing([ip], !!manual);
 }
 
 function onDeviceIpChange(index) {
