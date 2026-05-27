@@ -29,6 +29,10 @@ use crate::log_ui;
 const AUTO_START_VALUE_NAME: &str = "GiggleTechOSCRouter";
 const RUN_KEY: &str = r"Software\Microsoft\Windows\CurrentVersion\Run";
 const LOGO_PLACEHOLDER: &str = "{{LOGO_URI}}";
+const OUTPUT_WINDOW_WIDTH: f64 = 1080.0;
+const OUTPUT_WINDOW_HEIGHT: f64 = 720.0;
+const OUTPUT_WINDOW_MIN_WIDTH: f64 = 960.0;
+const OUTPUT_WINDOW_MIN_HEIGHT: f64 = 480.0;
 
 const OUTPUT_HTML: &str = r#"<!DOCTYPE html>
 <html lang="en">
@@ -66,16 +70,25 @@ header {
   flex: 1;
   background: #000;
 }
-#main {
+#main-center {
   flex: 1 1 0;
   min-height: 0;
   display: flex;
-  flex-direction: row;
-  overflow: hidden;
+  justify-content: center;
+  align-items: stretch;
+  overflow: auto;
+  background: #000;
+}
+#main {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  width: 100%;
+  max-width: 1080px;
+  min-height: 100%;
+  height: 100%;
 }
 #config-wrap {
-  flex: 1.25 1 0;
-  min-width: 36rem;
+  min-width: 0;
   min-height: 0;
   display: flex;
   flex-direction: column;
@@ -87,7 +100,7 @@ header {
 #config-scroll {
   flex: 1 1 0;
   min-height: 0;
-  overflow-x: hidden;
+  overflow-x: auto;
   overflow-y: auto;
   overscroll-behavior: contain;
   -webkit-overflow-scrolling: touch;
@@ -121,9 +134,7 @@ header {
   flex-shrink: 0;
 }
 #log-section {
-  flex: 1 1 68ch;
-  min-width: min(68ch, 100%);
-  max-width: 42%;
+  min-width: 0;
   min-height: 0;
   display: flex;
   flex-direction: column;
@@ -135,7 +146,7 @@ header {
   flex: 1;
   min-width: 0;
   min-height: 0;
-  overflow-x: hidden;
+  overflow-x: auto;
   overflow-y: auto;
   overscroll-behavior: contain;
   -webkit-overflow-scrolling: touch;
@@ -162,9 +173,9 @@ header {
 #log {
   display: block;
   box-sizing: border-box;
-  width: calc(100% - 16px);
-  max-width: calc(100% - 16px);
-  margin: 0 16px 0 0;
+  width: 100%;
+  max-width: 100%;
+  margin: 0;
   min-height: 100%;
   font-family: "Cascadia Code", "Consolas", monospace;
   font-size: 12px;
@@ -193,6 +204,7 @@ header {
   padding-right: 4px;
 }
 .device-card {
+  width: 100%;
   background: #16161e;
   border: 1px solid #2a2a36;
   border-radius: 10px;
@@ -441,22 +453,24 @@ header {
   <img class="header-logo" src="{{LOGO_URI}}" alt="GiggleTech">
   <div class="header-fill" aria-hidden="true"></div>
 </header>
-<div id="main">
-  <div id="config-wrap">
-    <div id="config-status"></div>
-    <div id="config-scroll">
-      <div id="device-list"></div>
+<div id="main-center">
+  <div id="main">
+    <div id="config-wrap">
+      <div id="config-status"></div>
+      <div id="config-scroll">
+        <div id="device-list"></div>
+      </div>
+      <div class="btn-row">
+        <button type="button" class="btn btn-secondary" onclick="addDevice()">+ Add Device</button>
+        <button type="button" class="btn btn-primary" onclick="saveConfig()">Save config.yml</button>
+      </div>
     </div>
-    <div class="btn-row">
-      <button type="button" class="btn btn-secondary" onclick="addDevice()">+ Add Device</button>
-      <button type="button" class="btn btn-primary" onclick="saveConfig()">Save config.yml</button>
-    </div>
+    <section id="log-section">
+      <div id="log-scroll">
+        <pre id="log"></pre>
+      </div>
+    </section>
   </div>
-  <section id="log-section">
-    <div id="log-scroll">
-      <pre id="log"></pre>
-    </div>
-  </section>
 </div>
 <script>
 let editorDevices = [];
@@ -939,8 +953,11 @@ impl UiState {
   ) {
     let window = WindowBuilder::new()
       .with_title("GiggleTech")
-      .with_inner_size(LogicalSize::new(1360.0, 620.0))
-      .with_min_inner_size(LogicalSize::new(1180.0, 440.0))
+      .with_inner_size(LogicalSize::new(OUTPUT_WINDOW_WIDTH, OUTPUT_WINDOW_HEIGHT))
+      .with_min_inner_size(LogicalSize::new(
+        OUTPUT_WINDOW_MIN_WIDTH,
+        OUTPUT_WINDOW_MIN_HEIGHT,
+      ))
       .build(event_loop)
       .expect("Failed to create output window");
 
