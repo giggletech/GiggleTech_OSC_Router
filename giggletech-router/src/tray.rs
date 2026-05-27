@@ -57,23 +57,33 @@ body {
 header {
   flex-shrink: 0;
   display: flex;
-  align-items: stretch;
-  min-height: 112px;
+  justify-content: center;
   background: #000;
+}
+.header-inner {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  width: 100%;
+  max-width: 1080px;
+  min-height: 112px;
+}
+.header-config-col {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-width: 0;
 }
 .header-logo {
   display: block;
   height: 104px;
   width: auto;
-  max-width: min(840px, 110vw);
+  max-width: 100%;
   object-fit: contain;
-  object-position: left center;
-  flex-shrink: 0;
-  padding: 8px 16px 8px 20px;
+  object-position:  center;
+  padding: 16px 16px 0px 16px;
 }
-.header-fill {
-  flex: 1;
-  background: #000;
+.header-log-col {
+  min-width: 0;
 }
 #main-center {
   flex: 1 1 0;
@@ -430,23 +440,41 @@ header {
   border-color: #c026d3;
   box-shadow: 0 0 12px rgba(192, 38, 211, 0.35);
 }
+.test-slider-arrow {
+  position: absolute;
+  bottom: 8px;
+  left: 50%;
+  z-index: 2;
+  width: 14px;
+  height: 14px;
+  margin-left: -7px;
+  pointer-events: none;
+  border-top: 2.5px solid #c4b5fd;
+  border-right: 2.5px solid #c4b5fd;
+  transform: rotate(-45deg);
+  opacity: 0.85;
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.5));
+  transition: opacity 0.08s ease-out;
+}
+.test-slider-track.active .test-slider-arrow:not(.hidden) {
+  border-color: #e879f9;
+  opacity: 1;
+}
+.test-slider-arrow.hidden {
+  opacity: 0;
+  visibility: hidden;
+}
 .test-slider-fill {
   position: absolute;
   bottom: 0;
   left: 0;
   right: 0;
   height: 0%;
+  z-index: 1;
   background: linear-gradient(to top, #7c3aed, #e879f9);
   border-radius: 0 0 8px 8px;
   pointer-events: none;
   transition: height 0.05s ease-out;
-}
-.test-slider-hint {
-  flex-shrink: 0;
-  font-size: 0.65rem;
-  color: #6b6b80;
-  text-align: center;
-  line-height: 1.2;
 }
 .device-actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-top: 4px; }
 .device-actions .btn[disabled] { opacity: 0.55; cursor: default; }
@@ -471,8 +499,12 @@ header {
 </head>
 <body>
 <header>
-  <img class="header-logo" src="{{LOGO_URI}}" alt="GiggleTech">
-  <div class="header-fill" aria-hidden="true"></div>
+  <div class="header-inner">
+    <div class="header-config-col">
+      <img class="header-logo" src="{{LOGO_URI}}" alt="GiggleTech">
+    </div>
+    <div class="header-log-col" aria-hidden="true"></div>
+  </div>
 </header>
 <div id="main-center">
   <div id="main">
@@ -638,11 +670,11 @@ function renderDevices() {
           </div>
         </div>
         <div class="test-slider-col">
-          <span class="test-slider-label">Test</span>
+          <span class="test-slider-label">Motor</span>
           <div class="test-slider-track" data-index="${i}">
+            <span class="test-slider-arrow" aria-hidden="true"></span>
             <div class="test-slider-fill"></div>
           </div>
-          <span class="test-slider-hint">Hold & drag up</span>
         </div>
       </div>
     </div>
@@ -752,6 +784,12 @@ function setSliderVisual(trackEl, value) {
   const fill = trackEl.querySelector('.test-slider-fill');
   if (fill) fill.style.height = Math.round(value * 100) + '%';
   trackEl.classList.toggle('active', value > 0);
+  const arrow = trackEl.querySelector('.test-slider-arrow');
+  if (arrow) {
+    const trackH = trackEl.clientHeight || 1;
+    const arrowZonePx = 24;
+    arrow.classList.toggle('hidden', value > 0 && value * trackH >= arrowZonePx);
+  }
 }
 
 function endActiveTestDrag() {
