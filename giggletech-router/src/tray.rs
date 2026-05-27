@@ -138,8 +138,9 @@ header {
   flex-shrink: 0;
 }
 #config-wrap .btn-row {
-  padding-left: 16px;
-  padding-right: 3px;
+  /* Align with device cards inside #device-list (config-wrap padding + device-list padding). */
+  padding-left: 32px;
+  padding-right: 19px;
   padding-bottom: 20px;
   padding-top: 16px;
   justify-content: flex-start;
@@ -194,6 +195,7 @@ header {
   font-family: "Cascadia Code", "Consolas", monospace;
   font-size: 12px;
   line-height: 1.45;
+  color: #b8b8c8;
   padding: 0;
   background: transparent;
   border: none;
@@ -316,7 +318,7 @@ header {
   border-radius: 999px;
   border: 1px solid #3f3f4e;
   background: #0f0f14;
-  color: #e8e8f0;
+  color: #b8b8c8;
   font-weight: 600;
   line-height: 1;
 }
@@ -493,7 +495,7 @@ header {
   pointer-events: none;
   transition: height 0.05s ease-out;
 }
-.device-actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-top: 4px; }
+.device-actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-top: 16px; }
 .device-actions .btn[disabled] { opacity: 0.55; cursor: default; }
 .device-actions .btn-sm {
   /* Make Confirm/Cancel match pill sizing. */
@@ -534,7 +536,7 @@ header {
   line-height: 1;
   border: 1px solid #3f3f4e;
   background: #2a2a36;
-  color: #e8e8f0;
+  color: #b8b8c8;
 }
 .device-actions .btn-danger:hover {
   background: #3f3f4e;
