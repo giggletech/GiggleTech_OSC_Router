@@ -66,30 +66,6 @@ mod yaml_validator;
 use yaml_validator::{validate_yaml, Config};
 
 
-fn log_to_file(message: &str) {
-    crate::log_ui::app_log(message);
-}
-
-// Banner
-fn banner_txt() {
-    // https://fsymbols.com/generators/carty/
-    for line in &[
-        // "",
-        // "  ██████  ██  ██████   ██████  ██      ███████     ████████ ███████  ██████ ██   ██ ",
-        // " ██       ██ ██       ██       ██      ██             ██    ██      ██      ██   ██ ",
-        // " ██   ███ ██ ██   ███ ██   ███ ██      █████          ██    █████   ██      ███████ ",
-        // " ██    ██ ██ ██    ██ ██    ██ ██      ██             ██    ██      ██      ██   ██ ",
-        // "  ██████  ██  ██████   ██████  ███████ ███████        ██    ███████  ██████ ██   ██ ",
-        // "",
-        // " █▀█ █▀ █▀▀   █▀█ █▀█ █ █ ▀█▀ █▀▀ █▀█",
-        // " █▄█ ▄█ █▄▄   █▀▄ █▄█ █▄█  █  ██▄ █▀▄",
-        // "",
-        " v1.4.0",
-    ] {
-        crate::log_ui::log_line(line);
-    }
-}
-
 #[derive(Clone, Debug)]
 pub(crate) struct DeviceConfig {
     pub device_uri: Arc<String>,
@@ -180,14 +156,9 @@ fn load_config_internal(verbose: bool) -> Result<(GlobalConfig, Vec<DeviceConfig
         Ok(f) => f
     };
 
-    match validate_yaml("./config.yml") {
-        Ok(_) => {
-            if verbose {
-                crate::log_ui::log_line("Configuration file is valid.");
-            }
-        }
-        Err(e) => return Err(format!("Configuration File Error: {}", e)),
-    };
+    if let Err(e) = validate_yaml("./config.yml") {
+        return Err(format!("Configuration File Error: {}", e));
+    }
 
     let mut config_data = String::new();
     match config_file.read_to_string(&mut config_data) {
@@ -242,33 +213,11 @@ fn load_config_internal(verbose: bool) -> Result<(GlobalConfig, Vec<DeviceConfig
     }
 
     if verbose {
-        crate::log_ui::log_line("");
-        banner_txt();
-        crate::log_ui::log_line("");
-        crate::log_ui::log_line(" Device Maps");
-        crate::log_ui::log_line("");
-        for (i, device) in device_configs.iter().enumerate() {
-            crate::log_ui::log_line(&format!("  Device {i}"));
-            crate::log_ui::log_line(&format!(
-                "   {} => {}",
-                device.proximity_parameter.trim_start_matches("/avatar/parameters/"),
-                device.device_uri
-            ));
-            crate::log_ui::log_line("   Vibration Configuration");
-            crate::log_ui::log_line(&format!("    Startup TX Speed: {:.0}%", device.start_tx));
-            crate::log_ui::log_line(&format!("    Min Speed: {:.0}%", device.min_speed * 100.0));
-            crate::log_ui::log_line(&format!("    Power: {:.0}%", device.max_speed * 100.0));
-            crate::log_ui::log_line(&format!("    Scale Factor: {:.0}%", device.speed_scale * 100.0));
-            crate::log_ui::log_line(&format!("    Advanced Mode: {}", device.use_velocity_control));
-            crate::log_ui::log_line("");
-        }
-
-        crate::log_ui::log_line(&format!(
-            "\n Listening for OSC on port: {}",
-            global_config.port_rx
+        crate::log_ui::status("GiggleTech OSC Router v1.4.0");
+        crate::log_ui::status(&format!(
+            "Loaded {} device(s) from config.yml",
+            device_configs.len()
         ));
-        crate::log_ui::log_line(&format!(" Timeout: {}s", global_config.timeout));
-        crate::log_ui::log_line("\nWaiting for pats...");
     }
 
     Ok((global_config, device_configs))
@@ -279,26 +228,23 @@ fn load_config_internal(verbose: bool) -> Result<(GlobalConfig, Vec<DeviceConfig
 fn parse_global_config(setup: YamlHashWrapper) -> GlobalConfig {
     // Retrieve the value of `port_rx` from the YAML file with fallback
     let port_rx_str = setup.get_str("port_rx").unwrap_or_else(|| {
-        crate::log_ui::log_line("Warning: port_rx not found in config, using default port 9001");
+        crate::log_ui::status("Warning: port_rx not found in config, using default port 9001");
         "9001".to_string()
     });
 
     // Check if `port_rx` is "OSCQuery" or a numeric port
     let port_rx: Arc<String> = if port_rx_str == "OSCQuery" {
         // If it's "OSCQuery", try to use the port from the OSCQuery server
-        crate::log_ui::log_line("\nAttempting to use OSCQuery...");
+        crate::log_ui::status("Using OSCQuery...");
         match std::panic::catch_unwind(|| {
             oscq_giggletech::initialize_and_get_udp_port()
         }) {
             Ok(udp_port) => {
-                crate::log_ui::log_line(&format!(
-                    "OSCQuery initialized successfully. UDP port: {}",
-                    udp_port
-                ));
+                crate::log_ui::status(&format!("OSCQuery ready (UDP port {})", udp_port));
                 Arc::new(udp_port.to_string())
             }
             Err(_) => {
-                crate::log_ui::log_line(
+                crate::log_ui::status(
                     "OSCQuery initialization failed. Falling back to default port 9001.",
                 );
                 Arc::new("9001".to_string())
@@ -309,8 +255,8 @@ fn parse_global_config(setup: YamlHashWrapper) -> GlobalConfig {
         match u16::from_str_radix(&port_rx_str, 10) {
             Ok(_) => Arc::new(port_rx_str),
             Err(_) => {
-                crate::log_ui::log_line(&format!(
-                    "Warning: Invalid port number '{}', using default port 9001",
+                crate::log_ui::status(&format!(
+                    "Warning: invalid port '{}', using default port 9001",
                     port_rx_str
                 ));
                 Arc::new("9001".to_string())
@@ -372,7 +318,7 @@ fn parse_global_config(setup: YamlHashWrapper) -> GlobalConfig {
 fn parse_device_config(
     device_data: YamlHashWrapper,
     global_config: &GlobalConfig,
-    verbose: bool,
+    _verbose: bool,
 ) -> Result<DeviceConfig, String> {
     let ip = match device_data.get_str("ip") {
         Some(ip_str) => {
@@ -408,13 +354,6 @@ fn parse_device_config(
     let outer_proximity = device_data.get_f64("outer_proximity").map(|x| x as f32).unwrap_or(global_config.default_outer_proximity);
     let inner_proximity = device_data.get_f64("inner_proximity").map(|x| x as f32).unwrap_or(global_config.default_inner_proximity);
     let velocity_scalar = device_data.get_f64("velocity_scalar").map(|x| x as f32).unwrap_or(global_config.default_velocity_scalar);
-
-    if verbose {
-        log_to_file(&format!(
-            "Device IP: {}\nMin Speed: {:.0}%\nPower: {:.0}%\nSpeed Scale: {:.0}%\nProximity Parameter: {}\nVelocity Control: {}\nOuter Proximity: {:.2}\nInner Proximity: {:.2}\n",
-            ip, min_speed * 100.0, max_speed * 100.0, speed_scale * 100.0, proximity_parameter, use_velocity_control, outer_proximity, inner_proximity
-        ));
-    }
 
     Ok(DeviceConfig {
         device_uri: ip,

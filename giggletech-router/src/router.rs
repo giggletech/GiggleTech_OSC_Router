@@ -57,18 +57,11 @@ fn send_restart_signal() {
 pub async fn run_giggletech_loop(restart_rx: Receiver<()>) -> Result<()> {
   giggletech_osc::start_connection_manager().await;
 
-  task::spawn(async {
-    loop {
-      task::sleep(std::time::Duration::from_secs(300)).await;
-      giggletech_osc::print_connection_stats().await;
-    }
-  });
-
   loop {
     match run_giggletech_session(&restart_rx).await {
       Ok(true) => {
         if !QUIET_RESTART.load(Ordering::SeqCst) {
-          log_ui::app_log("Restarting router with updated configuration...");
+          log_ui::status("Restarting with updated configuration...");
         }
         while restart_rx.try_recv().is_ok() {}
       }
@@ -90,12 +83,12 @@ async fn run_giggletech_session(restart_rx: &Receiver<()>) -> Result<bool> {
   let quiet_reload = QUIET_RESTART.swap(false, Ordering::SeqCst);
 
   if !quiet_reload {
-    log_ui::app_log("Loading configuration...");
+    log_ui::status("Loading configuration...");
   }
 
   if !Path::new("config.yml").exists() {
     let error_msg = "Configuration file (config.yml) not found.";
-    log_ui::app_log(error_msg);
+    log_ui::status(error_msg);
     return Err(async_osc::Error::Io(std::io::Error::new(
       std::io::ErrorKind::NotFound,
       error_msg,
@@ -110,7 +103,7 @@ async fn run_giggletech_session(restart_rx: &Receiver<()>) -> Result<bool> {
     Ok(config) => config,
     Err(e) => {
       let error_msg = format!("Config file error: {}", e);
-      log_ui::app_log(&error_msg);
+      log_ui::status(&error_msg);
       return Err(async_osc::Error::Io(std::io::Error::new(
         std::io::ErrorKind::InvalidData,
         error_msg,
@@ -121,7 +114,6 @@ async fn run_giggletech_session(restart_rx: &Receiver<()>) -> Result<bool> {
   let timeout = global_config.timeout;
 
   if !quiet_reload {
-    log_ui::app_log("Configuration loaded successfully. Setting up sockets and timeouts.");
     crate::test_device_connectivity(&devices).await;
   }
 
@@ -132,13 +124,16 @@ async fn run_giggletech_session(restart_rx: &Receiver<()>) -> Result<bool> {
     let alive = session_alive.clone();
     task::spawn(async move {
       if let Err(e) = osc_timeout::osc_timeout(&device_ip, timeout, alive).await {
-        log_ui::app_log(&format!("Timeout error for device {}: {}", device_ip, e));
+        log_ui::status(&format!("Timeout error for device {}: {}", device_ip, e));
       }
     });
   }
 
   if !quiet_reload {
-    log_ui::app_log("Listening for OSC Packets...");
+    log_ui::status(&format!(
+      "Listening for OSC on port {} (timeout {}s)",
+      global_config.port_rx, timeout
+    ));
   }
 
   let mut should_restart = false;
@@ -189,7 +184,7 @@ async fn process_osc_packet(
 
       if address == "/avatar/change" {
         if let Some(OscType::String(avatar_id)) = osc_value.first() {
-          log_ui::app_log(&format!("Avatar Changed: {}", avatar_id));
+          log_ui::status(&format!("Avatar changed: {}", avatar_id));
         }
         return Ok(true);
       }

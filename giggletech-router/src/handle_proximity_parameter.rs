@@ -63,9 +63,14 @@ pub(crate) async fn handle_proximity_parameter(
     let last_val = device_last_values.insert(device_ip.to_string(), value).unwrap_or(0.0);
 
     log_ui::notify_proximity(device.proximity_parameter.as_str(), value);
+    let pat_graph = if value > 0.0 {
+        data_processing::proximity_graph(value)
+    } else {
+        String::new()
+    };
+    log_ui::notify_pat_bar(device.proximity_parameter.as_str(), &pat_graph);
 
     if value == 0.0 {
-        crate::log_ui::ui_line("Stopping pats...");
         stop_pats::stop_device_with_terminator(device_ip.as_str(), running.clone()).await?;
     } else {
         if !device.use_velocity_control {

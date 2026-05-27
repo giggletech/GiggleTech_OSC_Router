@@ -22,17 +22,14 @@ mod terminator;
 #[cfg(windows)]
 mod tray;
 
-fn log_to_file(message: &str) {
-    log_ui::app_log(message);
-}
-
 fn main() {
     std::panic::set_hook(Box::new(|panic_info| {
         let message = format!("Application panicked: {}", panic_info);
-        log_to_file(&message);
+        log_ui::status(&message);
+        eprintln!("{}", message);
     }));
 
-    log_to_file("Starting GiggleTech OSC Router...");
+    log_ui::status("Starting GiggleTech OSC Router...");
 
     let no_tray = std::env::args().any(|a| a == "--no-tray");
 
@@ -63,7 +60,7 @@ fn run_with_tray() {
             let restart_rx = router::init_restart_channel();
             if let Err(e) = router::run_giggletech_loop(restart_rx).await {
                 let error_message = format!("Application encountered an error: {}", e);
-                log_to_file(&error_message);
+                log_ui::status(&error_message);
             }
         });
     });
@@ -78,7 +75,7 @@ fn run_console_mode() {
         let restart_rx = router::init_restart_channel();
         if let Err(e) = router::run_giggletech_loop(restart_rx).await {
             let error_message = format!("Application encountered an error: {}", e);
-            log_to_file(&error_message);
+            log_ui::status(&error_message);
             eprintln!("{}", error_message);
         }
 
@@ -89,29 +86,12 @@ fn run_console_mode() {
 }
 
 pub(crate) async fn test_device_connectivity(devices: &[config::DeviceConfig]) {
-    log_ui::log_line("\n=== Testing Device Connectivity ===");
-    log_to_file("Starting device connectivity test...");
+    log_ui::status("Checking device connectivity...");
 
     for (i, device) in devices.iter().enumerate() {
         let device_ip = &device.device_uri;
-
-        log_ui::log_line(&format!("  Testing Device {}: {}", i + 1, device_ip));
-
         let is_reachable = device_ping::ping_host(device_ip).await;
-
-        let status = if is_reachable { "ONLINE" } else { "OFFLINE" };
-        let message = format!("Device {}: {} - {}", i + 1, device_ip, status);
-
-        log_ui::log_line(&format!("  Result: {}", message));
-        if is_reachable {
-            log_ui::log_line(&format!("    ✓ Ping successful for {}", device_ip));
-        } else {
-            log_ui::log_line(&format!("    ✗ Ping failed for {}", device_ip));
-        }
-        log_to_file(&message);
-        log_ui::log_line("");
+        let label = if is_reachable { "online" } else { "offline" };
+        log_ui::status(&format!("Device {} ({}): {}", i + 1, device_ip, label));
     }
-
-    log_ui::log_line("=== Connectivity Test Complete ===\n");
-    log_to_file("Device connectivity test completed.");
 }

@@ -116,7 +116,7 @@ fn command_worker(
       });
 
       if let Err(e) = result {
-        log_ui::app_log(&format!("Device test error ({}): {}", ip, e));
+        log_ui::status(&format!("Device test error ({}): {}", ip, e));
       }
 
       if matches!(cmd, TestCommand::Stop) {

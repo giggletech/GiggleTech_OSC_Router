@@ -63,15 +63,8 @@ pub fn proximity_graph(proximity_signal: f32) -> String {
     graph
 }
 
-pub fn print_speed_limit(headpat_max_rx: f32) {
-    let headpat_max_rx_print = (headpat_max_rx * 100.0).round() as i32;
-    let max_meter = match headpat_max_rx_print {
-        91..=i32::MAX => "!!! SO MUCH !!!",
-        76..=90 => "!! ",
-        51..=75 => "!  ",
-        _ => "   ",
-    };
-    crate::log_ui::ui_line(&format!("Speed Limit: {}% {}", headpat_max_rx_print, max_meter));
+pub fn print_speed_limit(_headpat_max_rx: f32) {
+    // Speed limit is applied in the router; live feedback uses motor bars only.
 }
 
 // Pat Processor

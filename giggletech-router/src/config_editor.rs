@@ -162,7 +162,7 @@ pub fn save_editor_state(state: &EditorState, quiet: bool) -> Result<(), String>
   if quiet {
     crate::router::request_restart_quiet();
   } else {
-    log_ui::app_log("Configuration saved. Reloading router...");
+    log_ui::status("Configuration saved. Reloading router...");
     crate::router::request_restart();
   }
   Ok(())

@@ -1,201 +1,111 @@
-//! Shared log buffer for the output window and giggletech_log.txt.
+//! In-memory status lines for the output window (live console, not a log file).
 
-
-
-use std::fs::OpenOptions;
-
-use std::io::Write;
-
-use std::sync::atomic::{AtomicBool, Ordering};
-
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
-
-
-
-use chrono::Local;
 
 use once_cell::sync::OnceCell;
 
-
-
-// In-memory tail for the output window; UI shows only what fits in the card.
-
 const MAX_LINES: usize = 100;
 
-
-
-static LOG_LINES: once_cell::sync::Lazy<Arc<Mutex<Vec<String>>>> =
-
+static STATUS_LINES: once_cell::sync::Lazy<Arc<Mutex<Vec<String>>>> =
   once_cell::sync::Lazy::new(|| Arc::new(Mutex::new(Vec::new())));
 
-
+/// Incremented when the ring buffer drops lines from the front (UI must full-resync).
+static BUFFER_EPOCH: AtomicUsize = AtomicUsize::new(0);
 
 static CONSOLE_MIRROR: AtomicBool = AtomicBool::new(true);
 
-
-
-static LOG_NOTIFY: OnceCell<Box<dyn Fn() + Send + Sync>> = OnceCell::new();
-
-
+static STATUS_NOTIFY: OnceCell<Box<dyn Fn() + Send + Sync>> = OnceCell::new();
 
 static PROXIMITY_NOTIFY: OnceCell<Box<dyn Fn(&str, f32) + Send + Sync>> = OnceCell::new();
 
+static PAT_BAR_NOTIFY: OnceCell<Box<dyn Fn(&str, &str) + Send + Sync>> = OnceCell::new();
 
-
-/// When true, log lines are also printed to stdout (for `--no-tray` mode).
-
+/// When true, status lines are also printed to stdout (`--no-tray` mode).
 pub fn set_console_mirror(enabled: bool) {
-
   CONSOLE_MIRROR.store(enabled, Ordering::Relaxed);
-
 }
 
-
-
-/// Register a callback invoked when new log lines are written (e.g. to refresh the UI).
-
-pub fn set_log_notify(notify: impl Fn() + Send + Sync + 'static) {
-
-  let _ = LOG_NOTIFY.set(Box::new(notify));
-
+/// Register a callback when new status lines are written (refreshes the output window).
+pub fn set_status_notify(notify: impl Fn() + Send + Sync + 'static) {
+  let _ = STATUS_NOTIFY.set(Box::new(notify));
 }
 
-
-
-/// Register a callback invoked when live proximity changes (drives motor bars directly).
-
+/// Register a callback for live proximity (motor bars in the output window).
 pub fn set_proximity_notify(notify: impl Fn(&str, f32) + Send + Sync + 'static) {
-
   let _ = PROXIMITY_NOTIFY.set(Box::new(notify));
-
 }
-
-
-
-/// Push a proximity value to the output window motor bar for `parameter`.
 
 pub fn notify_proximity(parameter: &str, value: f32) {
-
   if let Some(notify) = PROXIMITY_NOTIFY.get() {
-
     let key = parameter.trim_start_matches("/avatar/parameters/");
-
     notify(key, value);
-
   }
-
 }
 
-
-
-/// Status / errors: shown in the output window and appended to `giggletech_log.txt`.
-
-pub fn app_log(message: &str) {
-
-  let now = Local::now();
-
-  let line = format!("[{}] {}", now.format("%Y-%m-%d %H:%M:%S"), message);
-
-  push_line(&line, true);
-
+/// Register a callback for live pat bars (`---->`), separate from the status console.
+pub fn set_pat_bar_notify(notify: impl Fn(&str, &str) + Send + Sync + 'static) {
+  let _ = PAT_BAR_NOTIFY.set(Box::new(notify));
 }
 
-
-
-/// Live feedback (pat bars, startup banner): output window only, not written to the log file.
-
-pub fn ui_line(message: &str) {
-
-  push_line(message, false);
-
+/// Update the ASCII pat bar for `parameter` (empty string clears it).
+pub fn notify_pat_bar(parameter: &str, graph: &str) {
+  if let Some(notify) = PAT_BAR_NOTIFY.get() {
+    let key = parameter.trim_start_matches("/avatar/parameters/");
+    notify(key, graph);
+  }
 }
 
-
-
-/// Alias for [`ui_line`] (display-only).
-
-pub fn log_line(message: &str) {
-
-  ui_line(message);
-
+/// Append a line to the live status console (and optional stdout mirror).
+pub fn status(message: &str) {
+  push_line(message);
 }
 
+pub fn buffer_epoch() -> usize {
+  BUFFER_EPOCH.load(Ordering::Acquire)
+}
 
+pub fn line_count() -> usize {
+  STATUS_LINES
+    .lock()
+    .map(|lines| lines.len())
+    .unwrap_or(0)
+}
 
-fn push_line(line: &str, persist_to_file: bool) {
-  if let Ok(mut lines) = LOG_LINES.lock() {
+/// Lines appended since `from_index` (before the latest push), and the new line count.
+pub fn lines_since(from_index: usize) -> (Vec<String>, usize) {
+  STATUS_LINES
+    .lock()
+    .map(|lines| {
+      let len = lines.len();
+      let start = from_index.min(len);
+      (lines[start..].to_vec(), len)
+    })
+    .unwrap_or_default()
+}
+
+pub fn snapshot() -> Vec<String> {
+  STATUS_LINES
+    .lock()
+    .map(|lines| lines.clone())
+    .unwrap_or_default()
+}
+
+fn push_line(line: &str) {
+  if let Ok(mut lines) = STATUS_LINES.lock() {
     lines.push(line.to_string());
     if lines.len() > MAX_LINES {
       let excess = lines.len() - MAX_LINES;
       lines.drain(0..excess);
+      BUFFER_EPOCH.fetch_add(1, Ordering::Release);
     }
   }
 
-  if persist_to_file {
-    write_to_file(line);
+  if CONSOLE_MIRROR.load(Ordering::Relaxed) {
+    println!("{}", line);
   }
 
-  maybe_println(line);
-
-  if let Some(notify) = LOG_NOTIFY.get() {
+  if let Some(notify) = STATUS_NOTIFY.get() {
     notify();
   }
 }
-
-
-
-fn write_to_file(line: &str) {
-
-  match OpenOptions::new()
-
-    .create(true)
-
-    .append(true)
-
-    .open("giggletech_log.txt")
-
-  {
-
-    Ok(mut file) => {
-
-      if let Err(e) = writeln!(file, "{}", line) {
-
-        eprintln!("Failed to write to log file: {}", e);
-
-      }
-
-    }
-
-    Err(e) => eprintln!("Failed to open log file: {}", e),
-
-  }
-
-}
-
-
-
-fn maybe_println(line: &str) {
-
-  if CONSOLE_MIRROR.load(Ordering::Relaxed) {
-
-    println!("{}", line);
-
-  }
-
-}
-
-
-
-pub fn snapshot() -> Vec<String> {
-
-  LOG_LINES
-
-    .lock()
-
-    .map(|lines| lines.clone())
-
-    .unwrap_or_default()
-
-}
-
-

@@ -46,7 +46,5 @@ pub async fn stop_pats(device: DeviceConfig) -> Result<()> {
     let device_ip = device.device_uri.clone();
     let running = Arc::new(AtomicBool::new(false));
 
-    crate::log_ui::log_line("Stopping pats...");
-
     stop_device_with_terminator(&device_ip, running).await
 }

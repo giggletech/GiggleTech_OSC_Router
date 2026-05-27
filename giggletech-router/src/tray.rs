@@ -5,6 +5,7 @@ use std::io;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
+use std::time::{Duration, Instant};
 
 use once_cell::sync::Lazy;
 
@@ -41,29 +42,48 @@ const OUTPUT_WINDOW_MIN_HEIGHT: f64 = 480.0;
 
 static PENDING_MOTOR_BARS: Lazy<Mutex<HashMap<String, f32>>> =
   Lazy::new(|| Mutex::new(HashMap::new()));
-static MOTOR_BAR_FLUSH_PENDING: AtomicBool = AtomicBool::new(false);
+static PENDING_PAT_BARS: Lazy<Mutex<HashMap<String, String>>> =
+  Lazy::new(|| Mutex::new(HashMap::new()));
+static LIVE_UI_FLUSH_PENDING: AtomicBool = AtomicBool::new(false);
 
-fn queue_motor_bar(param: String, value: f32, proxy: &EventLoopProxy<UserEvent>) {
-  PENDING_MOTOR_BARS.lock().unwrap().insert(param, value);
-  if MOTOR_BAR_FLUSH_PENDING
+fn queue_live_ui_flush(proxy: &EventLoopProxy<UserEvent>) {
+  if LIVE_UI_FLUSH_PENDING
     .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
     .is_ok()
   {
-    let _ = proxy.send_event(UserEvent::MotorBarFlush);
+    let _ = proxy.send_event(UserEvent::LiveUiFlush);
   }
 }
 
-fn flush_motor_bars(webview: &wry::WebView) {
+fn queue_motor_bar(param: String, value: f32, proxy: &EventLoopProxy<UserEvent>) {
+  PENDING_MOTOR_BARS.lock().unwrap().insert(param, value);
+  queue_live_ui_flush(proxy);
+}
+
+fn queue_pat_bar(param: String, graph: String, proxy: &EventLoopProxy<UserEvent>) {
+  PENDING_PAT_BARS.lock().unwrap().insert(param, graph);
+  queue_live_ui_flush(proxy);
+}
+
+fn flush_live_ui(webview: &wry::WebView) {
   loop {
-    MOTOR_BAR_FLUSH_PENDING.store(false, Ordering::Release);
-    let batch: HashMap<String, f32> = PENDING_MOTOR_BARS.lock().unwrap().drain().collect();
-    if batch.is_empty() {
+    LIVE_UI_FLUSH_PENDING.store(false, Ordering::Release);
+    let motor_batch: HashMap<String, f32> = PENDING_MOTOR_BARS.lock().unwrap().drain().collect();
+    let pat_batch: HashMap<String, String> = PENDING_PAT_BARS.lock().unwrap().drain().collect();
+    if motor_batch.is_empty() && pat_batch.is_empty() {
       break;
     }
-    if let Ok(json) = serde_json::to_string(&batch) {
-      let _ = webview.evaluate_script(&format!("applyMotorBars({});", json));
+    if !motor_batch.is_empty() {
+      if let Ok(json) = serde_json::to_string(&motor_batch) {
+        let _ = webview.evaluate_script(&format!("applyMotorBars({});", json));
+      }
     }
-    if !MOTOR_BAR_FLUSH_PENDING.load(Ordering::Acquire) {
+    if !pat_batch.is_empty() {
+      if let Ok(json) = serde_json::to_string(&pat_batch) {
+        let _ = webview.evaluate_script(&format!("applyPatBars({});", json));
+      }
+    }
+    if !LIVE_UI_FLUSH_PENDING.load(Ordering::Acquire) {
       break;
     }
   }
@@ -209,6 +229,8 @@ header {
   padding-bottom: 16px;
 }
 #log-box {
+  display: flex;
+  flex-direction: column;
   width: 100%;
   height: 100%;
   background: #16161e;
@@ -218,14 +240,29 @@ header {
   box-sizing: border-box;
   overflow: hidden;
 }
-
+#pat-bars {
+  flex-shrink: 0;
+  font-family: "Cascadia Code", "Consolas", monospace;
+  font-size: 13px;
+  line-height: 1.5;
+  color: #e879f9;
+  min-height: 1.5em;
+  white-space: pre;
+  overflow: hidden;
+  margin-bottom: 8px;
+}
+#pat-bars:empty {
+  display: none;
+  margin-bottom: 0;
+}
 #log {
   display: block;
+  flex: 1 1 0;
+  min-height: 0;
   box-sizing: border-box;
   width: 100%;
   max-width: 100%;
   margin: 0;
-  min-height: 0;
   overflow: hidden;
   font-family: "Cascadia Code", "Consolas", monospace;
   font-size: 12px;
@@ -619,6 +656,7 @@ header {
     <section id="log-section">
       <div id="log-scroll">
         <div id="log-box">
+          <pre id="pat-bars" aria-live="polite"></pre>
           <pre id="log"></pre>
         </div>
       </div>
@@ -1054,6 +1092,8 @@ window.onConfigError = function(msg) {
   setConfigStatus(msg, true);
 };
 
+const patBarByParam = {};
+
 function applyMotorBars(updates) {
   if (activeTestDrag) return;
   for (const param in updates) {
@@ -1067,26 +1107,68 @@ function applyMotorBars(updates) {
   }
 }
 
-let lastLogLines = [];
-const LOG_LINE_PX = 12 * 1.45;
+function applyPatBars(updates) {
+  for (const param in updates) {
+    const paramKey = (param || '').trim();
+    if (!paramKey) continue;
+    const graph = updates[param];
+    if (graph) patBarByParam[paramKey] = graph;
+    else delete patBarByParam[paramKey];
+  }
+  renderPatBars();
+}
 
-function logViewportLines() {
+function renderPatBars() {
+  const el = document.getElementById('pat-bars');
+  if (!el) return;
+  const lines = [];
+  const seen = new Set();
+  editorDevices.forEach((d, i) => {
+    const paramKey = (d.proximity_parameter || '').trim();
+    if (!paramKey || seen.has(paramKey)) return;
+    const graph = patBarByParam[paramKey];
+    if (!graph) return;
+    seen.add(paramKey);
+    const label = (d.name || paramKey || ('Device ' + (i + 1))).trim();
+    lines.push(label + ': |' + graph);
+  });
+  Object.keys(patBarByParam).sort().forEach((paramKey) => {
+    if (seen.has(paramKey)) return;
+    lines.push(paramKey + ': |' + patBarByParam[paramKey]);
+  });
+  el.textContent = lines.join('\n');
+}
+
+let lastStatusLines = [];
+const STATUS_LINE_PX = 12 * 1.45;
+const STATUS_MAX_LINES = 100;
+
+function statusViewportLines() {
   const box = document.getElementById('log-box');
   if (!box) return 40;
   const pad = 20;
-  return Math.max(4, Math.floor((box.clientHeight - pad) / LOG_LINE_PX));
+  return Math.max(4, Math.floor((box.clientHeight - pad) / STATUS_LINE_PX));
 }
 
-function renderLogs(lines) {
+function renderStatus(lines) {
   const el = document.getElementById('log');
   if (!el) return;
-  const tail = lines.slice(-logViewportLines());
+  const tail = lines.slice(-statusViewportLines());
   el.textContent = tail.join('\n');
 }
 
-function setLogs(lines) {
-  lastLogLines = lines.slice();
-  renderLogs(lastLogLines);
+function setStatusLines(lines) {
+  lastStatusLines = lines.slice(-STATUS_MAX_LINES);
+  renderStatus(lastStatusLines);
+}
+
+function appendStatusLines(lines) {
+  if (!lines || !lines.length) return;
+  lastStatusLines = lastStatusLines.concat(lines);
+  if (lastStatusLines.length > STATUS_MAX_LINES) {
+    lastStatusLines = lastStatusLines.slice(-STATUS_MAX_LINES);
+  }
+  renderStatus(lastStatusLines);
 }
 
 function setupPaneScroll(wrapId, scrollId) {
@@ -1107,7 +1189,7 @@ setupTestSliderSafety();
 const logBox = document.getElementById('log-box');
 if (logBox) {
   new ResizeObserver(() => {
-    if (lastLogLines.length) renderLogs(lastLogLines);
+    if (lastStatusLines.length) renderStatus(lastStatusLines);
   }).observe(logBox);
 }
 const configScroll = document.getElementById('config-scroll');
@@ -1143,8 +1225,8 @@ fn output_html() -> String {
 enum UserEvent {
   TrayIconEvent(tray_icon::TrayIconEvent),
   MenuEvent(tray_icon::menu::MenuEvent),
-  LogUpdated,
-  MotorBarFlush,
+  StatusUpdated,
+  LiveUiFlush,
   ConfigIpc(String),
   PingResults(String),
 }
@@ -1159,16 +1241,24 @@ struct OutputWindow {
   webview: wry::WebView,
 }
 
+const STATUS_FLUSH_INTERVAL: Duration = Duration::from_millis(50);
+
 struct UiState {
   output: Option<OutputWindow>,
-  logs_synced: usize,
+  status_synced: usize,
+  status_epoch: usize,
+  status_pending: bool,
+  last_status_flush: Option<Instant>,
 }
 
 impl UiState {
   fn new() -> Self {
     Self {
       output: None,
-      logs_synced: 0,
+      status_synced: 0,
+      status_epoch: log_ui::buffer_epoch(),
+      status_pending: false,
+      last_status_flush: None,
     }
   }
 
@@ -1199,8 +1289,10 @@ impl UiState {
       .build(&window)
       .expect("Failed to create output webview");
 
-    self.logs_synced = 0;
-    sync_logs_to_webview(&webview, &mut self.logs_synced);
+    self.status_synced = 0;
+    self.status_epoch = log_ui::buffer_epoch();
+    self.status_pending = false;
+    sync_status_to_webview(&webview, &mut self.status_synced, &mut self.status_epoch);
 
     self.output = Some(OutputWindow { window, webview });
   }
@@ -1217,7 +1309,9 @@ impl UiState {
     if let Some(output) = &self.output {
       output.window.set_visible(true);
       output.window.set_focus();
-      sync_logs_to_webview(&output.webview, &mut self.logs_synced);
+      sync_status_to_webview(&output.webview, &mut self.status_synced, &mut self.status_epoch);
+      self.status_pending = false;
+      self.last_status_flush = Some(Instant::now());
     }
   }
 
@@ -1235,34 +1329,84 @@ impl UiState {
       .unwrap_or(false)
   }
 
-  fn on_log_updated(&mut self) {
+  fn on_status_updated(&mut self) {
     if !self.is_output_visible() {
+      self.status_pending = true;
+      return;
+    }
+    let now = Instant::now();
+    if self
+      .last_status_flush
+      .is_some_and(|t| now.duration_since(t) < STATUS_FLUSH_INTERVAL)
+    {
+      self.status_pending = true;
       return;
     }
     if let Some(output) = &self.output {
-      push_new_logs(&output.webview, &mut self.logs_synced);
+      flush_status_to_webview(
+        &output.webview,
+        &mut self.status_synced,
+        &mut self.status_epoch,
+      );
+      self.status_pending = false;
+      self.last_status_flush = Some(now);
+    }
+  }
+
+  fn flush_pending_status(&mut self) {
+    if !self.status_pending || !self.is_output_visible() {
+      return;
+    }
+    if let Some(output) = &self.output {
+      flush_status_to_webview(
+        &output.webview,
+        &mut self.status_synced,
+        &mut self.status_epoch,
+      );
+      self.status_pending = false;
+      self.last_status_flush = Some(Instant::now());
     }
   }
 
   fn close_output(&mut self) {
     self.output = None;
-    self.logs_synced = 0;
+    self.status_synced = 0;
+    self.status_epoch = log_ui::buffer_epoch();
+    self.status_pending = false;
+    self.last_status_flush = None;
   }
 }
 
-fn sync_logs_to_webview(webview: &wry::WebView, synced: &mut usize) {
+fn sync_status_to_webview(
+  webview: &wry::WebView,
+  synced: &mut usize,
+  epoch: &mut usize,
+) {
   let lines = log_ui::snapshot();
   *synced = lines.len();
+  *epoch = log_ui::buffer_epoch();
   if let Ok(json) = serde_json::to_string(&lines) {
-    let _ = webview.evaluate_script(&format!("setLogs({});", json));
+    let _ = webview.evaluate_script(&format!("setStatusLines({});", json));
   }
 }
 
-fn push_new_logs(webview: &wry::WebView, synced: &mut usize) {
-  let lines = log_ui::snapshot();
-  *synced = lines.len();
-  if let Ok(json) = serde_json::to_string(&lines) {
-    let _ = webview.evaluate_script(&format!("setLogs({});", json));
+fn flush_status_to_webview(
+  webview: &wry::WebView,
+  synced: &mut usize,
+  epoch: &mut usize,
+) {
+  let current_epoch = log_ui::buffer_epoch();
+  if current_epoch != *epoch {
+    sync_status_to_webview(webview, synced, epoch);
+    return;
+  }
+  let (new_lines, len) = log_ui::lines_since(*synced);
+  *synced = len;
+  if new_lines.is_empty() {
+    return;
+  }
+  if let Ok(json) = serde_json::to_string(&new_lines) {
+    let _ = webview.evaluate_script(&format!("appendStatusLines({});", json));
   }
 }
 
@@ -1323,13 +1467,18 @@ pub fn run() {
   let event_proxy = event_loop.create_proxy();
   let ipc_proxy = event_loop.create_proxy();
 
-  log_ui::set_log_notify(move || {
-    let _ = event_proxy.send_event(UserEvent::LogUpdated);
+  log_ui::set_status_notify(move || {
+    let _ = event_proxy.send_event(UserEvent::StatusUpdated);
   });
 
   let prox_proxy = event_loop.create_proxy();
   log_ui::set_proximity_notify(move |param, value| {
     queue_motor_bar(param.to_string(), value, &prox_proxy);
+  });
+
+  let pat_proxy = event_loop.create_proxy();
+  log_ui::set_pat_bar_notify(move |param, graph| {
+    queue_pat_bar(param.to_string(), graph.to_string(), &pat_proxy);
   });
 
   let proxy = event_loop.create_proxy();
@@ -1385,14 +1534,18 @@ pub fn run() {
         ui_state.show_output(event_loop, &ipc_proxy);
       }
 
-      Event::UserEvent(UserEvent::LogUpdated) => {
-        ui_state.on_log_updated();
+      Event::UserEvent(UserEvent::StatusUpdated) => {
+        ui_state.on_status_updated();
       }
 
-      Event::UserEvent(UserEvent::MotorBarFlush) => {
+      Event::MainEventsCleared => {
+        ui_state.flush_pending_status();
+      }
+
+      Event::UserEvent(UserEvent::LiveUiFlush) => {
         if ui_state.is_output_visible() {
           if let Some(output) = &ui_state.output {
-            flush_motor_bars(&output.webview);
+            flush_live_ui(&output.webview);
           }
         }
       }
@@ -1421,7 +1574,7 @@ pub fn run() {
           let new_checked = !auto_start.is_checked();
           auto_start.set_checked(new_checked);
           if let Err(e) = set_auto_start(new_checked) {
-            log_ui::app_log(&format!("Failed to update auto-start: {}", e));
+            log_ui::status(&format!("Failed to update auto-start: {}", e));
             auto_start.set_checked(!new_checked);
           }
         } else if menu_event.id == exit_item.id() {
