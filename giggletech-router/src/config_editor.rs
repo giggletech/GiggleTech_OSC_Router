@@ -107,13 +107,13 @@ pub fn save_editor_state(state: &EditorState, quiet: bool) -> Result<(), String>
   for (i, device) in state.devices.iter().enumerate() {
     if device.max_speed < min_speed {
       return Err(format!(
-        "Device {}: max speed must be at least {}%.",
+        "Device {}: power must be at least {}%.",
         i + 1,
         min_speed
       ));
     }
     if device.max_speed > 100 {
-      return Err(format!("Device {}: max speed cannot exceed 100%.", i + 1));
+      return Err(format!("Device {}: power cannot exceed 100%.", i + 1));
     }
   }
   let existing = cfg.devices.clone();

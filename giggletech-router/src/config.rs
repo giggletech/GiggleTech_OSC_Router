@@ -257,7 +257,7 @@ fn load_config_internal(verbose: bool) -> Result<(GlobalConfig, Vec<DeviceConfig
             crate::log_ui::log_line("   Vibration Configuration");
             crate::log_ui::log_line(&format!("    Startup TX Speed: {:.0}%", device.start_tx));
             crate::log_ui::log_line(&format!("    Min Speed: {:.0}%", device.min_speed * 100.0));
-            crate::log_ui::log_line(&format!("    Max Speed: {:.0}%", device.max_speed * 100.0));
+            crate::log_ui::log_line(&format!("    Power: {:.0}%", device.max_speed * 100.0));
             crate::log_ui::log_line(&format!("    Scale Factor: {:.0}%", device.speed_scale * 100.0));
             crate::log_ui::log_line(&format!("    Advanced Mode: {}", device.use_velocity_control));
             crate::log_ui::log_line("");
@@ -411,7 +411,7 @@ fn parse_device_config(
 
     if verbose {
         log_to_file(&format!(
-            "Device IP: {}\nMin Speed: {:.0}%\nMax Speed: {:.0}%\nSpeed Scale: {:.0}%\nProximity Parameter: {}\nVelocity Control: {}\nOuter Proximity: {:.2}\nInner Proximity: {:.2}\n",
+            "Device IP: {}\nMin Speed: {:.0}%\nPower: {:.0}%\nSpeed Scale: {:.0}%\nProximity Parameter: {}\nVelocity Control: {}\nOuter Proximity: {:.2}\nInner Proximity: {:.2}\n",
             ip, min_speed * 100.0, max_speed * 100.0, speed_scale * 100.0, proximity_parameter, use_velocity_control, outer_proximity, inner_proximity
         ));
     }

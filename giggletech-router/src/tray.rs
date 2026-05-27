@@ -41,6 +41,11 @@ const OUTPUT_HTML: &str = r#"<!DOCTYPE html>
 <style>
 * { box-sizing: border-box; margin: 0; padding: 0; }
 html, body { height: 100%; min-height: 100vh; overflow-x: hidden; background: #000; }
+::-webkit-scrollbar { width: 20px; height: 0; }
+::-webkit-scrollbar-track { background: #000; }
+::-webkit-scrollbar-thumb { background: #3f3f4e; border-radius: 10px; border: 2px solid #000; }
+::-webkit-scrollbar-thumb:hover { background: #5b5b70; }
+::-webkit-scrollbar-corner { background: #000; }
 body {
   background: #000;
   color: #e8e8f0;
@@ -76,7 +81,7 @@ header {
   display: flex;
   justify-content: center;
   align-items: stretch;
-  overflow: auto;
+  overflow: hidden;
   background: #000;
 }
 #main {
@@ -105,25 +110,6 @@ header {
   overscroll-behavior: contain;
   -webkit-overflow-scrolling: touch;
   direction: rtl;
-  scrollbar-width: thin;
-  scrollbar-color: #3f3f4e #000;
-}
-#config-scroll::-webkit-scrollbar {
-  width: 10px;
-}
-#config-scroll::-webkit-scrollbar-track {
-  background: #000;
-}
-#config-scroll::-webkit-scrollbar-thumb {
-  background: #3f3f4e;
-  border-radius: 5px;
-  border: 2px solid #000;
-}
-#config-scroll::-webkit-scrollbar-thumb:hover {
-  background: #5b5b70;
-}
-#config-scroll::-webkit-scrollbar-corner {
-  background: #000;
 }
 #device-list,
 #device-list .device-card {
@@ -138,52 +124,51 @@ header {
   min-height: 0;
   display: flex;
   flex-direction: column;
-  padding: 14px;
+  padding: 16px;
+  gap: 12px;
   background: #000;
   overflow: hidden;
 }
 #log-scroll {
-  flex: 1;
+  flex: 1 1 0;
   min-width: 0;
   min-height: 0;
-  overflow-x: auto;
+  overflow-x: hidden; /* remove left/right scrolling */
   overflow-y: auto;
   overscroll-behavior: contain;
   -webkit-overflow-scrolling: touch;
-  scrollbar-width: thin;
-  scrollbar-color: #3f3f4e #000;
+  background: transparent;
+  border-radius: 0;
+  border: none;
 }
-#log-scroll::-webkit-scrollbar {
-  width: 10px;
+#log-bottom-spacer {
+  flex-shrink: 0;
+  width: 100%;
 }
-#log-scroll::-webkit-scrollbar-track {
-  background: #000;
+#log-box {
+  width: calc(100% - 16px);
+  min-height: 100%;
+  background: #16161e;
+  border-radius: 10px;
+  border: 1px solid #2a2a36;
+  padding: 10px 12px;
+  box-sizing: border-box;
 }
-#log-scroll::-webkit-scrollbar-thumb {
-  background: #3f3f4e;
-  border-radius: 5px;
-  border: 2px solid #000;
-}
-#log-scroll::-webkit-scrollbar-thumb:hover {
-  background: #5b5b70;
-}
-#log-scroll::-webkit-scrollbar-corner {
-  background: #000;
-}
+
 #log {
   display: block;
   box-sizing: border-box;
   width: 100%;
   max-width: 100%;
   margin: 0;
-  min-height: 100%;
+  min-height: 0;
   font-family: "Cascadia Code", "Consolas", monospace;
   font-size: 12px;
   line-height: 1.45;
-  padding: 10px 12px 10px 4px;
-  background: #16161e;
-  border-radius: 10px;
-  border: 1px solid #2a2a36;
+  padding: 0;
+  background: transparent;
+  border: none;
+  border-radius: 0;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
   word-break: break-word;
@@ -205,6 +190,8 @@ header {
 }
 .device-card {
   width: 100%;
+  /* test-slider-col 72px − horizontal padding 20px */
+  --test-slider-track-width: calc(72px - 20px);
   background: #16161e;
   border: 1px solid #2a2a36;
   border-radius: 10px;
@@ -224,10 +211,10 @@ header {
   flex-direction: column;
   gap: 12px;
 }
-.device-card h3 { font-size: 0.9rem; color: #c4b5fd; }
+.device-card h3 { font-size: 1.8rem; color: #c4b5fd; }
 .device-name-input {
   width: 100%;
-  font-size: 0.95rem;
+  font-size: 1.9rem;
   font-weight: 600;
   font-family: inherit;
   color: #c4b5fd;
@@ -286,7 +273,7 @@ header {
   font-size: 0.8rem;
 }
 .device-card label { display: flex; flex-direction: column; gap: 4px; font-size: 0.8rem; color: #a1a1b5; }
-.device-card input {
+.device-card input:not(.device-name-input) {
   padding: 8px 10px;
   border-radius: 6px;
   border: 1px solid #3f3f4e;
@@ -294,7 +281,19 @@ header {
   color: #e8e8f0;
   font-size: 0.9rem;
 }
+.device-card input.device-name-input {
+  font-size: 1.9rem;
+  padding: 6px 0 8px;
+  background: transparent;
+  border: none;
+  border-bottom: 1px dashed #3f3f4e;
+  border-radius: 0;
+}
 .device-card input:not([type="range"]):focus { outline: none; border-color: #a855f7; }
+.device-card input.device-name-input:focus {
+  border-bottom-color: #a855f7;
+  border-bottom-style: solid;
+}
 .max-speed-block {
   width: 100%;
   display: flex;
@@ -312,7 +311,7 @@ header {
   flex: 1;
   min-width: 0;
   width: 100%;
-  height: 40px;
+  height: var(--test-slider-track-width);
   margin: 0;
   padding: 0;
   border: none;
@@ -336,9 +335,9 @@ header {
 }
 .speed-slider-row input[type="range"]::-webkit-slider-thumb {
   -webkit-appearance: none;
-  width: 40px;
-  height: 40px;
-  margin-top: -11px;
+  width: var(--test-slider-track-width);
+  height: var(--test-slider-track-width);
+  margin-top: calc((20px - var(--test-slider-track-width)) / 2);
   border-radius: 50%;
   background: linear-gradient(135deg, #e879f9, #7c3aed);
   border: 3px solid #f3e8ff;
@@ -351,8 +350,8 @@ header {
   border: 1px solid #3f3f4e;
 }
 .speed-slider-row input[type="range"]::-moz-range-thumb {
-  width: 40px;
-  height: 40px;
+  width: var(--test-slider-track-width);
+  height: var(--test-slider-track-width);
   border-radius: 50%;
   background: linear-gradient(135deg, #e879f9, #7c3aed);
   border: 3px solid #f3e8ff;
@@ -396,7 +395,8 @@ header {
 .test-slider-track {
   position: relative;
   flex: 1;
-  width: 100%;
+  width: var(--test-slider-track-width);
+  max-width: 100%;
   min-height: 0;
   background: #0f0f14;
   border: 2px solid #3f3f4e;
@@ -467,8 +467,11 @@ header {
     </div>
     <section id="log-section">
       <div id="log-scroll">
-        <pre id="log"></pre>
+        <div id="log-box">
+          <pre id="log"></pre>
+        </div>
       </div>
+      <div id="log-bottom-spacer" aria-hidden="true"></div>
     </section>
   </div>
 </div>
@@ -487,23 +490,29 @@ const SPEED_SLIDER_STEPS = 1000;
 const SPEED_SLIDER_LOW_MAX = 50;
 const SPEED_SLIDER_SPLIT = 0.75;
 
-/** Slider 0..1 → max speed %: first ¾ is 0–50, last ¼ is 50–100. */
+/** Slider 0..1 → power % (min..100): first ¾ is min–50, last ¼ is 50–100. */
 function sliderPosToSpeed(t) {
   t = Math.max(0, Math.min(1, t));
+  const min = editorSpeedDefaults.min;
+  let raw;
   if (t <= SPEED_SLIDER_SPLIT) {
-    return SPEED_SLIDER_LOW_MAX * (t / SPEED_SLIDER_SPLIT);
+    raw = SPEED_SLIDER_LOW_MAX * (t / SPEED_SLIDER_SPLIT);
+  } else {
+    const u = (t - SPEED_SLIDER_SPLIT) / (1 - SPEED_SLIDER_SPLIT);
+    raw = SPEED_SLIDER_LOW_MAX + (100 - SPEED_SLIDER_LOW_MAX) * u;
   }
-  const u = (t - SPEED_SLIDER_SPLIT) / (1 - SPEED_SLIDER_SPLIT);
-  return SPEED_SLIDER_LOW_MAX + (100 - SPEED_SLIDER_LOW_MAX) * u;
+  return Math.round(min + (raw / 100) * (100 - min));
 }
 
 function speedToSliderPos(speed) {
-  speed = Math.max(0, Math.min(100, speed));
-  if (speed <= SPEED_SLIDER_LOW_MAX) {
-    return SPEED_SLIDER_SPLIT * (speed / SPEED_SLIDER_LOW_MAX);
+  const min = editorSpeedDefaults.min;
+  speed = Math.max(min, Math.min(100, speed));
+  const raw = ((speed - min) / (100 - min)) * 100;
+  if (raw <= SPEED_SLIDER_LOW_MAX) {
+    return SPEED_SLIDER_SPLIT * (raw / SPEED_SLIDER_LOW_MAX);
   }
   return SPEED_SLIDER_SPLIT
-    + (1 - SPEED_SLIDER_SPLIT) * ((speed - SPEED_SLIDER_LOW_MAX) / (100 - SPEED_SLIDER_LOW_MAX));
+    + (1 - SPEED_SLIDER_SPLIT) * ((raw - SPEED_SLIDER_LOW_MAX) / (100 - SPEED_SLIDER_LOW_MAX));
 }
 
 function setConfigStatus(msg, isError) {
@@ -590,7 +599,7 @@ function renderDevices() {
                 oninput="editorDevices[${i}].proximity_parameter=this.value; maybeClearConfigError()">
             </label>
           </div>
-          <label class="max-speed-block">Max speed
+          <label class="max-speed-block">Power
             <div class="speed-slider-row">
               <input type="range" min="0" max="${SPEED_SLIDER_STEPS}"
                 value="${Math.round(speedToSliderPos(d.max_speed) * SPEED_SLIDER_STEPS)}"
@@ -618,6 +627,14 @@ function renderDevices() {
   `).join('');
   bindDeviceSliders();
   updatePingBadges();
+  syncLogSectionLayout();
+}
+
+function syncLogSectionLayout() {
+  const btnRow = document.querySelector('#config-wrap .btn-row');
+  const spacer = document.getElementById('log-bottom-spacer');
+  if (!btnRow || !spacer) return;
+  spacer.style.height = btnRow.offsetHeight + 'px';
 }
 
 function pingStatusLabel(st) {
@@ -803,8 +820,9 @@ function beginSliderDrag(index, trackEl, e) {
 
 function onMaxSpeedChange(index, input) {
   const t = parseInt(input.value, 10) / SPEED_SLIDER_STEPS;
-  const speed = Math.round(sliderPosToSpeed(t));
+  const speed = sliderPosToSpeed(t);
   editorDevices[index].max_speed = speed;
+  input.value = Math.round(speedToSliderPos(speed) * SPEED_SLIDER_STEPS);
   const label = document.getElementById('max-speed-val-' + index);
   if (label) label.textContent = speed + '%';
 }
@@ -847,9 +865,13 @@ function saveConfig(quiet) {
 }
 
 window.onConfigLoaded = function(state) {
-  editorDevices = state.devices || [];
   if (state.min_speed != null) editorSpeedDefaults.min = state.min_speed;
   if (state.max_speed_cap != null) editorSpeedDefaults.max = state.max_speed_cap;
+  const powerMin = editorSpeedDefaults.min;
+  editorDevices = (state.devices || []).map((d) => ({
+    ...d,
+    max_speed: Math.max(powerMin, d.max_speed ?? powerMin),
+  }));
   renderDevices();
   clearConfigStatus();
   startDevicePingLoop();
@@ -867,11 +889,50 @@ window.onConfigError = function(msg) {
   setConfigStatus(msg, true);
 };
 
+// Same format as data_processing::log_pat_line, e.g. "proximity_02 Prox:  0.45 Motor Tx: ..."
+const PROX_LOG_RE = /^(\S+)\s+Prox:\s+([\d.]+)/;
+
+function updateTestBarFromProxLog(param, proxValue) {
+  if (activeTestDrag) return;
+  const value = Math.max(0, Math.min(1, proxValue));
+  const paramKey = (param || '').trim();
+  editorDevices.forEach((d, i) => {
+    if ((d.proximity_parameter || '').trim() !== paramKey) return;
+    const track = document.querySelector('.test-slider-track[data-index="' + i + '"]');
+    if (track) setSliderVisual(track, value);
+  });
+}
+
+function applyProximityFromLogLine(line) {
+  if (!line || activeTestDrag) return;
+  if (line.includes('Stopping pats')) {
+    document.querySelectorAll('.test-slider-track').forEach((track) => setSliderVisual(track, 0));
+    return;
+  }
+  const m = line.match(PROX_LOG_RE);
+  if (!m) return;
+  updateTestBarFromProxLog(m[1], parseFloat(m[2]));
+}
+
 function setLogs(lines) {
   const el = document.getElementById('log');
   const scroll = document.getElementById('log-scroll');
   el.textContent = lines.slice().reverse().join('\n');
   if (scroll) scroll.scrollTop = 0;
+  if (!activeTestDrag && lines.length) {
+    const latest = {};
+    for (const line of lines) {
+      if (line.includes('Stopping pats')) continue;
+      const m = line.match(PROX_LOG_RE);
+      if (m) latest[m[1]] = parseFloat(m[2]);
+    }
+    editorDevices.forEach((d, i) => {
+      const key = (d.proximity_parameter || '').trim();
+      if (latest[key] === undefined) return;
+      const track = document.querySelector('.test-slider-track[data-index="' + i + '"]');
+      if (track) setSliderVisual(track, Math.max(0, Math.min(1, latest[key])));
+    });
+  }
 }
 
 function appendLog(line) {
@@ -879,6 +940,7 @@ function appendLog(line) {
   const scroll = document.getElementById('log-scroll');
   el.textContent = el.textContent ? line + '\n' + el.textContent : line;
   if (scroll) scroll.scrollTop = 0;
+  applyProximityFromLogLine(line);
 }
 
 function setupPaneScroll(wrapId, scrollId) {
@@ -897,6 +959,12 @@ function setupPaneScroll(wrapId, scrollId) {
 setupPaneScroll('config-wrap', 'config-scroll');
 setupPaneScroll('log-section', 'log-scroll');
 setupTestSliderSafety();
+window.addEventListener('resize', () => syncLogSectionLayout());
+const configBtnRow = document.querySelector('#config-wrap .btn-row');
+if (configBtnRow && typeof ResizeObserver !== 'undefined') {
+  new ResizeObserver(() => syncLogSectionLayout()).observe(configBtnRow);
+}
+requestAnimationFrame(() => syncLogSectionLayout());
 window.ipc.postMessage('load-config');
 </script>
 </body>
