@@ -71,7 +71,7 @@ pub fn print_speed_limit(headpat_max_rx: f32) {
         51..=75 => "!  ",
         _ => "   ",
     };
-    crate::log_ui::log_line(&format!("Speed Limit: {}% {}", headpat_max_rx_print, max_meter));
+    crate::log_ui::ui_line(&format!("Speed Limit: {}% {}", headpat_max_rx_print, max_meter));
 }
 
 // Pat Processor
@@ -85,44 +85,24 @@ pub fn process_pat(proximity_signal: f32, device: &DeviceConfig, prev_signal: f3
         headpat_tx
     };
 
-    log_pat_line(
-        device.proximity_parameter.as_str(),
-        proximity_signal,
-        headpat_tx,
-    );
-
     headpat_tx
 }
 
-/// Same line as live proximity routing (shown in the Output panel).
-pub fn log_pat_line(parameter: &str, proximity_signal: f32, headpat_tx: i32) {
-    let graph_str = proximity_graph(proximity_signal);
-    let proximity_fmt = format!("{:.2}", proximity_signal);
-    crate::log_ui::log_line(&format!(
-        "{} Prox: {:5} Motor Tx: {:3} |{:11}|",
-        parameter.trim_start_matches("/avatar/parameters/"),
-        proximity_fmt,
-        headpat_tx,
-        graph_str
-    ));
-}
-
 pub fn process_pat_advanced(proximity_signal: f32, prev_signal: f32, delta_t: Duration, device: &DeviceConfig) -> i32 {
-    let graph_str = proximity_graph(proximity_signal);
-    let mut headpat_tx: i32 = 0;
-    let mut vel: f32 = 0.0;
-    if proximity_signal > device.outer_proximity && proximity_signal < device.inner_proximity && prev_signal > 0.0 {
-        vel = f32::max(0.0, f32::abs(proximity_signal - prev_signal) / delta_t.as_secs_f32() * device.velocity_scalar);
-        headpat_tx = (((device.max_speed - device.min_speed) * vel * device.min_speed) * MOTOR_SPEED_SCALE * device.speed_scale * 255.0).round() as i32;
+    if proximity_signal > device.outer_proximity
+        && proximity_signal < device.inner_proximity
+        && prev_signal > 0.0
+    {
+        let vel = f32::max(
+            0.0,
+            f32::abs(proximity_signal - prev_signal) / delta_t.as_secs_f32() * device.velocity_scalar,
+        );
+        (((device.max_speed - device.min_speed) * vel * device.min_speed)
+            * MOTOR_SPEED_SCALE
+            * device.speed_scale
+            * 255.0)
+            .round() as i32
+    } else {
+        0
     }
-    crate::log_ui::log_line(&format!(
-        "{} Prox: {:5} Vel: {:5} Motor Tx: {:3} |{:11}|",
-        device.proximity_parameter.trim_start_matches("/avatar/parameters/"),
-        format!("{:.2}", proximity_signal),
-        format!("{:.2}", vel),
-        headpat_tx,
-        graph_str
-    ));
-
-    return headpat_tx;
 }

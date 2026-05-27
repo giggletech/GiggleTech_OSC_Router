@@ -1,7 +1,12 @@
 //! System tray UI, output window, auto-start toggle, exit.
 
+use std::collections::HashMap;
 use std::io;
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Mutex;
+
+use once_cell::sync::Lazy;
 
 use tao::{
   dpi::LogicalSize,
@@ -33,6 +38,36 @@ const OUTPUT_WINDOW_WIDTH: f64 = 1080.0;
 const OUTPUT_WINDOW_HEIGHT: f64 = 720.0;
 const OUTPUT_WINDOW_MIN_WIDTH: f64 = 960.0;
 const OUTPUT_WINDOW_MIN_HEIGHT: f64 = 480.0;
+
+static PENDING_MOTOR_BARS: Lazy<Mutex<HashMap<String, f32>>> =
+  Lazy::new(|| Mutex::new(HashMap::new()));
+static MOTOR_BAR_FLUSH_PENDING: AtomicBool = AtomicBool::new(false);
+
+fn queue_motor_bar(param: String, value: f32, proxy: &EventLoopProxy<UserEvent>) {
+  PENDING_MOTOR_BARS.lock().unwrap().insert(param, value);
+  if MOTOR_BAR_FLUSH_PENDING
+    .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
+    .is_ok()
+  {
+    let _ = proxy.send_event(UserEvent::MotorBarFlush);
+  }
+}
+
+fn flush_motor_bars(webview: &wry::WebView) {
+  loop {
+    MOTOR_BAR_FLUSH_PENDING.store(false, Ordering::Release);
+    let batch: HashMap<String, f32> = PENDING_MOTOR_BARS.lock().unwrap().drain().collect();
+    if batch.is_empty() {
+      break;
+    }
+    if let Ok(json) = serde_json::to_string(&batch) {
+      let _ = webview.evaluate_script(&format!("applyMotorBars({});", json));
+    }
+    if !MOTOR_BAR_FLUSH_PENDING.load(Ordering::Acquire) {
+      break;
+    }
+  }
+}
 
 const OUTPUT_HTML: &str = r#"<!DOCTYPE html>
 <html lang="en">
@@ -493,7 +528,6 @@ header {
   background: linear-gradient(to top, #7c3aed, #e879f9);
   border-radius: 0 0 8px 8px;
   pointer-events: none;
-  transition: height 0.05s ease-out;
 }
 .device-actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-top: 16px; }
 .device-actions .btn[disabled] { opacity: 0.55; cursor: default; }
@@ -932,24 +966,14 @@ function beginSliderDrag(index, trackEl, e) {
     window.ipc.postMessage('device-motor:' + JSON.stringify({ ip: ip, value: value }));
   };
 
-  const queueMotor = (motorValue) => {
-    if (drag.dragEnded || activeTestDrag !== drag) return;
-    if (drag.pendingSend !== null) cancelAnimationFrame(drag.pendingSend);
-    drag.pendingSend = requestAnimationFrame(() => {
-      drag.pendingSend = null;
-      if (drag.dragEnded || activeTestDrag !== drag) return;
-      postMotor(motorValue);
-    });
-  };
-
   drag.onMove = (ev) => {
     if (drag.dragEnded || activeTestDrag !== drag) return;
     const value = sliderValueFromEvent(trackEl, ev);
     setSliderVisual(trackEl, value);
-    const stepped = Math.round(value * 20);
+    const stepped = Math.round(value * 100);
     if (stepped === drag.lastSent) return;
     drag.lastSent = stepped;
-    queueMotor(stepped / 20);
+    postMotor(stepped / 100);
   };
 
   drag.onLostCapture = () => endActiveTestDrag();
@@ -1030,29 +1054,17 @@ window.onConfigError = function(msg) {
   setConfigStatus(msg, true);
 };
 
-// Same format as data_processing::log_pat_line, e.g. "proximity_02 Prox:  0.45 Motor Tx: ..."
-const PROX_LOG_RE = /^(\S+)\s+Prox:\s+([\d.]+)/;
-
-function updateTestBarFromProxLog(param, proxValue) {
+function applyMotorBars(updates) {
   if (activeTestDrag) return;
-  const value = Math.max(0, Math.min(1, proxValue));
-  const paramKey = (param || '').trim();
-  editorDevices.forEach((d, i) => {
-    if ((d.proximity_parameter || '').trim() !== paramKey) return;
-    const track = document.querySelector('.test-slider-track[data-index="' + i + '"]');
-    if (track) setSliderVisual(track, value);
-  });
-}
-
-function applyProximityFromLogLine(line) {
-  if (!line || activeTestDrag) return;
-  if (line.includes('Stopping pats')) {
-    document.querySelectorAll('.test-slider-track').forEach((track) => setSliderVisual(track, 0));
-    return;
+  for (const param in updates) {
+    const value = Math.max(0, Math.min(1, updates[param]));
+    const paramKey = (param || '').trim();
+    editorDevices.forEach((d, i) => {
+      if ((d.proximity_parameter || '').trim() !== paramKey) return;
+      const track = document.querySelector('.test-slider-track[data-index="' + i + '"]');
+      if (track) setSliderVisual(track, value);
+    });
   }
-  const m = line.match(PROX_LOG_RE);
-  if (!m) return;
-  updateTestBarFromProxLog(m[1], parseFloat(m[2]));
 }
 
 let lastLogLines = [];
@@ -1075,26 +1087,6 @@ function renderLogs(lines) {
 function setLogs(lines) {
   lastLogLines = lines.slice();
   renderLogs(lastLogLines);
-  if (!activeTestDrag && lines.length) {
-    const latest = {};
-    for (const line of lines) {
-      if (line.includes('Stopping pats')) continue;
-      const m = line.match(PROX_LOG_RE);
-      if (m) latest[m[1]] = parseFloat(m[2]);
-    }
-    editorDevices.forEach((d, i) => {
-      const key = (d.proximity_parameter || '').trim();
-      if (latest[key] === undefined) return;
-      const track = document.querySelector('.test-slider-track[data-index="' + i + '"]');
-      if (track) setSliderVisual(track, Math.max(0, Math.min(1, latest[key])));
-    });
-  }
-}
-
-function appendLog(line) {
-  lastLogLines.push(line);
-  renderLogs(lastLogLines);
-  applyProximityFromLogLine(line);
 }
 
 function setupPaneScroll(wrapId, scrollId) {
@@ -1152,6 +1144,7 @@ enum UserEvent {
   TrayIconEvent(tray_icon::TrayIconEvent),
   MenuEvent(tray_icon::menu::MenuEvent),
   LogUpdated,
+  MotorBarFlush,
   ConfigIpc(String),
   PingResults(String),
 }
@@ -1334,6 +1327,11 @@ pub fn run() {
     let _ = event_proxy.send_event(UserEvent::LogUpdated);
   });
 
+  let prox_proxy = event_loop.create_proxy();
+  log_ui::set_proximity_notify(move |param, value| {
+    queue_motor_bar(param.to_string(), value, &prox_proxy);
+  });
+
   let proxy = event_loop.create_proxy();
   TrayIconEvent::set_event_handler(Some(move |event| {
     let _ = proxy.send_event(UserEvent::TrayIconEvent(event));
@@ -1389,6 +1387,14 @@ pub fn run() {
 
       Event::UserEvent(UserEvent::LogUpdated) => {
         ui_state.on_log_updated();
+      }
+
+      Event::UserEvent(UserEvent::MotorBarFlush) => {
+        if ui_state.is_output_visible() {
+          if let Some(output) = &ui_state.output {
+            flush_motor_bars(&output.webview);
+          }
+        }
       }
 
       Event::UserEvent(UserEvent::ConfigIpc(msg)) => {

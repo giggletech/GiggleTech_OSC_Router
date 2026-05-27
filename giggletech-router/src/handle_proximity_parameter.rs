@@ -35,6 +35,7 @@ use crate::osc_timeout;
 use crate::terminator;
 use crate::giggletech_osc;
 use crate::data_processing;
+use crate::log_ui;
 use crate::stop_pats;
 use lazy_static::lazy_static;
 use crate::config::DeviceConfig;
@@ -61,8 +62,10 @@ pub(crate) async fn handle_proximity_parameter(
     let mut device_last_values = DEVICE_LAST_VALUE.lock().await;
     let last_val = device_last_values.insert(device_ip.to_string(), value).unwrap_or(0.0);
 
+    log_ui::notify_proximity(device.proximity_parameter.as_str(), value);
+
     if value == 0.0 {
-        crate::log_ui::log_line("Stopping pats...");
+        crate::log_ui::ui_line("Stopping pats...");
         stop_pats::stop_device_with_terminator(device_ip.as_str(), running.clone()).await?;
     } else {
         if !device.use_velocity_control {

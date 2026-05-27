@@ -12,7 +12,6 @@ use once_cell::sync::Lazy;
 use serde::Deserialize;
 
 use crate::config;
-use crate::data_processing;
 use crate::giggletech_osc;
 use crate::log_ui;
 use crate::stop_pats;
@@ -96,30 +95,47 @@ fn command_worker(
   epoch: Arc<AtomicU64>,
 ) {
   while let Ok(first) = rx.recv() {
-    let mut last = first;
-    let mut stop_requested = matches!(last, TestCommand::Stop);
-    while let Ok(next) = rx.try_recv() {
-      if matches!(next, TestCommand::Stop) {
-        stop_requested = true;
+    let mut cmd = first;
+    'drive: loop {
+      while let Ok(next) = rx.try_recv() {
+        if matches!(next, TestCommand::Stop) {
+          cmd = TestCommand::Stop;
+          break;
+        }
+        cmd = next;
       }
-      last = next;
-    }
-    if stop_requested {
-      last = TestCommand::Stop;
-    }
 
-    let result = async_std::task::block_on(async {
-      match last {
-        TestCommand::Motor(level) => set_device_motor_async(ip, level, &running, &epoch).await,
-        TestCommand::Stop => {
-          let epoch_at_request = epoch.load(Ordering::SeqCst);
-          stop_device_async(ip, epoch_at_request, &running, &epoch).await
+      let result = async_std::task::block_on(async {
+        match cmd {
+          TestCommand::Motor(level) => set_device_motor_async(ip, level, &running, &epoch).await,
+          TestCommand::Stop => {
+            let epoch_at_request = epoch.load(Ordering::SeqCst);
+            stop_device_async(ip, epoch_at_request, &running, &epoch).await
+          }
+        }
+      });
+
+      if let Err(e) = result {
+        log_ui::app_log(&format!("Device test error ({}): {}", ip, e));
+      }
+
+      if matches!(cmd, TestCommand::Stop) {
+        break;
+      }
+
+      cmd = TestCommand::Stop;
+      while let Ok(next) = rx.try_recv() {
+        match next {
+          TestCommand::Stop => break,
+          TestCommand::Motor(level) => {
+            cmd = TestCommand::Motor(level);
+          }
         }
       }
-    });
-
-    if let Err(e) = result {
-      log_ui::app_log(&format!("Device test error ({}): {}", ip, e));
+      if matches!(cmd, TestCommand::Motor(_)) {
+        continue 'drive;
+      }
+      break;
     }
   }
 }
@@ -178,8 +194,7 @@ async fn set_device_motor_async(
     return Ok(());
   }
 
-  let (motor, params) = motor_from_level(ip, level)?;
-  data_processing::log_pat_line(&params.proximity_parameter, level, motor);
+  let (motor, _params) = motor_from_level(ip, level)?;
   giggletech_osc::send_data(ip, motor)
     .await
     .map_err(|e| format!("{}", e))?;
@@ -199,10 +214,6 @@ async fn stop_device_async(
 
   if epoch.load(Ordering::SeqCst) != epoch_at_request {
     return Ok(());
-  }
-
-  if let Ok(params) = motor_params(ip) {
-    data_processing::log_pat_line(&params.proximity_parameter, 0.0, 0);
   }
 
   stop_pats::stop_device_immediate(ip, running.clone())
