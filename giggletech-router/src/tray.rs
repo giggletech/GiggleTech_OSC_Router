@@ -125,6 +125,7 @@ header {
   min-height: 0;
   overflow-x: auto;
   overflow-y: auto;
+  scrollbar-gutter: stable;
   overscroll-behavior: contain;
   -webkit-overflow-scrolling: touch;
   direction: rtl;
@@ -138,9 +139,9 @@ header {
   flex-shrink: 0;
 }
 #config-wrap .btn-row {
-  /* Align with device cards inside #device-list (config-wrap padding + device-list padding). */
-  padding-left: 32px;
-  padding-right: 19px;
+  /* Match #device-list inset so buttons line up with card edges. */
+  padding-left: 35px;
+  padding-right: 3px;
   padding-bottom: 20px;
   padding-top: 16px;
   justify-content: flex-start;
