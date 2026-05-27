@@ -160,12 +160,9 @@ header {
   flex: 1 1 0;
   min-width: 0;
   min-height: 0;
-  overflow-x: hidden; /* remove left/right scrolling */
-  overflow-y: auto;
-  overscroll-behavior: contain;
-  -webkit-overflow-scrolling: touch;
+  overflow: hidden;
   box-sizing: border-box;
-  padding-right: 16px; /* match #log-section padding: gap to scrollbar */
+  padding-right: 16px;
   background: transparent;
   border-radius: 0;
   border: none;
@@ -178,12 +175,13 @@ header {
 }
 #log-box {
   width: 100%;
-  min-height: 100%;
+  height: 100%;
   background: #16161e;
   border-radius: 10px;
   border: 1px solid #2a2a36;
   padding: 10px 12px;
   box-sizing: border-box;
+  overflow: hidden;
 }
 
 #log {
@@ -193,6 +191,7 @@ header {
   max-width: 100%;
   margin: 0;
   min-height: 0;
+  overflow: hidden;
   font-family: "Cascadia Code", "Consolas", monospace;
   font-size: 12px;
   line-height: 1.45;
@@ -1056,11 +1055,26 @@ function applyProximityFromLogLine(line) {
   updateTestBarFromProxLog(m[1], parseFloat(m[2]));
 }
 
-function setLogs(lines) {
+let lastLogLines = [];
+const LOG_LINE_PX = 12 * 1.45;
+
+function logViewportLines() {
+  const box = document.getElementById('log-box');
+  if (!box) return 40;
+  const pad = 20;
+  return Math.max(4, Math.floor((box.clientHeight - pad) / LOG_LINE_PX));
+}
+
+function renderLogs(lines) {
   const el = document.getElementById('log');
-  const scroll = document.getElementById('log-scroll');
-  el.textContent = lines.slice().reverse().join('\n');
-  if (scroll) scroll.scrollTop = 0;
+  if (!el) return;
+  const tail = lines.slice(-logViewportLines());
+  el.textContent = tail.join('\n');
+}
+
+function setLogs(lines) {
+  lastLogLines = lines.slice();
+  renderLogs(lastLogLines);
   if (!activeTestDrag && lines.length) {
     const latest = {};
     for (const line of lines) {
@@ -1078,10 +1092,8 @@ function setLogs(lines) {
 }
 
 function appendLog(line) {
-  const el = document.getElementById('log');
-  const scroll = document.getElementById('log-scroll');
-  el.textContent = el.textContent ? line + '\n' + el.textContent : line;
-  if (scroll) scroll.scrollTop = 0;
+  lastLogLines.push(line);
+  renderLogs(lastLogLines);
   applyProximityFromLogLine(line);
 }
 
@@ -1099,8 +1111,13 @@ function setupPaneScroll(wrapId, scrollId) {
 }
 
 setupPaneScroll('config-wrap', 'config-scroll');
-setupPaneScroll('log-section', 'log-scroll');
 setupTestSliderSafety();
+const logBox = document.getElementById('log-box');
+if (logBox) {
+  new ResizeObserver(() => {
+    if (lastLogLines.length) renderLogs(lastLogLines);
+  }).observe(logBox);
+}
 const configScroll = document.getElementById('config-scroll');
 if (configScroll) {
   configScroll.addEventListener('scroll', () => syncLogSectionLayout(), { passive: true });
@@ -1250,15 +1267,10 @@ fn sync_logs_to_webview(webview: &wry::WebView, synced: &mut usize) {
 
 fn push_new_logs(webview: &wry::WebView, synced: &mut usize) {
   let lines = log_ui::snapshot();
-  if lines.len() <= *synced {
-    return;
-  }
-  for line in &lines[*synced..] {
-    if let Ok(json) = serde_json::to_string(line) {
-      let _ = webview.evaluate_script(&format!("appendLog({});", json));
-    }
-  }
   *synced = lines.len();
+  if let Ok(json) = serde_json::to_string(&lines) {
+    let _ = webview.evaluate_script(&format!("setLogs({});", json));
+  }
 }
 
 fn handle_config_ipc(

@@ -8,7 +8,8 @@ use std::sync::{Arc, Mutex};
 use chrono::Local;
 use once_cell::sync::OnceCell;
 
-const MAX_LINES: usize = 2000;
+// In-memory tail for the output window; UI shows only what fits in the card.
+const MAX_LINES: usize = 100;
 
 static LOG_LINES: once_cell::sync::Lazy<Arc<Mutex<Vec<String>>>> =
   once_cell::sync::Lazy::new(|| Arc::new(Mutex::new(Vec::new())));
