@@ -56,6 +56,14 @@ fn test_state(ip: &str) -> TestDeviceState {
   clone
 }
 
+/// Stops any test-slider periodic stop workers (e.g. after a prior session bug or reload).
+pub fn stop_all_test_terminators() {
+  let devices = TEST_DEVICES.lock().unwrap();
+  for state in devices.values() {
+    state.running.store(false, Ordering::SeqCst);
+  }
+}
+
 pub fn set_device_motor(ip: String, level: f32) {
   let epoch_at_request = test_state(&ip).epoch.load(Ordering::SeqCst);
   std::thread::spawn(move || {
@@ -133,14 +141,16 @@ async fn stop_device_async(ip: &str, epoch_at_request: u64) -> Result<(), String
     return Ok(());
   }
 
-  stop_pats::stop_device_with_terminator(ip, state.running.clone())
+  // Do not start the periodic stop worker — it uses a separate `running` flag from the
+  // router and would keep sending 0 to the device after the test slider is released.
+  stop_pats::stop_device_immediate(ip, state.running.clone())
     .await
     .map_err(|e| format!("{}", e))?;
   Ok(())
 }
 
 fn motor_from_level(ip: &str, level: f32) -> Result<i32, String> {
-  let (_global, devices) = config::load_config()?;
+  let (_global, devices) = config::load_config_quiet()?;
   if let Some(device) = devices.iter().find(|d| d.device_uri.as_str() == ip) {
     let mut headpat_tx = (((device.max_speed - device.min_speed) * level + device.min_speed)
       * MOTOR_SPEED_SCALE

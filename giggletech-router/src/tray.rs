@@ -52,47 +52,57 @@ header {
 }
 .header-text h1 { font-size: 1.5rem; font-weight: 600; }
 .header-text p { font-size: 0.85rem; opacity: 0.92; margin-top: 2px; }
-.header-actions { display: flex; gap: 8px; flex-shrink: 0; }
-.hdr-btn {
-  padding: 9px 14px;
-  font-size: 0.85rem;
+#main {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: row;
+  overflow: hidden;
+}
+#config-wrap {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 14px;
+  gap: 12px;
+  overflow: hidden;
+  border-right: 1px solid #2a2a36;
+}
+#log-section {
+  flex: 0 0 38%;
+  min-width: 260px;
+  max-width: 50%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 14px;
+  background: #0c0c10;
+}
+.section-title {
+  flex-shrink: 0;
+  font-size: 0.75rem;
   font-weight: 600;
-  font-family: inherit;
-  color: #7c3aed;
-  background: #fff;
-  border: none;
-  border-radius: 8px;
-  cursor: pointer;
-}
-.hdr-btn:hover { background: #f3e8ff; }
-.hdr-btn.active { background: #ede9fe; box-shadow: inset 0 0 0 2px #5b21b6; }
-#main { flex: 1; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
-.panel { display: none; flex: 1; min-height: 0; flex-direction: column; overflow: hidden; }
-.panel.visible { display: flex; }
-#home-view {
-  align-items: center;
-  justify-content: center;
-  padding: 32px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
   color: #8888a0;
-  text-align: center;
-  gap: 8px;
+  padding: 0 0 8px;
 }
-#log-wrap { padding: 14px; }
 #log {
   flex: 1;
+  min-height: 0;
   overflow-y: auto;
   font-family: "Cascadia Code", "Consolas", monospace;
-  font-size: 13px;
-  line-height: 1.5;
-  padding: 14px;
+  font-size: 12px;
+  line-height: 1.45;
+  padding: 10px 12px;
   background: #16161e;
   border-radius: 10px;
   border: 1px solid #2a2a36;
   white-space: pre-wrap;
   word-break: break-word;
-  min-height: 0;
 }
-#config-wrap { padding: 14px; gap: 12px; }
 #config-status {
   font-size: 0.85rem;
   padding: 8px 12px;
@@ -207,18 +217,9 @@ header {
     <h1>GiggleTech</h1>
     <p>OSC Router</p>
   </div>
-  <div class="header-actions">
-    <button type="button" class="hdr-btn" id="show-logs-btn" onclick="showPanel('logs')">Output</button>
-    <button type="button" class="hdr-btn" id="show-config-btn" onclick="showPanel('config')">Config</button>
-  </div>
 </header>
 <div id="main">
-  <div id="home-view" class="panel visible">
-    <p>Router is running.</p>
-    <p class="hint">Use <strong>Output</strong> for logs or <strong>Config</strong> to edit devices.</p>
-  </div>
-  <div id="log-wrap" class="panel"><pre id="log"></pre></div>
-  <div id="config-wrap" class="panel">
+  <div id="config-wrap">
     <div id="config-status"></div>
     <div id="device-list"></div>
     <div class="btn-row">
@@ -227,23 +228,14 @@ header {
     </div>
     <p class="hint">Saving reloads the router automatically.</p>
   </div>
+  <section id="log-section">
+    <div class="section-title">Output</div>
+    <pre id="log"></pre>
+  </section>
 </div>
 <script>
-let activePanel = 'home';
 let editorDevices = [];
 let editorSpeedDefaults = { min: 5, max: 25 };
-
-function showPanel(name) {
-  activePanel = name;
-  document.getElementById('home-view').classList.toggle('visible', name === 'home');
-  document.getElementById('log-wrap').classList.toggle('visible', name === 'logs');
-  document.getElementById('config-wrap').classList.toggle('visible', name === 'config');
-  document.getElementById('show-logs-btn').classList.toggle('active', name === 'logs');
-  document.getElementById('show-config-btn').classList.toggle('active', name === 'config');
-  if (name === 'config') {
-    window.ipc.postMessage('load-config');
-  }
-}
 
 function setConfigStatus(msg, isError) {
   const el = document.getElementById('config-status');
@@ -423,6 +415,8 @@ function appendLog(line) {
   el.textContent = el.textContent ? line + '\n' + el.textContent : line;
   el.scrollTop = 0;
 }
+
+window.ipc.postMessage('load-config');
 </script>
 </body>
 </html>"#;
@@ -463,8 +457,8 @@ impl UiState {
   ) {
     let window = WindowBuilder::new()
       .with_title("GiggleTech")
-      .with_inner_size(LogicalSize::new(720.0, 520.0))
-      .with_min_inner_size(LogicalSize::new(480.0, 320.0))
+      .with_inner_size(LogicalSize::new(960.0, 560.0))
+      .with_min_inner_size(LogicalSize::new(640.0, 360.0))
       .build(event_loop)
       .expect("Failed to create output window");
 

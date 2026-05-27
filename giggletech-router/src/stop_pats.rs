@@ -21,18 +21,24 @@ use crate::giggletech_osc;
 use crate::config::DeviceConfig;
 use crate::terminator;
 
-/// Same stop sequence as proximity-off: halt terminator, five immediate stops, then periodic stop worker.
-pub async fn stop_device_with_terminator(
-    device_ip: &str,
-    running: Arc<AtomicBool>,
-) -> Result<()> {
-    terminator::stop(running.clone()).await?;
+/// Halt any stop worker and send five immediate stop packets (no periodic worker).
+pub async fn stop_device_immediate(device_ip: &str, running: Arc<AtomicBool>) -> Result<()> {
+    terminator::stop(running).await?;
 
     for _ in 0..5 {
         giggletech_osc::send_data(device_ip, 0i32).await?;
     }
 
-    terminator::start(running.clone(), &Arc::new(device_ip.to_string())).await?;
+    Ok(())
+}
+
+/// Same stop sequence as proximity-off: immediate stops, then periodic stop worker until cleared.
+pub async fn stop_device_with_terminator(
+    device_ip: &str,
+    running: Arc<AtomicBool>,
+) -> Result<()> {
+    stop_device_immediate(device_ip, running.clone()).await?;
+    terminator::start(running, &Arc::new(device_ip.to_string())).await?;
     Ok(())
 }
 

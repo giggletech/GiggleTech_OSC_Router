@@ -16,6 +16,7 @@ use once_cell::sync::OnceCell;
 
 use crate::config;
 use crate::giggletech_osc;
+use crate::device_test;
 use crate::handle_proximity_parameter;
 use crate::log_ui;
 use crate::osc_timeout;
@@ -68,6 +69,8 @@ pub async fn run_giggletech_loop(restart_rx: Receiver<()>) -> Result<()> {
 async fn run_giggletech_session(restart_rx: &Receiver<()>) -> Result<bool> {
   let session_alive = Arc::new(AtomicBool::new(true));
   let running = Arc::new(AtomicBool::new(false));
+
+  device_test::stop_all_test_terminators();
 
   log_ui::app_log("Loading configuration...");
 

@@ -166,14 +166,26 @@ impl YamlHashWrapper {
 
 
 pub(crate) fn load_config() -> Result<(GlobalConfig, Vec<DeviceConfig>), String> {
+    load_config_internal(true)
+}
+
+/// Same as `load_config` but without startup banner / validation log lines (for hot paths like device test).
+pub(crate) fn load_config_quiet() -> Result<(GlobalConfig, Vec<DeviceConfig>), String> {
+    load_config_internal(false)
+}
+
+fn load_config_internal(verbose: bool) -> Result<(GlobalConfig, Vec<DeviceConfig>), String> {
     let mut config_file = match File::open("./config.yml") {
         Err(why) => return Err(format!("Failed to open config.yml: {}", why)),
         Ok(f) => f
     };
 
-    // Call validate_yaml function
     match validate_yaml("./config.yml") {
-        Ok(_) => crate::log_ui::log_line("Configuration file is valid."),
+        Ok(_) => {
+            if verbose {
+                crate::log_ui::log_line("Configuration file is valid.");
+            }
+        }
         Err(e) => return Err(format!("Configuration File Error: {}", e)),
     };
 
@@ -223,39 +235,41 @@ pub(crate) fn load_config() -> Result<(GlobalConfig, Vec<DeviceConfig>), String>
             None => return Err(format!("Device {} is not a valid map", i + 1)),
         };
         let device_data = YamlHashWrapper {yaml_hash: device_hash.clone()};
-        match parse_device_config(device_data, &global_config) {
+        match parse_device_config(device_data, &global_config, verbose) {
             Ok(device_config) => device_configs.push(device_config),
             Err(e) => return Err(format!("Error parsing device {}: {}", i + 1, e)),
         }
     }
 
-    crate::log_ui::log_line("");
-    banner_txt();
-    crate::log_ui::log_line("");
-    crate::log_ui::log_line(" Device Maps");
-    crate::log_ui::log_line("");
-    for (i, device) in device_configs.iter().enumerate() {
-        crate::log_ui::log_line(&format!("  Device {i}"));
-        crate::log_ui::log_line(&format!(
-            "   {} => {}",
-            device.proximity_parameter.trim_start_matches("/avatar/parameters/"),
-            device.device_uri
-        ));
-        crate::log_ui::log_line("   Vibration Configuration");
-        crate::log_ui::log_line(&format!("    Startup TX Speed: {:.0}%", device.start_tx));
-        crate::log_ui::log_line(&format!("    Min Speed: {:.0}%", device.min_speed * 100.0));
-        crate::log_ui::log_line(&format!("    Max Speed: {:.0}%", device.max_speed * 100.0));
-        crate::log_ui::log_line(&format!("    Scale Factor: {:.0}%", device.speed_scale * 100.0));
-        crate::log_ui::log_line(&format!("    Advanced Mode: {}", device.use_velocity_control));
+    if verbose {
         crate::log_ui::log_line("");
-    }
+        banner_txt();
+        crate::log_ui::log_line("");
+        crate::log_ui::log_line(" Device Maps");
+        crate::log_ui::log_line("");
+        for (i, device) in device_configs.iter().enumerate() {
+            crate::log_ui::log_line(&format!("  Device {i}"));
+            crate::log_ui::log_line(&format!(
+                "   {} => {}",
+                device.proximity_parameter.trim_start_matches("/avatar/parameters/"),
+                device.device_uri
+            ));
+            crate::log_ui::log_line("   Vibration Configuration");
+            crate::log_ui::log_line(&format!("    Startup TX Speed: {:.0}%", device.start_tx));
+            crate::log_ui::log_line(&format!("    Min Speed: {:.0}%", device.min_speed * 100.0));
+            crate::log_ui::log_line(&format!("    Max Speed: {:.0}%", device.max_speed * 100.0));
+            crate::log_ui::log_line(&format!("    Scale Factor: {:.0}%", device.speed_scale * 100.0));
+            crate::log_ui::log_line(&format!("    Advanced Mode: {}", device.use_velocity_control));
+            crate::log_ui::log_line("");
+        }
 
-    crate::log_ui::log_line(&format!(
-        "\n Listening for OSC on port: {}",
-        global_config.port_rx
-    ));
-    crate::log_ui::log_line(&format!(" Timeout: {}s", global_config.timeout));
-    crate::log_ui::log_line("\nWaiting for pats...");
+        crate::log_ui::log_line(&format!(
+            "\n Listening for OSC on port: {}",
+            global_config.port_rx
+        ));
+        crate::log_ui::log_line(&format!(" Timeout: {}s", global_config.timeout));
+        crate::log_ui::log_line("\nWaiting for pats...");
+    }
 
     Ok((global_config, device_configs))
 }
@@ -355,7 +369,11 @@ fn parse_global_config(setup: YamlHashWrapper) -> GlobalConfig {
 }
 
 
-fn parse_device_config(device_data: YamlHashWrapper, global_config: &GlobalConfig) -> Result<DeviceConfig, String> {
+fn parse_device_config(
+    device_data: YamlHashWrapper,
+    global_config: &GlobalConfig,
+    verbose: bool,
+) -> Result<DeviceConfig, String> {
     let ip = match device_data.get_str("ip") {
         Some(ip_str) => {
             match ip_str.parse::<IpAddr>() {
@@ -391,11 +409,12 @@ fn parse_device_config(device_data: YamlHashWrapper, global_config: &GlobalConfi
     let inner_proximity = device_data.get_f64("inner_proximity").map(|x| x as f32).unwrap_or(global_config.default_inner_proximity);
     let velocity_scalar = device_data.get_f64("velocity_scalar").map(|x| x as f32).unwrap_or(global_config.default_velocity_scalar);
 
-    // Log device settings
-    log_to_file(&format!(
-        "Device IP: {}\nMin Speed: {:.0}%\nMax Speed: {:.0}%\nSpeed Scale: {:.0}%\nProximity Parameter: {}\nVelocity Control: {}\nOuter Proximity: {:.2}\nInner Proximity: {:.2}\n",
-        ip, min_speed * 100.0, max_speed * 100.0, speed_scale * 100.0, proximity_parameter, use_velocity_control, outer_proximity, inner_proximity
-    ));
+    if verbose {
+        log_to_file(&format!(
+            "Device IP: {}\nMin Speed: {:.0}%\nMax Speed: {:.0}%\nSpeed Scale: {:.0}%\nProximity Parameter: {}\nVelocity Control: {}\nOuter Proximity: {:.2}\nInner Proximity: {:.2}\n",
+            ip, min_speed * 100.0, max_speed * 100.0, speed_scale * 100.0, proximity_parameter, use_velocity_control, outer_proximity, inner_proximity
+        ));
+    }
 
     Ok(DeviceConfig {
         device_uri: ip,
