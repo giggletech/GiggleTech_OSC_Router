@@ -97,10 +97,18 @@ header {
   min-height: 0;
   display: flex;
   flex-direction: column;
-  padding: 16px;
+  padding: 16px 16px 0 16px;
   gap: 12px;
   overflow: hidden;
-  border-right: 1px solid #2a2a36;
+  position: relative;
+}
+#config-column-divider {
+  position: absolute;
+  right: 0;
+  width: 1px;
+  background: #2a2a36;
+  pointer-events: none;
+  display: none;
 }
 #config-scroll {
   flex: 1 1 0;
@@ -119,12 +127,19 @@ header {
 #config-wrap > .hint {
   flex-shrink: 0;
 }
+#config-wrap .btn-row {
+  padding-left: 16px;
+  padding-right: 3px;
+  padding-bottom: 20px;
+  padding-top: 16px;
+  justify-content: flex-start;
+}
 #log-section {
   min-width: 0;
   min-height: 0;
   display: flex;
   flex-direction: column;
-  padding: 16px;
+  padding: 16px 16px 0 16px;
   gap: 12px;
   background: #000;
   overflow: hidden;
@@ -137,6 +152,8 @@ header {
   overflow-y: auto;
   overscroll-behavior: contain;
   -webkit-overflow-scrolling: touch;
+  box-sizing: border-box;
+  padding-right: 16px; /* match #log-section padding: gap to scrollbar */
   background: transparent;
   border-radius: 0;
   border: none;
@@ -144,9 +161,11 @@ header {
 #log-bottom-spacer {
   flex-shrink: 0;
   width: 100%;
+  box-sizing: border-box;
+  padding-bottom: 16px;
 }
 #log-box {
-  width: calc(100% - 16px);
+  width: 100%;
   min-height: 100%;
   background: #16161e;
   border-radius: 10px;
@@ -175,6 +194,8 @@ header {
 }
 #config-status {
   flex-shrink: 0;
+  margin-left: 16px;
+  margin-right: 3px;
   font-size: 0.85rem;
   padding: 8px 12px;
   border-radius: 8px;
@@ -185,8 +206,8 @@ header {
   display: flex;
   flex-direction: column;
   gap: 10px;
-  padding-left: 14px;
-  padding-right: 4px;
+  padding-left: 16px;
+  padding-right: 3px;
 }
 .device-card {
   width: 100%;
@@ -456,6 +477,7 @@ header {
 <div id="main-center">
   <div id="main">
     <div id="config-wrap">
+      <div id="config-column-divider" aria-hidden="true"></div>
       <div id="config-status"></div>
       <div id="config-scroll">
         <div id="device-list"></div>
@@ -610,8 +632,8 @@ function renderDevices() {
           <div class="device-actions">
             ${pendingRemoveIndex === i
               ? `<button type="button" class="btn btn-danger" disabled>Remove</button>
-                 <button type="button" class="btn btn-primary btn-sm" onclick="confirmRemoveDevice(${i})">Confirm</button>
-                 <button type="button" class="btn btn-secondary btn-sm" onclick="cancelRemoveDevice()">Cancel</button>`
+                 <button type="button" class="btn btn-secondary btn-sm" onclick="cancelRemoveDevice()">Cancel</button>
+                 <button type="button" class="btn btn-primary btn-sm" onclick="confirmRemoveDevice(${i})">Confirm</button>`
               : `<button type="button" class="btn btn-danger" onclick="requestRemoveDevice(${i})">Remove</button>`}
           </div>
         </div>
@@ -633,8 +655,26 @@ function renderDevices() {
 function syncLogSectionLayout() {
   const btnRow = document.querySelector('#config-wrap .btn-row');
   const spacer = document.getElementById('log-bottom-spacer');
-  if (!btnRow || !spacer) return;
-  spacer.style.height = btnRow.offsetHeight + 'px';
+  if (btnRow && spacer) {
+    spacer.style.height = btnRow.offsetHeight + 'px';
+  }
+
+  const wrap = document.getElementById('config-wrap');
+  const list = document.getElementById('device-list');
+  const divider = document.getElementById('config-column-divider');
+  if (!wrap || !list || !divider) return;
+
+  const hasCards = list.querySelector('.device-card');
+  if (!hasCards) {
+    divider.style.display = 'none';
+    return;
+  }
+
+  const wrapRect = wrap.getBoundingClientRect();
+  const listRect = list.getBoundingClientRect();
+  divider.style.display = 'block';
+  divider.style.top = (listRect.top - wrapRect.top) + 'px';
+  divider.style.height = listRect.height + 'px';
 }
 
 function pingStatusLabel(st) {
@@ -959,10 +999,20 @@ function setupPaneScroll(wrapId, scrollId) {
 setupPaneScroll('config-wrap', 'config-scroll');
 setupPaneScroll('log-section', 'log-scroll');
 setupTestSliderSafety();
+const configScroll = document.getElementById('config-scroll');
+if (configScroll) {
+  configScroll.addEventListener('scroll', () => syncLogSectionLayout(), { passive: true });
+}
 window.addEventListener('resize', () => syncLogSectionLayout());
 const configBtnRow = document.querySelector('#config-wrap .btn-row');
-if (configBtnRow && typeof ResizeObserver !== 'undefined') {
-  new ResizeObserver(() => syncLogSectionLayout()).observe(configBtnRow);
+const deviceList = document.getElementById('device-list');
+if (typeof ResizeObserver !== 'undefined') {
+  if (configBtnRow) {
+    new ResizeObserver(() => syncLogSectionLayout()).observe(configBtnRow);
+  }
+  if (deviceList) {
+    new ResizeObserver(() => syncLogSectionLayout()).observe(deviceList);
+  }
 }
 requestAnimationFrame(() => syncLogSectionLayout());
 window.ipc.postMessage('load-config');
