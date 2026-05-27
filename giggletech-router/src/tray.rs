@@ -280,7 +280,7 @@ function renderDevices() {
           <label>Max speed
             <div class="speed-slider-row">
               <input type="range" min="${editorSpeedDefaults.min}" max="100" value="${d.max_speed}"
-                oninput="onMaxSpeedChange(${i}, this)">
+                oninput="onMaxSpeedChange(${i}, this)" onchange="saveConfig()">
               <span class="speed-value" id="max-speed-val-${i}">${d.max_speed}%</span>
             </div>
           </label>
