@@ -24,6 +24,7 @@
 
 
 use std::collections::HashMap;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 use anyhow::Result;
@@ -35,8 +36,12 @@ lazy_static! {
         Arc::new(Mutex::new(HashMap::new()));
 }
 
-pub async fn osc_timeout(device_ip: &str, timeout: u64) -> Result<()> {
-    loop {
+pub async fn osc_timeout(
+    device_ip: &str,
+    timeout: u64,
+    session_alive: Arc<AtomicBool>,
+) -> Result<()> {
+    while session_alive.load(Ordering::Relaxed) {
         async_std::task::sleep(Duration::from_secs(1)).await;
         
         // Handle mutex lock safely
@@ -81,4 +86,5 @@ pub async fn osc_timeout(device_ip: &str, timeout: u64) -> Result<()> {
             }
         }
     }
+    Ok(())
 }

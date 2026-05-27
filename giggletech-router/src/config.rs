@@ -60,6 +60,7 @@ use yaml_rust::{YamlLoader, Yaml};
 use yaml_rust::yaml::Hash;
 mod oscq_giggletech;
 
+pub mod config_validator;
 mod yaml_validator;
 
 use yaml_validator::{validate_yaml, Config};

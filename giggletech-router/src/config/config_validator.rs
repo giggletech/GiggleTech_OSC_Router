@@ -3,13 +3,13 @@ use serde_yaml;
 use std::fs;
 use std::path::Path;
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Config {
     pub devices: Vec<Device>,
     pub setup: Setup,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Device {
     pub ip: String,
     pub proximity_parameter: String,
@@ -29,7 +29,7 @@ pub struct Device {
     pub velocity_scalar: Option<u32>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Setup {
     pub port_rx: String,
     pub default_min_speed: u32,
