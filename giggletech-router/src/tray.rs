@@ -277,6 +277,10 @@ header {
   font-size: 0.8rem;
   font-weight: 600;
   padding: 4px 10px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
   border-radius: 999px;
   border: 1px solid #3f3f4e;
   background: #0f0f14;
@@ -302,6 +306,19 @@ header {
 .btn-sm {
   padding: 6px 12px;
   font-size: 0.8rem;
+}
+.device-name-row .btn-sm {
+  /* Match the one-line status pill styling/size. */
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid #3f3f4e;
+  background: #0f0f14;
+  color: #e8e8f0;
+  font-weight: 600;
+  line-height: 1;
 }
 .device-card label { display: flex; flex-direction: column; gap: 4px; font-size: 0.8rem; color: #a1a1b5; }
 .device-card input:not(.device-name-input) {
@@ -478,6 +495,50 @@ header {
 }
 .device-actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-top: 4px; }
 .device-actions .btn[disabled] { opacity: 0.55; cursor: default; }
+.device-actions .btn-sm {
+  /* Make Confirm/Cancel match pill sizing. */
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  line-height: 1;
+}
+.device-actions .btn-secondary.btn-sm {
+  border: 1px solid #3f3f4e;
+  background: #2a2a36;
+  color: #e8e8f0;
+}
+.device-actions .btn-secondary.btn-sm:hover {
+  background: #3f3f4e;
+}
+.device-actions .btn-primary.btn-sm {
+  border: 1px solid #7f1d1d;
+  background: #450a0a;
+  color: #fca5a5;
+}
+.device-actions .btn-primary.btn-sm:hover {
+  background: #7f1d1d;
+}
+.device-actions .btn-danger {
+  /* Match the status/ping pill sizing in the device header row. */
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  line-height: 1;
+  border: 1px solid #3f3f4e;
+  background: #2a2a36;
+  color: #e8e8f0;
+}
+.device-actions .btn-danger:hover {
+  background: #3f3f4e;
+}
 .btn-row { display: flex; gap: 8px; flex-wrap: wrap; }
 .btn {
   padding: 9px 14px;
@@ -663,7 +724,7 @@ function renderDevices() {
           </label>
           <div class="device-actions">
             ${pendingRemoveIndex === i
-              ? `<button type="button" class="btn btn-danger" disabled>Remove</button>
+              ? `<button type="button" class="btn btn-danger" onclick="cancelRemoveDevice()">Remove</button>
                  <button type="button" class="btn btn-secondary btn-sm" onclick="cancelRemoveDevice()">Cancel</button>
                  <button type="button" class="btn btn-primary btn-sm" onclick="confirmRemoveDevice(${i})">Confirm</button>`
               : `<button type="button" class="btn btn-danger" onclick="requestRemoveDevice(${i})">Remove</button>`}
