@@ -2,6 +2,8 @@
 
 use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
+
+static QUIET_RESTART: AtomicBool = AtomicBool::new(false);
 use std::sync::Mutex;
 
 use async_osc::{prelude::*, OscPacket, OscType, Result};
@@ -31,6 +33,17 @@ pub fn init_restart_channel() -> Receiver<()> {
 
 /// Ask the router to stop the current session and reload `config.yml`.
 pub fn request_restart() {
+  QUIET_RESTART.store(false, Ordering::SeqCst);
+  send_restart_signal();
+}
+
+/// Reload `config.yml` without printing the full startup banner (e.g. max-speed slider save).
+pub fn request_restart_quiet() {
+  QUIET_RESTART.store(true, Ordering::SeqCst);
+  send_restart_signal();
+}
+
+fn send_restart_signal() {
   if let Some(mutex) = RESTART_TX.get() {
     if let Ok(guard) = mutex.lock() {
       if let Some(tx) = guard.as_ref() {
@@ -54,7 +67,9 @@ pub async fn run_giggletech_loop(restart_rx: Receiver<()>) -> Result<()> {
   loop {
     match run_giggletech_session(&restart_rx).await {
       Ok(true) => {
-        log_ui::app_log("Restarting router with updated configuration...");
+        if !QUIET_RESTART.load(Ordering::SeqCst) {
+          log_ui::app_log("Restarting router with updated configuration...");
+        }
         while restart_rx.try_recv().is_ok() {}
       }
       Ok(false) => break,
@@ -72,7 +87,11 @@ async fn run_giggletech_session(restart_rx: &Receiver<()>) -> Result<bool> {
 
   device_test::stop_all_test_terminators();
 
-  log_ui::app_log("Loading configuration...");
+  let quiet_reload = QUIET_RESTART.swap(false, Ordering::SeqCst);
+
+  if !quiet_reload {
+    log_ui::app_log("Loading configuration...");
+  }
 
   if !Path::new("config.yml").exists() {
     let error_msg = "Configuration file (config.yml) not found.";
@@ -83,7 +102,11 @@ async fn run_giggletech_session(restart_rx: &Receiver<()>) -> Result<bool> {
     )));
   }
 
-  let (global_config, mut devices) = match config::load_config() {
+  let (global_config, mut devices) = match if quiet_reload {
+    config::load_config_quiet()
+  } else {
+    config::load_config()
+  } {
     Ok(config) => config,
     Err(e) => {
       let error_msg = format!("Config file error: {}", e);
@@ -97,9 +120,10 @@ async fn run_giggletech_session(restart_rx: &Receiver<()>) -> Result<bool> {
 
   let timeout = global_config.timeout;
 
-  log_ui::app_log("Configuration loaded successfully. Setting up sockets and timeouts.");
-
-  crate::test_device_connectivity(&devices).await;
+  if !quiet_reload {
+    log_ui::app_log("Configuration loaded successfully. Setting up sockets and timeouts.");
+    crate::test_device_connectivity(&devices).await;
+  }
 
   let mut rx_socket = giggletech_osc::setup_rx_socket(global_config.port_rx.to_string()).await?;
 
@@ -113,7 +137,9 @@ async fn run_giggletech_session(restart_rx: &Receiver<()>) -> Result<bool> {
     });
   }
 
-  log_ui::app_log("Listening for OSC Packets...");
+  if !quiet_reload {
+    log_ui::app_log("Listening for OSC Packets...");
+  }
 
   let mut should_restart = false;
 

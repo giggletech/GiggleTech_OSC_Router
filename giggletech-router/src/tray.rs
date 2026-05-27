@@ -31,7 +31,7 @@ const OUTPUT_HTML: &str = r#"<!DOCTYPE html>
 <meta charset="utf-8">
 <style>
 * { box-sizing: border-box; margin: 0; padding: 0; }
-html, body { height: 100%; }
+html, body { height: 100%; overflow-x: hidden; }
 body {
   background: #0f0f14;
   color: #e8e8f0;
@@ -60,25 +60,27 @@ header {
   overflow: hidden;
 }
 #config-wrap {
-  flex: 1;
-  min-width: 0;
+  flex: 1.25 1 32rem;
+  min-width: 32rem;
   min-height: 0;
   display: flex;
   flex-direction: column;
-  padding: 14px;
+  padding: 16px;
   gap: 12px;
   overflow: hidden;
   border-right: 1px solid #2a2a36;
 }
 #log-section {
-  flex: 0 0 38%;
-  min-width: 260px;
-  max-width: 50%;
+  /* Longest pat line ~56ch; advanced mode ~68ch */
+  flex: 1 1 68ch;
+  min-width: 68ch;
+  max-width: 42%;
   min-height: 0;
   display: flex;
   flex-direction: column;
   padding: 14px;
   background: #0c0c10;
+  overflow-x: hidden;
 }
 .section-title {
   flex-shrink: 0;
@@ -92,6 +94,7 @@ header {
 #log {
   flex: 1;
   min-height: 0;
+  overflow-x: hidden;
   overflow-y: auto;
   font-family: "Cascadia Code", "Consolas", monospace;
   font-size: 12px;
@@ -100,8 +103,8 @@ header {
   background: #16161e;
   border-radius: 10px;
   border: 1px solid #2a2a36;
-  white-space: pre-wrap;
-  word-break: break-word;
+  white-space: pre;
+  word-break: normal;
 }
 #config-status {
   font-size: 0.85rem;
@@ -151,8 +154,19 @@ header {
   color: #c4b5fd;
   text-align: right;
 }
-.device-row { display: flex; gap: 14px; align-items: flex-start; }
-.device-fields { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 10px; }
+.device-row { display: flex; gap: 16px; align-items: flex-start; }
+.device-fields {
+  flex: 1;
+  min-width: 14rem;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.device-card label .hint {
+  display: block;
+  margin-top: 2px;
+  line-height: 1.35;
+}
 .test-slider-col {
   display: flex;
   flex-direction: column;
@@ -182,7 +196,6 @@ header {
   background: linear-gradient(to top, #7c3aed, #e879f9);
   border-radius: 0 0 8px 8px;
   pointer-events: none;
-  transition: height 0.05s ease-out;
 }
 .test-slider-hint {
   font-size: 0.65rem;
@@ -272,7 +285,7 @@ function renderDevices() {
           <label>Max speed
             <div class="speed-slider-row">
               <input type="range" min="${editorSpeedDefaults.min}" max="100" value="${d.max_speed}"
-                oninput="onMaxSpeedChange(${i}, this)" onchange="saveConfig()">
+                oninput="onMaxSpeedChange(${i}, this)" onchange="saveConfig(true)">
               <span class="speed-value" id="max-speed-val-${i}">${d.max_speed}%</span>
             </div>
           </label>
@@ -326,23 +339,30 @@ function beginSliderDrag(index, trackEl, e) {
 
   let lastSent = -1;
   let dragEnded = false;
+  let pendingSend = null;
+  const postMotor = (value) => {
+    window.ipc.postMessage('device-motor:' + JSON.stringify({ ip: ip, value: value }));
+  };
   const sendLevel = (ev) => {
     if (dragEnded) return;
     const value = sliderValueFromEvent(trackEl, ev);
     setSliderVisual(trackEl, value);
-    const rounded = Math.round(value * 100);
-    if (rounded !== lastSent) {
-      lastSent = rounded;
-      if (rounded === 0) {
-        window.ipc.postMessage('device-stop:' + ip);
-      } else {
-        window.ipc.postMessage('device-motor:' + JSON.stringify({ ip: ip, value: value }));
-      }
-    }
+    // 5% steps — fewer device updates, smoother feel
+    const stepped = Math.round(value * 20);
+    if (stepped === lastSent) return;
+    lastSent = stepped;
+    if (stepped === 0) return;
+    const motorValue = stepped / 20;
+    if (pendingSend !== null) cancelAnimationFrame(pendingSend);
+    pendingSend = requestAnimationFrame(() => {
+      pendingSend = null;
+      postMotor(motorValue);
+    });
   };
 
   const endDrag = (ev) => {
     dragEnded = true;
+    if (pendingSend !== null) cancelAnimationFrame(pendingSend);
     try { trackEl.releasePointerCapture(ev.pointerId); } catch (_) {}
     trackEl.removeEventListener('pointermove', sendLevel);
     trackEl.removeEventListener('pointerup', endDrag);
@@ -378,12 +398,13 @@ function removeDevice(index) {
   renderDevices();
 }
 
-function saveConfig() {
-  setConfigStatus('Saving...', false);
+function saveConfig(quiet) {
+  if (!quiet) setConfigStatus('Saving...', false);
   window.ipc.postMessage('save-config:' + JSON.stringify({
     devices: editorDevices,
     min_speed: editorSpeedDefaults.min,
-    max_speed_cap: editorSpeedDefaults.max
+    max_speed_cap: editorSpeedDefaults.max,
+    quiet: !!quiet
   }));
 }
 
@@ -395,9 +416,12 @@ window.onConfigLoaded = function(state) {
   setConfigStatus('Loaded from config.yml', false);
 };
 
-window.onConfigSaved = function() {
-  setConfigStatus('Saved to config.yml', false);
-  window.ipc.postMessage('load-config');
+window.onConfigSaved = function(opts) {
+  opts = opts || {};
+  if (!opts.quiet) {
+    setConfigStatus('Saved to config.yml', false);
+    window.ipc.postMessage('load-config');
+  }
 };
 
 window.onConfigError = function(msg) {
@@ -457,8 +481,8 @@ impl UiState {
   ) {
     let window = WindowBuilder::new()
       .with_title("GiggleTech")
-      .with_inner_size(LogicalSize::new(960.0, 560.0))
-      .with_min_inner_size(LogicalSize::new(640.0, 360.0))
+      .with_inner_size(LogicalSize::new(1280.0, 600.0))
+      .with_min_inner_size(LogicalSize::new(1120.0, 420.0))
       .build(event_loop)
       .expect("Failed to create output window");
 
@@ -555,8 +579,11 @@ fn handle_config_ipc(webview: &wry::WebView, msg: &str) {
     }
   } else if let Some(json) = msg.strip_prefix("save-config:") {
     match config_editor::save_editor_json(json) {
-      Ok(()) => {
-        let _ = webview.evaluate_script("window.onConfigSaved();");
+      Ok(quiet) => {
+        let _ = webview.evaluate_script(&format!(
+          "window.onConfigSaved({{ quiet: {} }});",
+          if quiet { "true" } else { "false" }
+        ));
       }
       Err(e) => {
         let err = serde_json::to_string(&e).unwrap_or_else(|_| "\"Unknown error\"".to_string());

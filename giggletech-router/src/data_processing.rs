@@ -78,7 +78,6 @@ pub fn print_speed_limit(headpat_max_rx: f32) {
 const MOTOR_SPEED_SCALE: f32 = 0.66; // Overvolt   Here, OEM config 0.66 going higher than this value will reduce your vibrator motor life
 
 pub fn process_pat(proximity_signal: f32, device: &DeviceConfig, prev_signal: f32) -> i32 {
-    let graph_str = proximity_graph(proximity_signal);
     let headpat_tx = (((device.max_speed - device.min_speed) * proximity_signal + device.min_speed) * MOTOR_SPEED_SCALE * device.speed_scale * 255.0).round() as i32;
     let headpat_tx = if prev_signal == 0.0 && proximity_signal > 0.0 && headpat_tx < device.start_tx {
         device.start_tx
@@ -86,16 +85,26 @@ pub fn process_pat(proximity_signal: f32, device: &DeviceConfig, prev_signal: f3
         headpat_tx
     };
 
-    let proximity_signal = format!("{:.2}", proximity_signal);
+    log_pat_line(
+        device.proximity_parameter.as_str(),
+        proximity_signal,
+        headpat_tx,
+    );
+
+    headpat_tx
+}
+
+/// Same line as live proximity routing (shown in the Output panel).
+pub fn log_pat_line(parameter: &str, proximity_signal: f32, headpat_tx: i32) {
+    let graph_str = proximity_graph(proximity_signal);
+    let proximity_fmt = format!("{:.2}", proximity_signal);
     crate::log_ui::log_line(&format!(
         "{} Prox: {:5} Motor Tx: {:3} |{:11}|",
-        device.proximity_parameter.trim_start_matches("/avatar/parameters/"),
-        proximity_signal,
+        parameter.trim_start_matches("/avatar/parameters/"),
+        proximity_fmt,
         headpat_tx,
         graph_str
     ));
-
-    headpat_tx
 }
 
 pub fn process_pat_advanced(proximity_signal: f32, prev_signal: f32, delta_t: Duration, device: &DeviceConfig) -> i32 {

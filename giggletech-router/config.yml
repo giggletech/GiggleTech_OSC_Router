@@ -1,7 +1,7 @@
 devices:
 - ip: 192.168.1.69
   proximity_parameter: proximity_01
-  max_speed: 73
+  max_speed: 72
   speed_scale: null
   max_speed_parameter: null
   use_velocity_control: null

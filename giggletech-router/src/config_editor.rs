@@ -50,13 +50,22 @@ pub fn load_editor_state() -> Result<EditorState, String> {
   })
 }
 
-pub fn save_editor_json(json: &str) -> Result<(), String> {
-  let state: EditorState =
-    serde_json::from_str(json).map_err(|e| format!("Invalid config data: {}", e))?;
-  save_editor_state(&state)
+#[derive(Debug, Deserialize)]
+struct SaveRequest {
+  #[serde(flatten)]
+  state: EditorState,
+  #[serde(default)]
+  quiet: bool,
 }
 
-pub fn save_editor_state(state: &EditorState) -> Result<(), String> {
+pub fn save_editor_json(json: &str) -> Result<bool, String> {
+  let req: SaveRequest =
+    serde_json::from_str(json).map_err(|e| format!("Invalid config data: {}", e))?;
+  save_editor_state(&req.state, req.quiet)?;
+  Ok(req.quiet)
+}
+
+pub fn save_editor_state(state: &EditorState, quiet: bool) -> Result<(), String> {
   if state.devices.is_empty() {
     return Err("At least one device is required.".to_string());
   }
@@ -131,8 +140,13 @@ pub fn save_editor_state(state: &EditorState) -> Result<(), String> {
   let yaml =
     serde_yaml::to_string(&cfg).map_err(|e| format!("Failed to serialize config: {}", e))?;
   fs::write(CONFIG_PATH, yaml).map_err(|e| format!("Failed to write config.yml: {}", e))?;
-  log_ui::app_log("Configuration saved. Reloading router...");
-  crate::router::request_restart();
+  crate::device_test::invalidate_motor_cache();
+  if quiet {
+    crate::router::request_restart_quiet();
+  } else {
+    log_ui::app_log("Configuration saved. Reloading router...");
+    crate::router::request_restart();
+  }
   Ok(())
 }
 
