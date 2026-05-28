@@ -180,21 +180,27 @@ body.ui-large #main { max-width: 2160px; }
   min-height: 0;
   display: flex;
   flex-direction: column;
-  padding: 16px 16px 0 16px;
-  gap: 12px;
+  /* This column is zoomed (0.5) in normal mode. Use doubled spacing here so the
+     *visual* inset matches the unzoomed log column. */
+  padding: 32px 32px 0 32px;
+  gap: 24px;
   overflow: hidden;
   position: relative;
   zoom: 0.5;
   transform-origin: top left;
 }
-body.ui-large #config-wrap { zoom: 1; }
+body.ui-large #config-wrap {
+  zoom: 1;
+  padding: 16px 16px 0 16px;
+  gap: 12px;
+}
 #config-column-divider {
   position: absolute;
   right: 0;
   width: 1px;
   background: #2a2a36;
   pointer-events: none;
-  display: none;
+  display: none !important;
 }
 #config-scroll {
   flex: 1 1 0;
@@ -1337,20 +1343,7 @@ function syncLogSectionLayout() {
 
   const wrap = document.getElementById('config-wrap');
   const list = document.getElementById('device-list');
-  const divider = document.getElementById('config-column-divider');
-  if (!wrap || !list || !divider) return;
-
-  const hasCards = list.querySelector('.device-card');
-  if (!hasCards) {
-    divider.style.display = 'none';
-    return;
-  }
-
-  const wrapRect = wrap.getBoundingClientRect();
-  const listRect = list.getBoundingClientRect();
-  divider.style.display = 'block';
-  divider.style.top = (listRect.top - wrapRect.top) + 'px';
-  divider.style.height = listRect.height + 'px';
+  if (!wrap || !list) return;
 }
 
 function pingStatusLabel(st) {
