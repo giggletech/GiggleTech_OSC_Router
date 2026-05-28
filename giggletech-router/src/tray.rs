@@ -416,18 +416,44 @@ header {
   border-bottom-color: #a855f7;
   border-bottom-style: solid;
 }
-.max-speed-block {
-  width: 100%;
+.slider-field {
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  margin-top: 4px;
+  gap: 10px;
+  width: 100%;
+  margin-top: 8px;
+  padding: 14px 16px;
+  border-radius: 10px;
+  background: #12121a;
+  border: 1px solid #2a2a36;
+  box-sizing: border-box;
+}
+.slider-field-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 28px;
+  padding: 0 4px;
+}
+.slider-field-title {
+  font-size: 1rem;
+  font-weight: 600;
+  color: #e8e8f0;
+  letter-spacing: 0.01em;
+  line-height: 1.25;
+}
+.slider-field .speed-value {
+  font-size: 1.125rem;
+  min-width: 52px;
 }
 .speed-slider-row {
   display: flex;
   align-items: center;
   gap: 16px;
   width: 100%;
+  padding: 8px 4px 10px;
+  box-sizing: border-box;
 }
 .speed-slider-row input[type="range"] {
   flex: 1;
@@ -492,18 +518,67 @@ header {
   flex-direction: column;
   gap: 12px;
 }
+.velocity-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: 100%;
+  margin-top: 8px;
+  padding: 14px 16px;
+  border-radius: 10px;
+  background: #12121a;
+  border: 1px solid #2a2a36;
+  box-sizing: border-box;
+}
+.velocity-panel-header {
+  display: flex;
+  flex-direction: row !important;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 0;
+  cursor: pointer;
+  user-select: none;
+}
+.velocity-panel-title {
+  font-size: 1rem;
+  font-weight: 600;
+  color: #c4b5fd;
+  letter-spacing: 0.01em;
+}
+.velocity-panel-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding-top: 12px;
+  border-top: 1px solid #2a2a36;
+}
+.velocity-panel-body.hidden {
+  display: none;
+}
+.velocity-panel .slider-field {
+  margin-top: 0;
+  padding: 0;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  gap: 8px;
+}
+.velocity-panel .speed-slider-row {
+  padding: 4px 0 6px;
+}
 .velocity-toggle-row {
   flex-direction: row !important;
   align-items: center;
   justify-content: space-between;
   gap: 12px !important;
-  margin-top: 4px;
+  margin: 0;
   cursor: pointer;
   user-select: none;
 }
 .velocity-toggle-row span {
-  font-size: 0.85rem;
-  color: #c4b5fd;
+  font-size: 0.9rem;
+  color: #d8d8e8;
   font-weight: 600;
 }
 .velocity-toggle {
@@ -543,30 +618,17 @@ header {
 .velocity-toggle:focus-visible {
   box-shadow: 0 0 0 2px #000, 0 0 0 4px #a855f7;
 }
-.velocity-toggle-row.velocity-sub-toggle {
-  margin-left: 12px;
-  padding-left: 8px;
-  border-left: 2px solid #2a2a36;
-}
 .velocity-toggle-row.velocity-sub-toggle span {
-  font-size: 0.8rem;
+  font-size: 0.85rem;
   color: #a1a1b5;
   font-weight: 500;
-}
-.velocity-toggle-row.velocity-sub-toggle.disabled {
-  opacity: 0.45;
-  pointer-events: none;
-}
-.velocity-settings-wrap.hidden {
-  display: none;
 }
 .velocity-settings-actions {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
-  margin-top: 6px;
-  margin-bottom: 2px;
-  padding-left: 4px;
+  margin: 0;
+  padding: 0;
 }
 .velocity-settings-actions .btn-sm {
   font-size: 0.75rem;
@@ -575,20 +637,12 @@ header {
 .velocity-settings {
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  margin-top: 4px;
-  padding-left: 4px;
+  gap: 12px;
+  margin: 0;
+  padding: 0;
 }
 .velocity-settings.hidden {
   display: none;
-}
-.velocity-settings label {
-  font-size: 0.8rem;
-  color: #a1a1b5;
-}
-.velocity-settings .speed-value {
-  min-width: 44px;
-  font-size: 0.95rem;
 }
 .device-card label .hint {
   display: block;
@@ -985,23 +1039,35 @@ function renderDevices() {
                 oninput="editorDevices[${i}].proximity_parameter=this.value; maybeClearConfigError()">
             </label>
           </div>
-          <label class="velocity-toggle-row">
-            <span>Velocity control</span>
-            <input type="checkbox" class="velocity-toggle" role="switch"
-              aria-label="Velocity control for device ${i + 1}"
-              ${d.use_velocity_control ? 'checked' : ''}
-              onchange="onVelocityControlChange(${i}, this)">
+          <label class="slider-field">
+            <div class="slider-field-header">
+              <span class="slider-field-title">Power</span>
+              <span class="speed-value" id="max-speed-val-${i}">${d.max_speed}%</span>
+            </div>
+            <div class="speed-slider-row">
+              <input type="range" min="0" max="${SPEED_SLIDER_STEPS}"
+                aria-label="Power for device ${i + 1}"
+                value="${Math.round(speedToSliderPos(d.max_speed) * SPEED_SLIDER_STEPS)}"
+                oninput="onMaxSpeedChange(${i}, this)" onchange="saveConfig(true)">
+            </div>
           </label>
-          <label class="velocity-toggle-row velocity-sub-toggle${d.use_velocity_control ? '' : ' disabled'}">
-            <span>Vibrate on pull-away</span>
-            <input type="checkbox" class="velocity-toggle" role="switch"
-              id="velocity-on-drop-${i}"
-              aria-label="Vibrate on proximity drop for device ${i + 1}"
-              ${d.velocity_on_prox_drop ? 'checked' : ''}
-              ${d.use_velocity_control ? '' : 'disabled'}
-              onchange="onVelocityOnProxDropChange(${i}, this)">
-          </label>
-          <div class="velocity-settings-wrap${d.use_velocity_control ? '' : ' hidden'}">
+          <section class="velocity-panel" aria-label="Velocity control for device ${i + 1}">
+            <label class="velocity-panel-header">
+              <span class="velocity-panel-title">Velocity control</span>
+              <input type="checkbox" class="velocity-toggle" role="switch"
+                aria-label="Enable velocity control for device ${i + 1}"
+                ${d.use_velocity_control ? 'checked' : ''}
+                onchange="onVelocityControlChange(${i}, this)">
+            </label>
+            <div class="velocity-panel-body${d.use_velocity_control ? '' : ' hidden'}">
+            <label class="velocity-toggle-row velocity-sub-toggle">
+              <span>Vibrate on pull-away</span>
+              <input type="checkbox" class="velocity-toggle" role="switch"
+                id="velocity-on-drop-${i}"
+                aria-label="Vibrate on proximity drop for device ${i + 1}"
+                ${d.velocity_on_prox_drop ? 'checked' : ''}
+                onchange="onVelocityOnProxDropChange(${i}, this)">
+            </label>
             <div class="velocity-settings-actions">
               <button type="button" class="btn btn-secondary btn-sm"
                 onclick="resetVelocitySettings(${i})">Reset to defaults</button>
@@ -1010,43 +1076,45 @@ function renderDevices() {
                 onclick="toggleVelocitySettingsVisible(${i})">${isVelocitySlidersHidden(d, i) ? 'Show velocity settings' : 'Hide velocity settings'}</button>
             </div>
             <div class="velocity-settings${isVelocitySlidersHidden(d, i) ? ' hidden' : ''}" id="velocity-settings-${i}">
-            <label>Outer proximity
+            <label class="slider-field">
+              <div class="slider-field-header">
+                <span class="slider-field-title">Outer proximity</span>
+                <span class="speed-value" id="outer-prox-val-${i}">${formatProx(effectiveOuterProx(d))}</span>
+              </div>
               <div class="speed-slider-row">
                 <input type="range" id="outer-prox-${i}" min="0" max="100"
                   value="${proxToSliderPct(effectiveOuterProx(d))}"
                   aria-label="Outer proximity for device ${i + 1}"
                   oninput="onOuterProxChange(${i}, this)" onchange="saveConfig(true)">
-                <span class="speed-value" id="outer-prox-val-${i}">${formatProx(effectiveOuterProx(d))}</span>
               </div>
             </label>
-            <label>Inner proximity
+            <label class="slider-field">
+              <div class="slider-field-header">
+                <span class="slider-field-title">Inner proximity</span>
+                <span class="speed-value" id="inner-prox-val-${i}">${formatProx(effectiveInnerProx(d))}</span>
+              </div>
               <div class="speed-slider-row">
                 <input type="range" id="inner-prox-${i}" min="0" max="100"
                   value="${proxToSliderPct(effectiveInnerProx(d))}"
                   aria-label="Inner proximity for device ${i + 1}"
                   oninput="onInnerProxChange(${i}, this)" onchange="saveConfig(true)">
-                <span class="speed-value" id="inner-prox-val-${i}">${formatProx(effectiveInnerProx(d))}</span>
               </div>
             </label>
-            <label>Velocity sensitivity
+            <label class="slider-field">
+              <div class="slider-field-header">
+                <span class="slider-field-title">Velocity sensitivity</span>
+                <span class="speed-value" id="velocity-scalar-val-${i}">${effectiveVelocityScalar(d)}</span>
+              </div>
               <div class="speed-slider-row">
                 <input type="range" id="velocity-scalar-${i}" min="1" max="100"
                   value="${effectiveVelocityScalar(d)}"
                   aria-label="Velocity sensitivity for device ${i + 1}"
                   oninput="onVelocityScalarChange(${i}, this)" onchange="saveConfig(true)">
-                <span class="speed-value" id="velocity-scalar-val-${i}">${effectiveVelocityScalar(d)}</span>
               </div>
             </label>
             </div>
-          </div>
-          <label class="max-speed-block">Power
-            <div class="speed-slider-row">
-              <input type="range" min="0" max="${SPEED_SLIDER_STEPS}"
-                value="${Math.round(speedToSliderPos(d.max_speed) * SPEED_SLIDER_STEPS)}"
-                oninput="onMaxSpeedChange(${i}, this)" onchange="saveConfig(true)">
-              <span class="speed-value" id="max-speed-val-${i}">${d.max_speed}%</span>
             </div>
-          </label>
+          </section>
           <div class="device-actions">
             ${pendingRemoveIndex === i
               ? `<button type="button" class="btn btn-danger" onclick="cancelRemoveDevice()">Remove</button>
