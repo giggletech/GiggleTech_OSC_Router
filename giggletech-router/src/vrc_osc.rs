@@ -1,8 +1,10 @@
 //! Send OSC messages to VRChat (typically 127.0.0.1:9000).
 
 use async_osc::{OscSender, OscSocket, Result};
+use async_std::task;
 use once_cell::sync::Lazy;
 use std::sync::Mutex;
+use std::time::Duration;
 
 use crate::giggletech_osc::create_socket_address;
 
@@ -21,8 +23,7 @@ async fn shared_sender() -> Result<OscSender> {
   Ok(sender)
 }
 
-/// Send a bool value to a VRChat avatar parameter address.
-pub async fn send_avatar_parameter(address: &str, value: bool) -> Result<()> {
+async fn send_bool(address: &str, value: bool) -> Result<()> {
   let addr = create_socket_address(VRC_HOST, VRC_PORT);
   let sender = shared_sender().await?;
   match sender.send_to((address, (value,)), &addr).await {
@@ -34,3 +35,17 @@ pub async fn send_avatar_parameter(address: &str, value: bool) -> Result<()> {
   }
 }
 
+/// Send online/offline to a VRChat avatar parameter as OSC bool.
+///
+/// When `pulse_on_online` is true, sends false then true so VRChat sees a fresh transition.
+pub async fn send_avatar_parameter(
+  address: &str,
+  online: bool,
+  pulse_on_online: bool,
+) -> Result<()> {
+  if online && pulse_on_online {
+    send_bool(address, false).await?;
+    task::sleep(Duration::from_millis(50)).await;
+  }
+  send_bool(address, online).await
+}

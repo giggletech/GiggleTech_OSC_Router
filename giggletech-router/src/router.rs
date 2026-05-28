@@ -222,9 +222,11 @@ fn spawn_online_monitor(
         }
 
         if let Some(param) = online_param.as_ref() {
-          if vrc_osc::send_avatar_parameter(param, current)
+          let pulse = changed && current;
+          if vrc_osc::send_avatar_parameter(param, current, pulse)
             .await
             .is_ok()
+            && changed
           {
             log_ui::status(&format!("{} {}", param, current));
           }
