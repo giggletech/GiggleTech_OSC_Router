@@ -591,7 +591,7 @@ header {
 .panel-info-text.hidden {
   display: none;
 }
-.velocity-panel-header .velocity-toggle {
+.velocity-panel-header .velocity-switch {
   cursor: pointer;
 }
 .velocity-panel-body {
@@ -659,6 +659,7 @@ header {
   padding: 4px 0 6px;
 }
 .velocity-toggle-row {
+  position: relative;
   flex-direction: row !important;
   align-items: center;
   justify-content: space-between;
@@ -667,49 +668,68 @@ header {
   cursor: pointer;
   user-select: none;
 }
-.velocity-toggle-row span {
+.velocity-toggle-label {
   font-size: 0.9rem;
   color: #d8d8e8;
   font-weight: 600;
 }
-.velocity-toggle {
+.velocity-switch {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+  cursor: pointer;
+}
+.velocity-toggle-input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+.velocity-toggle-track {
+  display: block;
   position: relative;
   width: 44px;
   height: 24px;
   flex-shrink: 0;
-  margin: 0;
-  padding: 0;
-  border: none;
+  box-sizing: border-box;
+  border: 1.5px solid #4a4a5c;
   border-radius: 999px;
   background: #2a2a36;
-  cursor: pointer;
-  transition: background 0.15s ease;
-  -webkit-appearance: none;
-  appearance: none;
+  transition: background 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
 }
-.velocity-toggle::after {
-  content: '';
+.velocity-toggle-thumb {
   position: absolute;
-  top: 3px;
+  top: 50%;
   left: 3px;
-  width: 18px;
-  height: 18px;
+  width: 16px;
+  height: 16px;
   border-radius: 50%;
   background: #b8b8c8;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
+  transform: translateY(-50%);
   transition: transform 0.15s ease, background 0.15s ease;
+  pointer-events: none;
 }
-.velocity-toggle:checked {
+.velocity-toggle-input:checked + .velocity-toggle-track {
+  border-color: #c084fc;
   background: linear-gradient(135deg, #a855f7, #7c3aed);
 }
-.velocity-toggle:checked::after {
-  transform: translateX(20px);
+.velocity-toggle-input:checked + .velocity-toggle-track .velocity-toggle-thumb {
+  transform: translate(20px, -50%);
   background: #f3e8ff;
 }
-.velocity-toggle:focus { outline: none; }
-.velocity-toggle:focus-visible {
-  box-shadow: 0 0 0 2px #000, 0 0 0 4px #a855f7;
+.velocity-toggle-input:focus { outline: none; }
+.velocity-toggle-input:focus-visible + .velocity-toggle-track {
+  box-shadow: 0 0 0 2px #12121a, 0 0 0 4px #a855f7;
 }
-.velocity-toggle-row.velocity-sub-toggle span {
+.velocity-toggle-row.velocity-sub-toggle .velocity-toggle-label {
   font-size: 0.85rem;
   color: #a1a1b5;
   font-weight: 500;
@@ -1099,27 +1119,35 @@ function renderDevices() {
                   aria-label="About velocity control"
                   onclick="togglePanelInfo(event, 'velocity-info-${i}')">i</button>
               </div>
-              <input type="checkbox" class="velocity-toggle" role="switch"
-                aria-label="Enable velocity control for device ${i + 1}"
-                ${d.use_velocity_control ? 'checked' : ''}
-                onchange="onVelocityControlChange(${i}, this)">
+              <label class="velocity-switch">
+                <input type="checkbox" class="velocity-toggle-input" role="switch"
+                  aria-label="Enable velocity control for device ${i + 1}"
+                  ${d.use_velocity_control ? 'checked' : ''}
+                  onchange="onVelocityControlChange(${i}, this)">
+                <span class="velocity-toggle-track" aria-hidden="true">
+                  <span class="velocity-toggle-thumb"></span>
+                </span>
+              </label>
             </div>
             <p class="panel-info-text hidden" id="velocity-info-${i}">
               Vibratrion strength follows how fast proximity changes, not how close you are.
             </p>
             <div class="velocity-panel-body${d.use_velocity_control ? '' : ' hidden'}">
             <label class="velocity-toggle-row velocity-sub-toggle">
-              <span>Vibrate on pull-away</span>
-              <input type="checkbox" class="velocity-toggle" role="switch"
+              <span class="velocity-toggle-label">Vibrate on pull-away</span>
+              <input type="checkbox" class="velocity-toggle-input" role="switch"
                 id="velocity-on-drop-${i}"
                 aria-label="Vibrate on proximity drop for device ${i + 1}"
                 ${d.velocity_on_prox_drop ? 'checked' : ''}
                 onchange="onVelocityOnProxDropChange(${i}, this)">
+              <span class="velocity-toggle-track" aria-hidden="true">
+                <span class="velocity-toggle-thumb"></span>
+              </span>
             </label>
             <label class="slider-field">
               <div class="slider-field-header">
                 <span class="slider-field-title">Sensitivity</span>
-                <span class="speed-value" id="velocity-scalar-val-${i}">${effectiveVelocityScalar(d)}</span>
+                <span class="speed-value" id="velocity-scalar-val-${i}">${effectiveVelocityScalar(d)}%</span>
               </div>
               <div class="speed-slider-row">
                 <input type="range" id="velocity-scalar-${i}" min="1" max="100"
@@ -1467,7 +1495,7 @@ function onVelocityScalarChange(index, input) {
   const v = parseInt(input.value, 10);
   d.velocity_scalar = v;
   const label = document.getElementById('velocity-scalar-val-' + index);
-  if (label) label.textContent = String(v);
+  if (label) label.textContent = String(v) + '%';
   maybeClearConfigError();
 }
 

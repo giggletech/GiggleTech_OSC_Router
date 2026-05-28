@@ -70,9 +70,16 @@ pub fn print_speed_limit(_headpat_max_rx: f32) {
 // Pat Processor
 const MOTOR_SPEED_SCALE: f32 = 0.66; // Overvolt   Here, OEM config 0.66 going higher than this value will reduce your vibrator motor life
 
-/// Motor off only below the far edge; at/above far edge counts as in-band.
+/// Proximity-mode band: motor off only below the far edge.
+/// At/above the far edge counts as in-band (and clamps to 100% past the close edge).
 pub fn proximity_in_band(proximity_signal: f32, device: &DeviceConfig) -> bool {
     proximity_signal >= device.outer_proximity
+}
+
+/// Velocity-mode band: require proximity to stay between far and close edges.
+/// This prevents "stuck on" behavior when the sensor saturates at very close range.
+pub fn proximity_in_band_velocity(proximity_signal: f32, device: &DeviceConfig) -> bool {
+    proximity_signal >= device.outer_proximity && proximity_signal <= device.inner_proximity
 }
 
 /// Far edge → 0%, close edge → 100%, closer than close edge stays at 100%.
@@ -110,7 +117,7 @@ const MIN_VELOCITY_DELTA_SECS: f32 = 0.001;
 const PROX_VELOCITY_DEADZONE: f32 = 0.002;
 
 pub fn process_pat_advanced(proximity_signal: f32, prev_signal: f32, delta_t: Duration, device: &DeviceConfig) -> i32 {
-    if proximity_in_band(proximity_signal, device) && prev_signal > 0.0 {
+    if proximity_in_band_velocity(proximity_signal, device) && prev_signal > 0.0 {
         let delta = proximity_signal - prev_signal;
         if delta.abs() < PROX_VELOCITY_DEADZONE {
             return 0;
