@@ -674,10 +674,24 @@ body.ui-large #config-wrap {
   color: #e8e8f0;
   letter-spacing: 0.01em;
 }
+.proximity-band-hide-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-shrink: 0;
+}
+.proximity-band-hide-label {
+  font-size: 1.5rem;
+  color: #a1a1b5;
+  font-weight: 500;
+}
 .proximity-band-panel-body {
   display: flex;
   flex-direction: column;
   gap: 24px;
+}
+.proximity-band-panel-body.hidden {
+  display: none;
 }
 .proximity-band-panel .slider-field {
   margin-top: 0;
@@ -1067,6 +1081,13 @@ const PING_POLL_MS = 5000;
 let pingPollTimer = null;
 let pingInFlight = false;
 let pendingRemoveIndex = null;
+let colliderAdjustmentVisible = (() => {
+  try {
+    const v = localStorage.getItem('colliderAdjustmentVisible');
+    if (v === null) return false;
+    return v === '1';
+  } catch (_) { return false; }
+})();
 let activeTestDrag = null;
 let testSliderSafetyReady = false;
 const SPEED_SLIDER_STEPS = 1000;
@@ -1305,8 +1326,20 @@ function renderDevices() {
           <section class="proximity-band-panel" aria-label="Collider adjustment for device ${i + 1}">
             <div class="proximity-band-panel-header">
               <span class="proximity-band-panel-title">Collider adjustment</span>
+              <div class="proximity-band-hide-row">
+                <span class="proximity-band-hide-label">Hide</span>
+                <label class="velocity-switch">
+                  <input type="checkbox" class="velocity-toggle-input" role="switch"
+                    aria-label="Show collider adjustment sliders for device ${i + 1}"
+                    ${colliderAdjustmentVisible ? 'checked' : ''}
+                    onchange="onColliderAdjustmentVisibleChange(${i}, this)">
+                  <span class="velocity-toggle-track" aria-hidden="true">
+                    <span class="velocity-toggle-thumb"></span>
+                  </span>
+                </label>
+              </div>
             </div>
-            <div class="proximity-band-panel-body" id="proximity-band-${i}">
+            <div class="proximity-band-panel-body${colliderAdjustmentVisible ? '' : ' hidden'}" id="proximity-band-${i}">
               <label class="slider-field">
                 <div class="slider-field-header">
                   <span class="slider-field-title">Inner</span>
@@ -1579,6 +1612,17 @@ function onVelocityControlChange(index, input) {
   editorDevices[index].use_velocity_control = !!input.checked;
   renderDevices();
   saveConfig(true);
+}
+
+function onColliderAdjustmentVisibleChange(_index, input) {
+  colliderAdjustmentVisible = !!input.checked;
+  try { localStorage.setItem('colliderAdjustmentVisible', colliderAdjustmentVisible ? '1' : '0'); } catch (_) {}
+  document.querySelectorAll('.proximity-band-panel .velocity-toggle-input').forEach((el) => {
+    el.checked = colliderAdjustmentVisible;
+  });
+  document.querySelectorAll('.proximity-band-panel-body').forEach((el) => {
+    el.classList.toggle('hidden', !colliderAdjustmentVisible);
+  });
 }
 
 function onVelocityOnProxDropChange(index, input) {

@@ -6,55 +6,13 @@ devices:
   max_speed: null
   speed_scale: null
   max_speed_parameter: null
-  use_velocity_control: null
+  use_velocity_control: false
   velocity_on_prox_drop: true
-  outer_proximity: 0.12999999523162842
-  inner_proximity: 0.6299999952316284
+  outer_proximity: 0.6600000262260437
+  inner_proximity: null
   velocity_scalar: 50
   velocity_softcap: 20
   velocity_smoothing_ms: 190
-- name: null
-  ip: 192.168.1.70
-  proximity_parameter: proximity_02
-  online_parameter: Dev2
-  max_speed: 22
-  speed_scale: null
-  max_speed_parameter: null
-  use_velocity_control: false
-  velocity_on_prox_drop: null
-  outer_proximity: null
-  inner_proximity: null
-  velocity_scalar: null
-  velocity_softcap: null
-  velocity_smoothing_ms: null
-- name: null
-  ip: 192.168.1.71
-  proximity_parameter: proximity_03
-  online_parameter: null
-  max_speed: null
-  speed_scale: null
-  max_speed_parameter: null
-  use_velocity_control: null
-  velocity_on_prox_drop: null
-  outer_proximity: null
-  inner_proximity: null
-  velocity_scalar: null
-  velocity_softcap: null
-  velocity_smoothing_ms: null
-- name: null
-  ip: 192.168.1.73
-  proximity_parameter: proximity_04
-  online_parameter: null
-  max_speed: 100
-  speed_scale: 100
-  max_speed_parameter: max_speed_04
-  use_velocity_control: null
-  velocity_on_prox_drop: null
-  outer_proximity: 0.10000000149011612
-  inner_proximity: 0.6000000238418579
-  velocity_scalar: 25
-  velocity_softcap: null
-  velocity_smoothing_ms: null
 setup:
   port_rx: '9001'
   default_min_speed: 5
