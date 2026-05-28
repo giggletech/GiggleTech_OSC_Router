@@ -1,6 +1,6 @@
 # GiggleTech OSC Router
 
-**Version 1.4** — Routes VRChat proximity OSC to GiggleTech haptic hardware, with optional device online status back to your avatar.
+**Version 2.0** — Routes VRChat proximity OSC to GiggleTech haptic hardware, with optional device online status back to your avatar.
 
 ---
 
@@ -20,8 +20,7 @@ Logs are written to **giggletech_log.txt** beside the executable.
 
 1. Put your GiggleTech device on Wi‑Fi and note its IP.
 2. Install the OSCQuery helper (if you use `OSCQuery` for `port_rx`).
-3. Edit **config.yml** (IP, proximity parameters, optional online parameters).
-4. Run **GiggleTech.exe** and keep it open while in VRChat.
+3. Run **GiggleTech.exe** and keep it open while in VRChat.
 
 The router listens for VRChat OSC (proximity, max speed, etc.), drives motors over UDP, and can report whether each device is reachable back to VRChat avatar parameters.
 
@@ -65,8 +64,7 @@ After saving, power-cycle the device. Three blinks and three buzzes mean it join
 
 1. Download the latest release from the GiggleTech GitHub.
 2. Run **Giggletech_OSCQuery_Installer.exe** if you plan to use `port_rx: OSCQuery` in config (recommended for VRChat).
-3. Place **config.yml** next to **GiggleTech.exe** (or in the folder you run from).
-4. Launch **GiggleTech.exe**. A settings window and tray icon appear; the router starts automatically.
+3. Launch **GiggleTech.exe**. A settings window and tray icon appear; the router starts automatically.
 
 ### VR mode
 
@@ -188,8 +186,9 @@ For help, use the GiggleTech Discord or support email from the release page.
 
 ---
 
-## Version 1.4 highlights
+## Version 2.0 highlights
 
+- New UI
 - Graceful handling when devices are offline (no crash on unreachable networks)
 - Background **ping** monitoring and optional **VRChat online OSC** per device
 - Connection manager for UDP to hardware with improved error logging
