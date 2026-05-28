@@ -6,12 +6,12 @@ devices:
   max_speed: null
   speed_scale: null
   max_speed_parameter: null
-  use_velocity_control: false
-  velocity_on_prox_drop: true
-  outer_proximity: 0.6600000262260437
+  use_velocity_control: null
+  velocity_on_prox_drop: null
+  outer_proximity: null
   inner_proximity: null
-  velocity_scalar: 50
-  velocity_softcap: 20
+  velocity_scalar: 100
+  velocity_softcap: 21
   velocity_smoothing_ms: 190
 setup:
   port_rx: '9001'
