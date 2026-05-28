@@ -15,13 +15,35 @@ pub async fn ping_host(device_ip: &str) -> bool {
     return false;
   }
 
-  match async_std::process::Command::new("ping")
-    .args(["-n", "1", "-w", "1000", device_ip])
-    .output()
-    .await
+  #[cfg(windows)]
   {
-    Ok(output) => output.status.success(),
-    Err(_) => false,
+    // Since the app runs as a GUI subsystem process in release builds,
+    // spawning `ping.exe` (a console program) can pop up a new console window.
+    // Run it with CREATE_NO_WINDOW so pings are always silent.
+    const CREATE_NO_WINDOW: u32 = 0x08000000;
+    let ip = device_ip.to_string();
+    return async_std::task::spawn_blocking(move || {
+      use std::os::windows::process::CommandExt;
+      std::process::Command::new("ping")
+        .creation_flags(CREATE_NO_WINDOW)
+        .args(["-n", "1", "-w", "1000", &ip])
+        .output()
+        .map(|o| o.status.success())
+        .unwrap_or(false)
+    })
+    .await;
+  }
+
+  #[cfg(not(windows))]
+  {
+    match async_std::process::Command::new("ping")
+      .args(["-c", "1", "-W", "1", device_ip])
+      .output()
+      .await
+    {
+      Ok(output) => output.status.success(),
+      Err(_) => false,
+    }
   }
 }
 

@@ -1059,7 +1059,7 @@ let editorDevices = [];
 let editorSpeedDefaults = { min: 5, max: 25 };
 let editorVelocityDefault = false;
 let editorVelocityOnProxDropDefault = false;
-let editorVelocityProxDefaults = { outer: 0, inner: 1, scalar: 20, smoothing_ms: 80 };
+let editorVelocityProxDefaults = { outer: 0, inner: 1, scalar: 20, softcap: 35, smoothing_ms: 80 };
 let editorPortRx = 'OSCQuery';
 let devicePingStatus = {};
 let pingDebounceTimer = null;
@@ -1142,6 +1142,9 @@ function effectiveInnerProx(d) {
 function effectiveVelocityScalar(d) {
   return d.velocity_scalar ?? editorVelocityProxDefaults.scalar;
 }
+function effectiveVelocitySoftcap(d) {
+  return d.velocity_softcap ?? editorVelocityProxDefaults.softcap;
+}
 function effectiveVelocitySmoothingMs(d) {
   return d.velocity_smoothing_ms ?? editorVelocityProxDefaults.smoothing_ms;
 }
@@ -1158,6 +1161,8 @@ function editorValidationOk() {
     if (d.use_velocity_control) {
       const scalar = effectiveVelocityScalar(d);
       if (scalar < 1 || scalar > 100) return false;
+      const softcap = effectiveVelocitySoftcap(d);
+      if (softcap < 1 || softcap > 100) return false;
       const smoothing = effectiveVelocitySmoothingMs(d);
       if (smoothing < 0 || smoothing > 500) return false;
     }
@@ -1225,18 +1230,18 @@ function renderDevices() {
                 oninput="onMaxSpeedChange(${i}, this)" onchange="saveConfig(true)">
             </div>
           </label>
-          <section class="velocity-panel" aria-label="Velocity control for device ${i + 1}">
+          <section class="velocity-panel" aria-label="Headpat Mode for device ${i + 1}">
             <div class="velocity-panel-header">
               <div class="panel-title-row">
-                <span class="velocity-panel-title">Velocity control</span>
+                <span class="velocity-panel-title">Headpat Mode</span>
                 <button type="button" class="panel-info-btn" aria-expanded="false"
                   aria-controls="velocity-info-${i}"
-                  aria-label="About velocity control"
+                  aria-label="About Headpat Mode"
                   onclick="togglePanelInfo(event, 'velocity-info-${i}')">i</button>
               </div>
               <label class="velocity-switch">
                 <input type="checkbox" class="velocity-toggle-input" role="switch"
-                  aria-label="Enable velocity control for device ${i + 1}"
+                  aria-label="Enable Headpat Mode for device ${i + 1}"
                   ${d.use_velocity_control ? 'checked' : ''}
                   onchange="onVelocityControlChange(${i}, this)">
                 <span class="velocity-toggle-track" aria-hidden="true">
@@ -1269,6 +1274,18 @@ function renderDevices() {
                   value="${effectiveVelocityScalar(d)}"
                   aria-label="Velocity sensitivity for device ${i + 1}"
                   oninput="onVelocityScalarChange(${i}, this)" onchange="saveConfig(true)">
+              </div>
+            </label>
+            <label class="slider-field">
+              <div class="slider-field-header">
+                <span class="slider-field-title">High-speed damping</span>
+                <span class="speed-value" id="velocity-softcap-val-${i}">${effectiveVelocitySoftcap(d)}%</span>
+              </div>
+              <div class="speed-slider-row">
+                <input type="range" id="velocity-softcap-${i}" min="1" max="100"
+                  value="${effectiveVelocitySoftcap(d)}"
+                  aria-label="Velocity high-speed damping for device ${i + 1}"
+                  oninput="onVelocitySoftcapChange(${i}, this)" onchange="saveConfig(true)">
               </div>
             </label>
             <label class="slider-field">
@@ -1613,6 +1630,16 @@ function onVelocityScalarChange(index, input) {
   maybeClearConfigError();
 }
 
+function onVelocitySoftcapChange(index, input) {
+  const d = editorDevices[index];
+  if (!d) return;
+  const v = parseInt(input.value, 10);
+  d.velocity_softcap = v;
+  const label = document.getElementById('velocity-softcap-val-' + index);
+  if (label) label.textContent = String(v) + '%';
+  maybeClearConfigError();
+}
+
 function onVelocitySmoothingChange(index, input) {
   const d = editorDevices[index];
   if (!d) return;
@@ -1634,6 +1661,7 @@ function addDevice() {
     outer_proximity: editorVelocityProxDefaults.outer,
     inner_proximity: editorVelocityProxDefaults.inner,
     velocity_scalar: editorVelocityProxDefaults.scalar,
+    velocity_softcap: editorVelocityProxDefaults.softcap,
     velocity_smoothing_ms: editorVelocityProxDefaults.smoothing_ms
   });
   renderDevices();
@@ -1740,6 +1768,9 @@ window.onConfigLoaded = function(state) {
   if (state.default_velocity_scalar != null) {
     editorVelocityProxDefaults.scalar = state.default_velocity_scalar;
   }
+  if (state.default_velocity_softcap != null) {
+    editorVelocityProxDefaults.softcap = state.default_velocity_softcap;
+  }
   if (state.default_velocity_smoothing_ms != null) {
     editorVelocityProxDefaults.smoothing_ms = state.default_velocity_smoothing_ms;
   }
@@ -1753,6 +1784,7 @@ window.onConfigLoaded = function(state) {
     outer_proximity: d.outer_proximity ?? editorVelocityProxDefaults.outer,
     inner_proximity: d.inner_proximity ?? editorVelocityProxDefaults.inner,
     velocity_scalar: d.velocity_scalar ?? editorVelocityProxDefaults.scalar,
+    velocity_softcap: d.velocity_softcap ?? editorVelocityProxDefaults.softcap,
     velocity_smoothing_ms: d.velocity_smoothing_ms ?? editorVelocityProxDefaults.smoothing_ms,
   }));
   renderDevices();
@@ -2050,6 +2082,17 @@ impl UiState {
     event_loop: &EventLoopWindowTarget<UserEvent>,
     ipc_proxy: &tao::event_loop::EventLoopProxy<UserEvent>,
   ) {
+    // If another instance (or the OS) repeatedly signals "show output", avoid
+    // re-showing / refocusing the window which can feel like "window spam".
+    if self.is_output_visible() {
+      if let Some(output) = &self.output {
+        sync_status_to_webview(&output.webview, &mut self.status_synced, &mut self.status_epoch);
+        self.status_pending = false;
+        self.last_status_flush = Some(Instant::now());
+      }
+      return;
+    }
+
     if self.output.is_none() {
       self.create_output_window(event_loop, ipc_proxy.clone());
     }

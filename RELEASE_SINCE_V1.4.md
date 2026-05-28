@@ -11,7 +11,7 @@ This document summarizes changes from **`v1.4`** (`97a1d6e`, 2025-06-26) up to t
 - **Device test / VRChat simulator tooling** to validate without launching VRChat.
 - **Velocity control + smoothing improvements** and broader routing refinements.
 - **New assets & icon** for the Windows app.
-- **Twitch bot folder** added (separate Node.js project).
+
 
 ## Notable new/changed components
 

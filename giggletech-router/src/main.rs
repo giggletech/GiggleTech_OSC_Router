@@ -4,6 +4,9 @@
     Based on OSC Async Library: https://github.com/Frando/async-osc
 */
 
+// Hide the Windows console window in release builds (tray app).
+#![cfg_attr(all(windows, not(debug_assertions)), windows_subsystem = "windows")]
+
 use std::io;
 
 mod config;

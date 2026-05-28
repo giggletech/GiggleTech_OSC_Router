@@ -75,9 +75,18 @@ fn run_giggletech() -> Child {
         executable_path.display()
     ));
 
-    Command::new(executable_path)
-        .spawn()
-        .expect("Failed to start giggletech process")
+    let mut cmd = Command::new(executable_path);
+
+    #[cfg(windows)]
+    {
+        // If `giggletech_oscq.exe` is a console program, spawning it from the tray/GUI build
+        // can pop a console window. Start it hidden.
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x08000000;
+        cmd.creation_flags(CREATE_NO_WINDOW);
+    }
+
+    cmd.spawn().expect("Failed to start giggletech process")
 }
 
 
