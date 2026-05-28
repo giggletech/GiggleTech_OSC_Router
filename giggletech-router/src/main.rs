@@ -11,6 +11,7 @@ use std::io;
 
 mod config;
 mod config_editor;
+mod device_discovery;
 mod device_ping;
 mod device_test;
 mod data_processing;

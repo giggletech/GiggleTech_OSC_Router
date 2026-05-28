@@ -29,6 +29,7 @@ use serde::Deserialize;
 use tao::event_loop::EventLoopProxy;
 
 use crate::config_editor;
+use crate::device_discovery;
 use crate::device_ping;
 use crate::device_test;
 use crate::log_ui;
@@ -549,6 +550,62 @@ body.ui-large #config-wrap {
   display: flex;
   flex-direction: column;
   gap: 24px;
+}
+.ip-input-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+.ip-input-row input {
+  flex: 1;
+  min-width: 0;
+}
+.ip-input-row .btn-sm {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px 20px;
+  border-radius: 12px;
+  border: 2px solid #3f3f4e;
+  background: #0f0f14;
+  color: #e8e8f0;
+  font-size: 1.8rem;
+  font-weight: 600;
+  line-height: 1.2;
+  box-sizing: border-box;
+}
+.ip-input-row .btn-sm:hover {
+  background: #1a1a24;
+  border-color: #5b5b6e;
+}
+.ip-input-row .btn-sm:disabled {
+  opacity: 0.65;
+  cursor: wait;
+}
+@keyframes mdns-found-pulse {
+  0%, 100% {
+    box-shadow: 0 0 0 0 rgba(168, 85, 247, 0.55);
+    background: #6d28d9;
+    border-color: #a855f7;
+    color: #f3e8ff;
+  }
+  50% {
+    box-shadow: 0 0 0 10px rgba(168, 85, 247, 0);
+    background: #7c3aed;
+    border-color: #c084fc;
+    color: #faf5ff;
+  }
+}
+.mdns-check-btn.found-pulse {
+  animation: mdns-found-pulse 0.75s ease-in-out 3;
+}
+.mdns-check-hint {
+  flex-shrink: 0;
+  font-size: 1.45rem;
+  font-weight: 600;
+  color: #fca5a5;
+  white-space: nowrap;
 }
 .velocity-panel {
   display: flex;
@@ -1076,6 +1133,8 @@ let editorVelocityOnProxDropDefault = false;
 let editorVelocityProxDefaults = { outer: 0, inner: 1, scalar: 20, softcap: 35, smoothing_ms: 80 };
 let editorPortRx = 'OSCQuery';
 let devicePingStatus = {};
+let mdnsCheckInFlight = false;
+let mdnsHintTimers = {};
 let pingDebounceTimer = null;
 const PING_POLL_MS = 5000;
 let pingPollTimer = null;
@@ -1241,8 +1300,12 @@ function renderDevices() {
           </div>
           <div class="device-fields">
             <label>IP address
-              <input type="text" value="${escapeHtml(d.ip)}"
-                oninput="editorDevices[${i}].ip=this.value; onDeviceIpChange(${i}); maybeClearConfigError()">
+              <div class="ip-input-row">
+                <input type="text" id="device-ip-${i}" value="${escapeHtml(d.ip)}"
+                  oninput="editorDevices[${i}].ip=this.value; onDeviceIpChange(${i}); maybeClearConfigError()">
+                <button type="button" class="btn btn-secondary btn-sm mdns-check-btn" id="mdns-check-btn-${i}" onclick="checkDeviceMdns(${i})">Search IP</button>
+                <span class="mdns-check-hint" id="mdns-check-hint-${i}"></span>
+              </div>
             </label>
             <label>Proximity parameter
               <input type="text" value="${escapeHtml(d.proximity_parameter)}" placeholder="proximity_01"
@@ -1428,6 +1491,61 @@ function updatePingBadges() {
     el.textContent = pingStatusLabel(st);
   });
 }
+
+function clearMdnsHint(index) {
+  const hint = document.getElementById('mdns-check-hint-' + index);
+  if (hint) hint.textContent = '';
+  if (mdnsHintTimers[index]) {
+    clearTimeout(mdnsHintTimers[index]);
+    delete mdnsHintTimers[index];
+  }
+}
+
+function showMdnsNotFound(index) {
+  clearMdnsHint(index);
+  const hint = document.getElementById('mdns-check-hint-' + index);
+  if (!hint) return;
+  hint.textContent = 'Not found';
+  mdnsHintTimers[index] = setTimeout(() => {
+    if (hint.textContent === 'Not found') hint.textContent = '';
+    delete mdnsHintTimers[index];
+  }, 3000);
+}
+
+function pulseMdnsCheckButton(index) {
+  const btn = document.getElementById('mdns-check-btn-' + index);
+  if (!btn) return;
+  btn.classList.remove('found-pulse');
+  void btn.offsetWidth;
+  btn.classList.add('found-pulse');
+  setTimeout(() => btn.classList.remove('found-pulse'), 2400);
+}
+
+function checkDeviceMdns(index) {
+  if (mdnsCheckInFlight) return;
+  mdnsCheckInFlight = true;
+  clearMdnsHint(index);
+  const btn = document.getElementById('mdns-check-btn-' + index);
+  if (btn) btn.disabled = true;
+  window.ipc.postMessage('mdns-check:' + JSON.stringify({ device_index: index }));
+}
+
+window.onDeviceMdnsResult = function(result) {
+  mdnsCheckInFlight = false;
+  const i = result.device_index;
+  const btn = document.getElementById('mdns-check-btn-' + i);
+  if (btn) btn.disabled = false;
+  if (result.found && result.ip) {
+    editorDevices[i].ip = result.ip;
+    const ipInput = document.getElementById('device-ip-' + i);
+    if (ipInput) ipInput.value = result.ip;
+    onDeviceIpChange(i);
+    maybeClearConfigError();
+    pulseMdnsCheckButton(i);
+  } else {
+    showMdnsNotFound(i);
+  }
+};
 
 function requestDevicePing(ips, manual) {
   const list = ips.map(ip => (ip || '').trim()).filter(Boolean);
@@ -2048,12 +2166,18 @@ enum UserEvent {
   LiveUiFlush,
   ConfigIpc(String),
   PingResults(String),
+  MdnsLookupResult(String),
   ShowOutput,
 }
 
 #[derive(Debug, Deserialize)]
 struct PingDevicesRequest {
   ips: Vec<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct MdnsCheckRequest {
+  device_index: usize,
 }
 
 struct OutputWindow {
@@ -2337,6 +2461,20 @@ fn handle_config_ipc(
       };
       let _ = proxy.send_event(UserEvent::PingResults(payload));
     });
+  } else if let Some(json) = msg.strip_prefix("mdns-check:") {
+    let req: MdnsCheckRequest = match serde_json::from_str(json) {
+      Ok(r) => r,
+      Err(_) => return,
+    };
+    let proxy = event_proxy.clone();
+    std::thread::spawn(move || {
+      let result = device_discovery::lookup_giggletech_webpage(req.device_index);
+      if result.found {
+        log_ui::status("Found device.");
+      }
+      let payload = serde_json::to_string(&result).unwrap_or_else(|_| "{}".to_string());
+      let _ = proxy.send_event(UserEvent::MdnsLookupResult(payload));
+    });
   }
 }
 
@@ -2473,6 +2611,15 @@ pub fn run(start_minimized: bool, primary: PrimaryInstance) {
         if let Some(output) = &ui_state.output {
           let _ = output.webview.evaluate_script(&format!(
             "window.onDevicePingResults({});",
+            json
+          ));
+        }
+      }
+
+      Event::UserEvent(UserEvent::MdnsLookupResult(json)) => {
+        if let Some(output) = &ui_state.output {
+          let _ = output.webview.evaluate_script(&format!(
+            "window.onDeviceMdnsResult({});",
             json
           ));
         }
