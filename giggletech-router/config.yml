@@ -2,20 +2,22 @@ devices:
 - name: Headpats
   ip: 192.168.1.69
   proximity_parameter: proximity_01
-  max_speed: 100
+  max_speed: 15
   speed_scale: null
   max_speed_parameter: null
   use_velocity_control: null
-  outer_proximity: null
-  inner_proximity: null
-  velocity_scalar: null
+  velocity_on_prox_drop: true
+  outer_proximity: 0.0
+  inner_proximity: 0.7
+  velocity_scalar: 30
 - name: null
   ip: 192.168.1.70
   proximity_parameter: proximity_02
-  max_speed: null
+  max_speed: 18
   speed_scale: null
   max_speed_parameter: null
-  use_velocity_control: null
+  use_velocity_control: true
+  velocity_on_prox_drop: null
   outer_proximity: null
   inner_proximity: null
   velocity_scalar: null
@@ -27,6 +29,7 @@ setup:
   default_max_speed_parameter: max_speed
   timeout: 5
   default_use_velocity_control: false
+  default_velocity_on_prox_drop: false
   default_outer_proximity: 0.0
   default_inner_proximity: 0.7
   default_velocity_scalar: 20

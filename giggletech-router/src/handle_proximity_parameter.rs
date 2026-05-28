@@ -82,8 +82,14 @@ pub(crate) async fn handle_proximity_parameter(
                 Some(t_prev) => Instant::now().duration_since(t_prev),
             };
 
-            giggletech_osc::send_data(&device_ip,
-                data_processing::process_pat_advanced(value, last_val, delta_t, &device)).await?;
+            let headpat_tx =
+                data_processing::process_pat_advanced(value, last_val, delta_t, &device);
+            if headpat_tx == 0 {
+                // Proximity still non-zero but no velocity pulse — latch motor off (single 0 is often not enough).
+                stop_pats::stop_device_immediate(device_ip.as_str(), running.clone()).await?;
+            } else {
+                giggletech_osc::send_data(&device_ip, headpat_tx).await?;
+            }
         }
     }
     Ok(())

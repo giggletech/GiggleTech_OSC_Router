@@ -492,6 +492,71 @@ header {
   flex-direction: column;
   gap: 12px;
 }
+.velocity-toggle-row {
+  flex-direction: row !important;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px !important;
+  margin-top: 4px;
+  cursor: pointer;
+  user-select: none;
+}
+.velocity-toggle-row span {
+  font-size: 0.85rem;
+  color: #c4b5fd;
+  font-weight: 600;
+}
+.velocity-toggle {
+  position: relative;
+  width: 44px;
+  height: 24px;
+  flex-shrink: 0;
+  margin: 0;
+  padding: 0;
+  border: none;
+  border-radius: 999px;
+  background: #2a2a36;
+  cursor: pointer;
+  transition: background 0.15s ease;
+  -webkit-appearance: none;
+  appearance: none;
+}
+.velocity-toggle::after {
+  content: '';
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #b8b8c8;
+  transition: transform 0.15s ease, background 0.15s ease;
+}
+.velocity-toggle:checked {
+  background: linear-gradient(135deg, #a855f7, #7c3aed);
+}
+.velocity-toggle:checked::after {
+  transform: translateX(20px);
+  background: #f3e8ff;
+}
+.velocity-toggle:focus { outline: none; }
+.velocity-toggle:focus-visible {
+  box-shadow: 0 0 0 2px #000, 0 0 0 4px #a855f7;
+}
+.velocity-toggle-row.velocity-sub-toggle {
+  margin-left: 12px;
+  padding-left: 8px;
+  border-left: 2px solid #2a2a36;
+}
+.velocity-toggle-row.velocity-sub-toggle span {
+  font-size: 0.8rem;
+  color: #a1a1b5;
+  font-weight: 500;
+}
+.velocity-toggle-row.velocity-sub-toggle.disabled {
+  opacity: 0.45;
+  pointer-events: none;
+}
 .device-card label .hint {
   display: block;
   margin-top: 2px;
@@ -705,6 +770,8 @@ header {
 <script>
 let editorDevices = [];
 let editorSpeedDefaults = { min: 5, max: 25 };
+let editorVelocityDefault = false;
+let editorVelocityOnProxDropDefault = false;
 let editorPortRx = 'OSCQuery';
 let devicePingStatus = {};
 let pingDebounceTimer = null;
@@ -827,6 +894,22 @@ function renderDevices() {
                 oninput="editorDevices[${i}].proximity_parameter=this.value; maybeClearConfigError()">
             </label>
           </div>
+          <label class="velocity-toggle-row">
+            <span>Velocity control</span>
+            <input type="checkbox" class="velocity-toggle" role="switch"
+              aria-label="Velocity control for device ${i + 1}"
+              ${d.use_velocity_control ? 'checked' : ''}
+              onchange="onVelocityControlChange(${i}, this)">
+          </label>
+          <label class="velocity-toggle-row velocity-sub-toggle${d.use_velocity_control ? '' : ' disabled'}">
+            <span>Vibrate on pull-away</span>
+            <input type="checkbox" class="velocity-toggle" role="switch"
+              id="velocity-on-drop-${i}"
+              aria-label="Vibrate on proximity drop for device ${i + 1}"
+              ${d.velocity_on_prox_drop ? 'checked' : ''}
+              ${d.use_velocity_control ? '' : 'disabled'}
+              onchange="onVelocityOnProxDropChange(${i}, this)">
+          </label>
           <label class="max-speed-block">Power
             <div class="speed-slider-row">
               <input type="range" min="0" max="${SPEED_SLIDER_STEPS}"
@@ -985,7 +1068,10 @@ function endActiveTestDrag() {
     }
   } catch (_) {}
   if (drag.trackEl) setSliderVisual(drag.trackEl, 0);
-  if (drag.ip) window.ipc.postMessage('device-stop:' + drag.ip);
+  if (drag.ip) {
+    window.ipc.postMessage('device-motor:' + JSON.stringify({ ip: drag.ip, value: 0 }));
+    window.ipc.postMessage('device-stop:' + drag.ip);
+  }
 }
 
 function setupTestSliderSafety() {
@@ -1069,12 +1155,27 @@ function onMaxSpeedChange(index, input) {
   if (label) label.textContent = speed + '%';
 }
 
+function onVelocityControlChange(index, input) {
+  if (!editorDevices[index]) return;
+  editorDevices[index].use_velocity_control = !!input.checked;
+  renderDevices();
+  saveConfig(true);
+}
+
+function onVelocityOnProxDropChange(index, input) {
+  if (!editorDevices[index]) return;
+  editorDevices[index].velocity_on_prox_drop = !!input.checked;
+  saveConfig(true);
+}
+
 function addDevice() {
   editorDevices.push({
     name: editorDevices.length === 0 ? 'Headpats' : '',
     ip: '',
     proximity_parameter: 'proximity_01',
-    max_speed: editorSpeedDefaults.max
+    max_speed: editorSpeedDefaults.max,
+    use_velocity_control: editorVelocityDefault,
+    velocity_on_prox_drop: editorVelocityOnProxDropDefault
   });
   renderDevices();
 }
@@ -1165,11 +1266,19 @@ function saveConfig(quiet) {
 window.onConfigLoaded = function(state) {
   if (state.min_speed != null) editorSpeedDefaults.min = state.min_speed;
   if (state.max_speed_cap != null) editorSpeedDefaults.max = state.max_speed_cap;
+  if (state.default_use_velocity_control != null) {
+    editorVelocityDefault = !!state.default_use_velocity_control;
+  }
+  if (state.default_velocity_on_prox_drop != null) {
+    editorVelocityOnProxDropDefault = !!state.default_velocity_on_prox_drop;
+  }
   if (state.port_rx != null) editorPortRx = String(state.port_rx);
   const powerMin = editorSpeedDefaults.min;
   editorDevices = (state.devices || []).map((d) => ({
     ...d,
     max_speed: Math.max(powerMin, d.max_speed ?? powerMin),
+    use_velocity_control: !!d.use_velocity_control,
+    velocity_on_prox_drop: !!d.velocity_on_prox_drop,
   }));
   renderDevices();
   updateOscPortUi();

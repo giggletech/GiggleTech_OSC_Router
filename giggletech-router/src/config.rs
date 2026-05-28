@@ -76,6 +76,8 @@ pub(crate) struct DeviceConfig {
     pub proximity_parameter: Arc<String>,
     pub max_speed_parameter: Arc<String>,
     pub use_velocity_control: bool,
+    /// When true with velocity control, motor also fires when proximity decreases (pull-away).
+    pub velocity_on_prox_drop: bool,
     pub outer_proximity: f32,
     pub inner_proximity: f32,
     pub velocity_scalar: f32
@@ -92,6 +94,7 @@ pub(crate) struct GlobalConfig {
     pub minimum_max_speed: f32,
     pub timeout: u64,
     pub default_use_velocity_control: bool,
+    pub default_velocity_on_prox_drop: bool,
     pub default_outer_proximity: f32,
     pub default_inner_proximity: f32,
     pub default_velocity_scalar: f32
@@ -296,6 +299,15 @@ fn parse_global_config(setup: YamlHashWrapper) -> GlobalConfig {
         })
         .unwrap_or(false); // Default to `false` if the key is missing or invalid
 
+    let default_velocity_on_prox_drop = setup
+        .get_bool("default_velocity_on_prox_drop")
+        .or_else(|| {
+            setup
+                .get_str("default_velocity_on_prox_drop")
+                .map(|s| s.to_lowercase() == "true")
+        })
+        .unwrap_or(false);
+
     let default_outer_proximity = setup.get_f64("default_outer_proximity").unwrap_or(0.0) as f32;
     let default_inner_proximity = setup.get_f64("default_inner_proximity").unwrap_or(0.7) as f32;
     let default_velocity_scalar = setup.get_f64("default_velocity_scalar").unwrap_or(20.0) as f32;
@@ -311,6 +323,7 @@ fn parse_global_config(setup: YamlHashWrapper) -> GlobalConfig {
         default_speed_scale,
         timeout,
         default_use_velocity_control,
+        default_velocity_on_prox_drop,
         default_outer_proximity,
         default_inner_proximity,
         default_velocity_scalar,
@@ -354,6 +367,9 @@ fn parse_device_config(
     let speed_scale = device_data.get_f64("speed_scale").map(|x| x as f32 / 100.0).unwrap_or(global_config.default_speed_scale);
     let max_speed_parameter = device_data.get_str("max_speed_parameter").map(|x| Arc::new(format!("/avatar/parameters/{}", x))).unwrap_or(global_config.default_max_speed_parameter.clone());
     let use_velocity_control = device_data.get_bool("use_velocity_control").unwrap_or(global_config.default_use_velocity_control);
+    let velocity_on_prox_drop = device_data
+        .get_bool("velocity_on_prox_drop")
+        .unwrap_or(global_config.default_velocity_on_prox_drop);
     let outer_proximity = device_data.get_f64("outer_proximity").map(|x| x as f32).unwrap_or(global_config.default_outer_proximity);
     let inner_proximity = device_data.get_f64("inner_proximity").map(|x| x as f32).unwrap_or(global_config.default_inner_proximity);
     let velocity_scalar = device_data.get_f64("velocity_scalar").map(|x| x as f32).unwrap_or(global_config.default_velocity_scalar);
@@ -367,6 +383,7 @@ fn parse_device_config(
         speed_scale,
         max_speed_parameter,
         use_velocity_control,
+        velocity_on_prox_drop,
         outer_proximity,
         inner_proximity,
         velocity_scalar

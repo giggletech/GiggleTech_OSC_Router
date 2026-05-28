@@ -1,13 +1,14 @@
 //! Interactive device test slider: motor on while held, same stop path as proximity-off.
+//!
+//! Slider sends `value` 0.0–1.0 from the UI; that maps to motor output 0–100% of the
+//! device's configured max speed (0% = off, 100% = full max).
 
 use std::collections::HashMap;
 use std::net::IpAddr;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
-use std::sync::mpsc::{self, Receiver, Sender};
 use std::sync::Mutex;
-use std::thread;
 
-use async_std::sync::Arc;
+use async_std::sync::{Arc, Mutex as AsyncMutex};
 use once_cell::sync::Lazy;
 use serde::Deserialize;
 
@@ -21,25 +22,17 @@ const MOTOR_SPEED_SCALE: f32 = 0.66;
 
 #[derive(Clone)]
 struct MotorParams {
-  min_speed: f32,
   max_speed: f32,
   speed_scale: f32,
-  start_tx: i32,
-  proximity_parameter: String,
 }
 
 static MOTOR_CACHE: Lazy<Mutex<HashMap<String, MotorParams>>> =
   Lazy::new(|| Mutex::new(HashMap::new()));
 
-enum TestCommand {
-  Motor(f32),
-  Stop,
-}
-
 struct TestDeviceState {
   running: Arc<AtomicBool>,
+  command_lock: Arc<AsyncMutex<()>>,
   epoch: Arc<AtomicU64>,
-  tx: Sender<TestCommand>,
 }
 
 static TEST_DEVICES: Lazy<Mutex<HashMap<String, TestDeviceState>>> =
@@ -48,6 +41,7 @@ static TEST_DEVICES: Lazy<Mutex<HashMap<String, TestDeviceState>>> =
 #[derive(Debug, Deserialize)]
 pub struct MotorPayload {
   pub ip: String,
+  /// UI slider position 0.0–1.0 (= output 0–100% of configured max speed).
   pub value: f32,
 }
 
@@ -60,113 +54,96 @@ fn test_state(ip: &str) -> TestDeviceState {
   if let Some(state) = devices.get(ip) {
     return TestDeviceState {
       running: state.running.clone(),
+      command_lock: state.command_lock.clone(),
       epoch: state.epoch.clone(),
-      tx: state.tx.clone(),
     };
   }
-
-  let (tx, rx) = mpsc::channel();
-  let running = Arc::new(AtomicBool::new(false));
-  let epoch = Arc::new(AtomicU64::new(0));
-  let worker_ip = ip.to_string();
-  let worker_running = running.clone();
-  let worker_epoch = epoch.clone();
-  thread::spawn(move || {
-    command_worker(&worker_ip, rx, worker_running, worker_epoch);
-  });
-
   let state = TestDeviceState {
-    running,
-    epoch,
-    tx,
+    running: Arc::new(AtomicBool::new(false)),
+    command_lock: Arc::new(AsyncMutex::new(())),
+    epoch: Arc::new(AtomicU64::new(0)),
   };
-  devices.insert(ip.to_string(), TestDeviceState {
+  let clone = TestDeviceState {
     running: state.running.clone(),
+    command_lock: state.command_lock.clone(),
     epoch: state.epoch.clone(),
-    tx: state.tx.clone(),
-  });
-  state
+  };
+  devices.insert(ip.to_string(), state);
+  clone
 }
 
-fn command_worker(
-  ip: &str,
-  rx: Receiver<TestCommand>,
-  running: Arc<AtomicBool>,
-  epoch: Arc<AtomicU64>,
-) {
-  while let Ok(first) = rx.recv() {
-    let mut cmd = first;
-    'drive: loop {
-      while let Ok(next) = rx.try_recv() {
-        if matches!(next, TestCommand::Stop) {
-          cmd = TestCommand::Stop;
-          break;
-        }
-        cmd = next;
-      }
+pub fn stop_all_test_terminators() {
+  let ips: Vec<String> = TEST_DEVICES
+    .lock()
+    .unwrap()
+    .keys()
+    .cloned()
+    .collect();
+  for ip in ips {
+    stop_device(ip);
+  }
+}
 
-      let result = async_std::task::block_on(async {
-        match cmd {
-          TestCommand::Motor(level) => set_device_motor_async(ip, level, &running, &epoch).await,
-          TestCommand::Stop => {
-            let epoch_at_request = epoch.load(Ordering::SeqCst);
-            stop_device_async(ip, epoch_at_request, &running, &epoch).await
-          }
-        }
-      });
+/// `level` is the UI slider value 0.0–1.0 (output percent ÷ 100).
+pub fn set_device_motor(ip: String, level: f32) {
+  let output_percent = level.clamp(0.0, 1.0) * 100.0;
+  set_device_motor_output(ip, output_percent);
+}
 
-      if let Err(e) = result {
+fn set_device_motor_output(ip: String, output_percent: f32) {
+  let ip = ip.trim().to_string();
+  if ip.is_empty() {
+    return;
+  }
+  let state = test_state(&ip);
+  let epoch_at_request = state.epoch.load(Ordering::SeqCst);
+  let command_lock = state.command_lock.clone();
+  let running = state.running.clone();
+  let epoch = state.epoch.clone();
+  std::thread::spawn(move || {
+    async_std::task::block_on(async move {
+      if let Err(e) = set_device_motor_async(
+        &ip,
+        output_percent,
+        epoch_at_request,
+        &command_lock,
+        &running,
+        &epoch,
+      )
+      .await
+      {
         log_ui::status(&format!("Device test error ({}): {}", ip, e));
       }
-
-      if matches!(cmd, TestCommand::Stop) {
-        break;
-      }
-
-      cmd = TestCommand::Stop;
-      while let Ok(next) = rx.try_recv() {
-        match next {
-          TestCommand::Stop => break,
-          TestCommand::Motor(level) => {
-            cmd = TestCommand::Motor(level);
-          }
-        }
-      }
-      if matches!(cmd, TestCommand::Motor(_)) {
-        continue 'drive;
-      }
-      break;
-    }
-  }
-}
-
-/// Stops any test-slider periodic stop workers (e.g. after a prior session bug or reload).
-pub fn stop_all_test_terminators() {
-  let devices = TEST_DEVICES.lock().unwrap();
-  for state in devices.values() {
-    state.running.store(false, Ordering::SeqCst);
-  }
-}
-
-pub fn set_device_motor(ip: String, level: f32) {
-  let state = test_state(ip.trim());
-  let _ = state.tx.send(TestCommand::Motor(level));
+    });
+  });
 }
 
 pub fn stop_device(ip: String) {
   let ip = ip.trim().to_string();
+  if ip.is_empty() {
+    return;
+  }
   let state = test_state(&ip);
-  epoch_fetch_stop(&state.epoch);
-  let _ = state.tx.send(TestCommand::Stop);
-}
-
-fn epoch_fetch_stop(epoch: &AtomicU64) {
-  epoch.fetch_add(1, Ordering::SeqCst);
+  let epoch_at_request = state.epoch.fetch_add(1, Ordering::SeqCst) + 1;
+  let command_lock = state.command_lock.clone();
+  let running = state.running.clone();
+  let epoch = state.epoch.clone();
+  std::thread::spawn(move || {
+    async_std::task::block_on(async move {
+      if let Err(e) =
+        stop_device_async(&ip, epoch_at_request, &command_lock, &running, &epoch).await
+      {
+        log_ui::status(&format!("Device test error ({}): {}", ip, e));
+      }
+    });
+  });
 }
 
 async fn set_device_motor_async(
   ip: &str,
-  level: f32,
+  output_percent: f32,
+  epoch_at_request: u64,
+  command_lock: &Arc<AsyncMutex<()>>,
   running: &Arc<AtomicBool>,
   epoch: &Arc<AtomicU64>,
 ) -> Result<(), String> {
@@ -177,11 +154,17 @@ async fn set_device_motor_async(
   ip.parse::<IpAddr>()
     .map_err(|_| format!("Invalid IP address: {}", ip))?;
 
-  let epoch_at_request = epoch.load(Ordering::SeqCst);
+  let _guard = command_lock.lock().await;
 
-  let level = level.clamp(0.0, 1.0);
-  if level <= 0.0 {
-    return stop_device_async(ip, epoch.load(Ordering::SeqCst), running, epoch).await;
+  if epoch.load(Ordering::SeqCst) != epoch_at_request {
+    return Ok(());
+  }
+
+  let output_percent = output_percent.clamp(0.0, 100.0);
+  if output_percent <= 0.0 {
+    let stop_epoch = epoch.fetch_add(1, Ordering::SeqCst) + 1;
+    drop(_guard);
+    return stop_device_async(ip, stop_epoch, command_lock, running, epoch).await;
   }
 
   if running.load(Ordering::SeqCst) {
@@ -194,7 +177,7 @@ async fn set_device_motor_async(
     return Ok(());
   }
 
-  let (motor, _params) = motor_from_level(ip, level)?;
+  let motor = motor_tx_from_output_percent(ip, output_percent)?;
   giggletech_osc::send_data(ip, motor)
     .await
     .map_err(|e| format!("{}", e))?;
@@ -204,6 +187,7 @@ async fn set_device_motor_async(
 async fn stop_device_async(
   ip: &str,
   epoch_at_request: u64,
+  command_lock: &Arc<AsyncMutex<()>>,
   running: &Arc<AtomicBool>,
   epoch: &Arc<AtomicU64>,
 ) -> Result<(), String> {
@@ -211,6 +195,8 @@ async fn stop_device_async(
   if ip.is_empty() {
     return Ok(());
   }
+
+  let _guard = command_lock.lock().await;
 
   if epoch.load(Ordering::SeqCst) != epoch_at_request {
     return Ok(());
@@ -222,17 +208,11 @@ async fn stop_device_async(
   Ok(())
 }
 
-fn motor_from_level(ip: &str, level: f32) -> Result<(i32, MotorParams), String> {
+/// 0% = off; 100% = full output at the device's configured `max_speed`.
+fn motor_tx_from_output_percent(ip: &str, output_percent: f32) -> Result<i32, String> {
   let params = motor_params(ip)?;
-  let mut headpat_tx = (((params.max_speed - params.min_speed) * level + params.min_speed)
-    * MOTOR_SPEED_SCALE
-    * params.speed_scale
-    * 255.0)
-    .round() as i32;
-  if headpat_tx < params.start_tx {
-    headpat_tx = params.start_tx;
-  }
-  Ok((headpat_tx, params))
+  let level = (output_percent / 100.0).clamp(0.0, 1.0);
+  Ok((params.max_speed * level * MOTOR_SPEED_SCALE * params.speed_scale * 255.0).round() as i32)
 }
 
 fn motor_params(ip: &str) -> Result<MotorParams, String> {
@@ -243,19 +223,13 @@ fn motor_params(ip: &str) -> Result<MotorParams, String> {
   let (_global, devices) = config::load_config_quiet()?;
   let params = if let Some(device) = devices.iter().find(|d| d.device_uri.as_str() == ip) {
     MotorParams {
-      min_speed: device.min_speed,
       max_speed: device.max_speed,
       speed_scale: device.speed_scale,
-      start_tx: device.start_tx,
-      proximity_parameter: device.proximity_parameter.to_string(),
     }
   } else {
     MotorParams {
-      min_speed: 0.0,
       max_speed: 1.0,
       speed_scale: 1.0,
-      start_tx: 1,
-      proximity_parameter: "test".to_string(),
     }
   };
 

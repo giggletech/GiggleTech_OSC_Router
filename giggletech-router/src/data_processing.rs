@@ -81,20 +81,55 @@ pub fn process_pat(proximity_signal: f32, device: &DeviceConfig, prev_signal: f3
     headpat_tx
 }
 
+/// Minimum time between OSC samples when computing velocity (avoids divide-by-zero only).
+const MIN_VELOCITY_DELTA_SECS: f32 = 0.001;
+
+/// Ignore proximity jitter below this — treats "held still" as zero velocity.
+/// Without this, `velocity_on_prox_drop` and float noise keep firing the motor.
+const PROX_VELOCITY_DEADZONE: f32 = 0.002;
+
 pub fn process_pat_advanced(proximity_signal: f32, prev_signal: f32, delta_t: Duration, device: &DeviceConfig) -> i32 {
     if proximity_signal > device.outer_proximity
         && proximity_signal < device.inner_proximity
         && prev_signal > 0.0
     {
-        let vel = f32::max(
-            0.0,
-            f32::abs(proximity_signal - prev_signal) / delta_t.as_secs_f32() * device.velocity_scalar,
-        );
-        (((device.max_speed - device.min_speed) * vel * device.min_speed)
+        let delta = proximity_signal - prev_signal;
+        if delta.abs() < PROX_VELOCITY_DEADZONE {
+            return 0;
+        }
+
+        let active = if device.velocity_on_prox_drop {
+            true
+        } else {
+            delta > 0.0
+        };
+        if !active {
+            return 0;
+        }
+
+        let delta_secs = delta_t.as_secs_f32();
+        if delta_secs <= 0.0 {
+            return 0;
+        }
+        let delta_secs = delta_secs.max(MIN_VELOCITY_DELTA_SECS);
+        let speed = if device.velocity_on_prox_drop {
+            delta.abs()
+        } else {
+            delta
+        };
+        // Original velocity scaling: max_speed scales output via (max_speed - min_speed).
+        let vel = f32::max(0.0, speed / delta_secs * device.velocity_scalar);
+        let headpat_tx = (((device.max_speed - device.min_speed) * vel * device.min_speed)
             * MOTOR_SPEED_SCALE
             * device.speed_scale
             * 255.0)
-            .round() as i32
+            .round() as i32;
+        let max_tx = (((device.max_speed - device.min_speed) + device.min_speed)
+            * MOTOR_SPEED_SCALE
+            * device.speed_scale
+            * 255.0)
+            .round() as i32;
+        headpat_tx.min(max_tx)
     } else {
         0
     }

@@ -24,6 +24,8 @@ pub struct Device {
     #[serde(default)]
     pub use_velocity_control: Option<bool>,
     #[serde(default)]
+    pub velocity_on_prox_drop: Option<bool>,
+    #[serde(default)]
     pub outer_proximity: Option<f64>,
     #[serde(default)]
     pub inner_proximity: Option<f64>,
@@ -40,6 +42,8 @@ pub struct Setup {
     pub default_max_speed_parameter: String,
     pub timeout: u32,
     pub default_use_velocity_control: bool,
+    #[serde(default)]
+    pub default_velocity_on_prox_drop: bool,
     pub default_outer_proximity: f64,
     pub default_inner_proximity: f64,
     pub default_velocity_scalar: u32,

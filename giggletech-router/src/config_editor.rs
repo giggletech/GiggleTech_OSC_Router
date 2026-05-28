@@ -30,6 +30,12 @@ pub struct EditorDevice {
   pub proximity_parameter: String,
   /// Motor max speed limit as a percentage (e.g. 5–100).
   pub max_speed: u32,
+  /// When true, motor follows approach velocity; when false, proximity level.
+  #[serde(default)]
+  pub use_velocity_control: bool,
+  /// When true (and velocity control on), motor also fires when proximity decreases.
+  #[serde(default)]
+  pub velocity_on_prox_drop: bool,
 }
 
 /// `port_rx` in config.yml: `"OSCQuery"` or a UDP port number (e.g. `"9001"`).
@@ -40,6 +46,11 @@ pub struct EditorState {
   pub max_speed_cap: u32,
   #[serde(default = "default_port_rx")]
   pub port_rx: String,
+  /// Default for new devices (from `setup.default_use_velocity_control`).
+  #[serde(default)]
+  pub default_use_velocity_control: bool,
+  #[serde(default)]
+  pub default_velocity_on_prox_drop: bool,
 }
 
 fn default_port_rx() -> String {
@@ -64,6 +75,8 @@ pub fn load_editor_state() -> Result<EditorState, String> {
   let cfg = load_config(CONFIG_PATH)?;
   let default_max = cfg.setup.default_max_speed;
   let min_speed = cfg.setup.default_min_speed;
+  let default_use_velocity_control = cfg.setup.default_use_velocity_control;
+  let default_velocity_on_prox_drop = cfg.setup.default_velocity_on_prox_drop;
 
   Ok(EditorState {
     devices: cfg
@@ -75,11 +88,19 @@ pub fn load_editor_state() -> Result<EditorState, String> {
         ip: d.ip,
         proximity_parameter: strip_proximity_prefix(d.proximity_parameter),
         max_speed: d.max_speed.unwrap_or(default_max).max(min_speed),
+        use_velocity_control: d
+          .use_velocity_control
+          .unwrap_or(default_use_velocity_control),
+        velocity_on_prox_drop: d
+          .velocity_on_prox_drop
+          .unwrap_or(default_velocity_on_prox_drop),
       })
       .collect(),
     min_speed,
     max_speed_cap: default_max.max(min_speed),
     port_rx: normalize_port_rx_for_editor(&cfg.setup.port_rx),
+    default_use_velocity_control,
+    default_velocity_on_prox_drop,
   })
 }
 
@@ -134,6 +155,8 @@ pub fn save_editor_state(state: &EditorState, quiet: bool) -> Result<(), String>
     }
   }
   let existing = cfg.devices.clone();
+  let default_use_velocity_control = cfg.setup.default_use_velocity_control;
+  let default_velocity_on_prox_drop = cfg.setup.default_velocity_on_prox_drop;
 
   cfg.devices = state
     .devices
@@ -150,6 +173,17 @@ pub fn save_editor_state(state: &EditorState, quiet: bool) -> Result<(), String>
         } else {
           Some(ed.max_speed)
         };
+        device.use_velocity_control = if ed.use_velocity_control == default_use_velocity_control {
+          None
+        } else {
+          Some(ed.use_velocity_control)
+        };
+        device.velocity_on_prox_drop =
+          if ed.velocity_on_prox_drop == default_velocity_on_prox_drop {
+            None
+          } else {
+            Some(ed.velocity_on_prox_drop)
+          };
         device
       } else {
         Device {
@@ -163,7 +197,16 @@ pub fn save_editor_state(state: &EditorState, quiet: bool) -> Result<(), String>
           },
           speed_scale: None,
           max_speed_parameter: None,
-          use_velocity_control: None,
+          use_velocity_control: if ed.use_velocity_control == default_use_velocity_control {
+            None
+          } else {
+            Some(ed.use_velocity_control)
+          },
+          velocity_on_prox_drop: if ed.velocity_on_prox_drop == default_velocity_on_prox_drop {
+            None
+          } else {
+            Some(ed.velocity_on_prox_drop)
+          },
           outer_proximity: None,
           inner_proximity: None,
           velocity_scalar: None,
