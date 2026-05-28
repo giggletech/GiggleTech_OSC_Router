@@ -62,7 +62,6 @@ pub(crate) async fn handle_proximity_parameter(
     let mut device_last_values = DEVICE_LAST_VALUE.lock().await;
     let last_val = device_last_values.insert(device_ip.to_string(), value).unwrap_or(0.0);
 
-    log_ui::notify_proximity(device.proximity_parameter.as_str(), value);
     let pat_graph = if value > 0.0 {
         data_processing::proximity_graph(value)
     } else {

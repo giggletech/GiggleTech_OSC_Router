@@ -10,6 +10,16 @@ const MAX_LINES: usize = 100;
 static STATUS_LINES: once_cell::sync::Lazy<Arc<Mutex<Vec<String>>>> =
   once_cell::sync::Lazy::new(|| Arc::new(Mutex::new(Vec::new())));
 
+#[derive(Debug, Clone)]
+struct MotorUiParams {
+  proximity_parameter: String,
+  max_tx: f32,
+}
+
+/// Device IP → motor UI mapping (parameter + max TX for normalization).
+static MOTOR_UI_BY_IP: once_cell::sync::Lazy<Mutex<std::collections::HashMap<String, MotorUiParams>>> =
+  once_cell::sync::Lazy::new(|| Mutex::new(std::collections::HashMap::new()));
+
 /// Incremented when the ring buffer drops lines from the front (UI must full-resync).
 static BUFFER_EPOCH: AtomicUsize = AtomicUsize::new(0);
 
@@ -41,6 +51,37 @@ pub fn notify_proximity(parameter: &str, value: f32) {
     let key = parameter.trim_start_matches("/avatar/parameters/");
     notify(key, value);
   }
+}
+
+/// Replace motor UI mapping from current config devices.
+///
+/// This enables the motor bar to reflect the *actual motor output being sent* (from `send_data`),
+/// including stop/timeout paths that don't flow through proximity handling.
+pub fn set_motor_ui_devices(entries: Vec<(String, String, f32)>) {
+  if let Ok(mut map) = MOTOR_UI_BY_IP.lock() {
+    map.clear();
+    for (ip, proximity_parameter, max_tx) in entries {
+      let max_tx = max_tx.max(1.0);
+      map.insert(
+        ip,
+        MotorUiParams {
+          proximity_parameter,
+          max_tx,
+        },
+      );
+    }
+  }
+}
+
+/// Notify motor output based on a send-to-device TX value.
+pub fn notify_motor_tx_sent(device_ip: &str, motor_tx: i32) {
+  let params = MOTOR_UI_BY_IP
+    .lock()
+    .ok()
+    .and_then(|m| m.get(device_ip).cloned());
+  let Some(params) = params else { return; };
+  let motor_out = (motor_tx as f32 / params.max_tx).clamp(0.0, 1.0);
+  notify_proximity(&params.proximity_parameter, motor_out);
 }
 
 /// Register a callback for live pat bars (`---->`), separate from the status console.

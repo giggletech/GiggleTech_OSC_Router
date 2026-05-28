@@ -1645,16 +1645,33 @@ window.onConfigError = function(msg) {
 };
 
 const patBarByParam = {};
+const motorBarByParam = {};
 
 function applyMotorBars(updates) {
   if (activeTestDrag) return;
   for (const param in updates) {
-    const value = Math.max(0, Math.min(1, updates[param]));
+    const target = Math.max(0, Math.min(1, updates[param]));
     const paramKey = (param || '').trim();
+    if (!paramKey) continue;
+
+    // Smooth motor output so the live indicator looks stable (EMA),
+    // but snap hard to 0 on power-down so it never looks "stuck".
+    if (target <= 0) {
+      motorBarByParam[paramKey] = 0;
+    } else if (target >= 0.999) {
+      // If the real motor out is at full-scale, show it hitting the top.
+      motorBarByParam[paramKey] = 1;
+    } else {
+      // Higher alpha responds faster; lower alpha looks smoother.
+      const prev = (motorBarByParam[paramKey] != null) ? motorBarByParam[paramKey] : target;
+      const alpha = (target > prev) ? 0.35 : 0.18;
+      const value = prev + (target - prev) * alpha;
+      motorBarByParam[paramKey] = value;
+    }
     editorDevices.forEach((d, i) => {
       if ((d.proximity_parameter || '').trim() !== paramKey) return;
       const track = document.querySelector('.test-slider-track[data-index="' + i + '"]');
-      if (track) setSliderVisual(track, value);
+      if (track) setSliderVisual(track, motorBarByParam[paramKey]);
     });
   }
 }

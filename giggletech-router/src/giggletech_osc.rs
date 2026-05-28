@@ -27,6 +27,8 @@ use async_std::sync::RwLock;
 use std::time::{Duration, Instant};
 use once_cell::sync::Lazy;
 
+use crate::log_ui;
+
 // Connection manager for efficient socket handling
 pub struct ConnectionManager {
     connections: Arc<RwLock<HashMap<String, ConnectionInfo>>>,
@@ -143,6 +145,8 @@ pub(crate) async fn send_data(device_ip: &str, value: i32) -> Result<()> {
     match sender.send_to((TX_OSC_MOTOR_ADDRESS, (value,)), &addr).await {
         Ok(()) => {
             CONNECTION_MANAGER.update_connection_info(device_ip, true).await;
+            // Drive the UI from the actual motor TX being sent.
+            log_ui::notify_motor_tx_sent(device_ip, value);
             sender.send_to((TX_OSC_GIGGLESPARK, (value,)), &addr).await
         }
         Err(e) => {

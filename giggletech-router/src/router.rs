@@ -113,6 +113,19 @@ async fn run_giggletech_session(restart_rx: &Receiver<()>) -> Result<bool> {
 
   let timeout = global_config.timeout;
 
+  // Let the output window motor bars reflect the actual motor TX we send to each device.
+  // This covers stop/timeout/test paths (anything that uses `giggletech_osc::send_data`).
+  log_ui::set_motor_ui_devices(
+    devices
+      .iter()
+      .map(|d| {
+        // Match the actual integer TX rounding used by motor output.
+        let max_tx = (d.max_speed as f32 * 0.66 * d.speed_scale * 255.0).round();
+        (d.device_uri.to_string(), d.proximity_parameter.as_ref().clone(), max_tx)
+      })
+      .collect(),
+  );
+
   if !quiet_reload {
     crate::test_device_connectivity(&devices).await;
   }
