@@ -34,6 +34,8 @@ pub struct Device {
     #[serde(default)]
     pub velocity_scalar: Option<u32>,
     #[serde(default)]
+    pub velocity_softcap: Option<u32>,
+    #[serde(default)]
     pub velocity_smoothing_ms: Option<u32>,
 }
 
@@ -51,11 +53,17 @@ pub struct Setup {
     pub default_outer_proximity: f64,
     pub default_inner_proximity: f64,
     pub default_velocity_scalar: u32,
+    #[serde(default = "default_velocity_softcap")]
+    pub default_velocity_softcap: u32,
     #[serde(default)]
     pub default_velocity_smoothing_ms: u32,
     /// Resend online OSC every N seconds (0 = only on state change).
     #[serde(default)]
     pub online_status_broadcast_seconds: u32,
+}
+
+fn default_velocity_softcap() -> u32 {
+    35
 }
 
 /// Reads and parses a YAML configuration file.

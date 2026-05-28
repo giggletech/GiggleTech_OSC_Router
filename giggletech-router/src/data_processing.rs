@@ -121,6 +121,18 @@ const PROX_VELOCITY_DEADZONE: f32 = 0.002;
 /// does not change the threshold.
 const MAX_RETREAT_PROX_RATE: f32 = 4.0;
 
+/// Soft-cap a value so it stays linear at small magnitudes but saturates at high magnitudes.
+/// For x << cap, output ≈ x. For x >> cap, output → cap.
+fn softcap(x: f32, cap: f32) -> f32 {
+    if x <= 0.0 {
+        return 0.0;
+    }
+    if !cap.is_finite() || cap <= 0.0 {
+        return x;
+    }
+    (cap * x) / (cap + x)
+}
+
 /// Whether this sample may contribute to velocity (approach or retreat).
 fn velocity_sample_active(
     proximity_signal: f32,
@@ -180,7 +192,8 @@ pub fn compute_proximity_velocity(
         return 0.0;
     }
 
-    f32::max(0.0, rate * device.velocity_scalar)
+    let vel = f32::max(0.0, rate * device.velocity_scalar);
+    softcap(vel, device.velocity_softcap)
 }
 
 /// Convert a (possibly smoothed) velocity value to a motor tx value.
@@ -227,6 +240,7 @@ mod tests {
             outer_proximity: 0.13,
             inner_proximity: 1.0,
             velocity_scalar,
+            velocity_softcap: 35.0,
             velocity_smoothing_ms: 80,
         }
     }

@@ -116,6 +116,9 @@ pub(crate) struct DeviceConfig {
     pub outer_proximity: f32,
     pub inner_proximity: f32,
     pub velocity_scalar: f32,
+    /// Soft cap for velocity after scaling. Larger values = less damping.
+    /// Applied so small velocities remain responsive while large velocities saturate.
+    pub velocity_softcap: f32,
     /// EMA smoothing time constant for velocity control, in milliseconds.
     pub velocity_smoothing_ms: u32,
 }
@@ -150,6 +153,7 @@ pub(crate) struct GlobalConfig {
     pub default_outer_proximity: f32,
     pub default_inner_proximity: f32,
     pub default_velocity_scalar: f32,
+    pub default_velocity_softcap: f32,
     pub default_velocity_smoothing_ms: u32,
     /// When > 0, resend device online OSC to VRChat every N seconds (debug; 0 = transitions only).
     pub online_status_broadcast_seconds: u64,
@@ -370,6 +374,9 @@ fn parse_global_config(setup: YamlHashWrapper) -> GlobalConfig {
     let default_outer_proximity = setup.get_f64("default_outer_proximity").unwrap_or(0.0) as f32;
     let default_inner_proximity = setup.get_f64("default_inner_proximity").unwrap_or(1.0) as f32;
     let default_velocity_scalar = setup.get_f64("default_velocity_scalar").unwrap_or(20.0) as f32;
+    let default_velocity_softcap = setup
+        .get_f64("default_velocity_softcap")
+        .unwrap_or(35.0) as f32;
     let default_velocity_smoothing_ms =
         setup.get_i64("default_velocity_smoothing_ms").unwrap_or(80).max(0) as u32;
 
@@ -391,6 +398,7 @@ fn parse_global_config(setup: YamlHashWrapper) -> GlobalConfig {
         default_outer_proximity,
         default_inner_proximity,
         default_velocity_scalar,
+        default_velocity_softcap,
         default_velocity_smoothing_ms,
         online_status_broadcast_seconds,
     }
@@ -443,6 +451,10 @@ fn parse_device_config(
     let outer_proximity = device_data.get_f64("outer_proximity").map(|x| x as f32).unwrap_or(global_config.default_outer_proximity);
     let inner_proximity = device_data.get_f64("inner_proximity").map(|x| x as f32).unwrap_or(global_config.default_inner_proximity);
     let velocity_scalar = device_data.get_f64("velocity_scalar").map(|x| x as f32).unwrap_or(global_config.default_velocity_scalar);
+    let velocity_softcap = device_data
+        .get_f64("velocity_softcap")
+        .map(|x| x as f32)
+        .unwrap_or(global_config.default_velocity_softcap);
     let velocity_smoothing_ms = device_data
         .get_i64("velocity_smoothing_ms")
         .unwrap_or(global_config.default_velocity_smoothing_ms as i64)
@@ -462,6 +474,7 @@ fn parse_device_config(
         outer_proximity,
         inner_proximity,
         velocity_scalar,
+        velocity_softcap,
         velocity_smoothing_ms,
     })
 }
