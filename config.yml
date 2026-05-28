@@ -1,62 +1,67 @@
-# Giggle Tech OSC Router Configuration
-
-# This configuration file defines the setup for the OSC router and the specific parameters
-# for each connected haptic device. The setup section includes global default settings,
-# while the devices section specifies individual settings for each device.
-
-
-
 devices:
-  # Device 1
-  - ip: 192.168.1.69
-    proximity_parameter: proximity_01
-
-  # Device 2
-  - ip: 192.168.1.70
-    proximity_parameter: proximity_02
-
-  # Device 3
-  - ip: 192.168.1.71
-    proximity_parameter: proximity_03
-
-  # Device 4
-  - ip: 192.168.1.73
-    proximity_parameter: proximity_04
-    max_speed: 100
-    speed_scale: 100
-    max_speed_parameter: max_speed_04
-    use_velocity_control: True
-    outer_proximity: 0.1
-    inner_proximity: 0.6
-    velocity_scalar: 25
-
-
+- name: Headpats
+  ip: 192.168.1.69
+  proximity_parameter: proximity_01
+  online_parameter: HeadpatsOnline
+  max_speed: 18
+  speed_scale: null
+  max_speed_parameter: null
+  use_velocity_control: null
+  velocity_on_prox_drop: true
+  outer_proximity: 0.12999999523162842
+  inner_proximity: null
+  velocity_scalar: 22
+  velocity_smoothing_ms: 145
+- name: null
+  ip: 192.168.1.70
+  proximity_parameter: proximity_02
+  online_parameter: Dev2
+  max_speed: 22
+  speed_scale: null
+  max_speed_parameter: null
+  use_velocity_control: null
+  velocity_on_prox_drop: null
+  outer_proximity: null
+  inner_proximity: null
+  velocity_scalar: null
+  velocity_smoothing_ms: null
+- name: null
+  ip: 192.168.1.71
+  proximity_parameter: proximity_03
+  online_parameter: null
+  max_speed: null
+  speed_scale: null
+  max_speed_parameter: null
+  use_velocity_control: null
+  velocity_on_prox_drop: null
+  outer_proximity: null
+  inner_proximity: null
+  velocity_scalar: null
+  velocity_smoothing_ms: null
+- name: null
+  ip: 192.168.1.73
+  proximity_parameter: proximity_04
+  online_parameter: null
+  max_speed: 100
+  speed_scale: 100
+  max_speed_parameter: max_speed_04
+  use_velocity_control: null
+  velocity_on_prox_drop: null
+  outer_proximity: 0.10000000149011612
+  inner_proximity: 0.6000000238418579
+  velocity_scalar: 25
+  velocity_smoothing_ms: null
 setup:
-  # Port listening for OSC (Default: 9001) or use  port_rx: OSCQuery if you have mutiple apps
-  #port_rx: OSCQuery
-  port_rx: 9001
-
-  # Minimum Speed of Haptic Motor (5-100)
+  port_rx: OSCQuery
   default_min_speed: 5
-
-  # Maximum Speed of Haptic Motor (Recommended: 5-25)
   default_max_speed: 25
-
-  # The minimum initial speed used when the haptic motor is started (Recommended: 5-15)
   default_start_tx: 20
-
-  # Maximum Speed Parameter
   default_max_speed_parameter: max_speed
-
-
-  # OSC Timeout (seconds)
   timeout: 5
-
-  # Velocity Control Mode (True = Velocity / False = Proximity)
-  default_use_velocity_control: True
-
-  # Velocity Control Parameters
-  # Adjust these parameters to achieve the desired effect.
-  default_outer_proximity: 0
+  default_use_velocity_control: true
+  default_velocity_on_prox_drop: false
+  default_outer_proximity: 0.0
   default_inner_proximity: 1.0
   default_velocity_scalar: 20
+  default_velocity_smoothing_ms: 0
+  online_status_broadcast_seconds: 5

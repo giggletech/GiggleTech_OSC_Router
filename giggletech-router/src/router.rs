@@ -1,6 +1,5 @@
 //! Router lifecycle: run OSC loop and reload when config is saved.
 
-use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
 
 static QUIET_RESTART: AtomicBool = AtomicBool::new(false);
@@ -17,11 +16,13 @@ use futures::{FutureExt, select};
 use once_cell::sync::OnceCell;
 
 use crate::config;
+use crate::device_ping;
 use crate::giggletech_osc;
 use crate::device_test;
 use crate::handle_proximity_parameter;
 use crate::log_ui;
 use crate::osc_timeout;
+use crate::vrc_osc;
 static RESTART_TX: OnceCell<Mutex<Option<Sender<()>>>> = OnceCell::new();
 
 /// Register the channel used to request a config reload. Call once before `run_giggletech_loop`.
@@ -86,9 +87,10 @@ async fn run_giggletech_session(restart_rx: &Receiver<()>) -> Result<bool> {
     log_ui::status("Loading configuration...");
   }
 
-  if !Path::new("config.yml").exists() {
-    let error_msg = "Configuration file (config.yml) not found.";
-    log_ui::status(error_msg);
+  let config_path = config::config_file_path();
+  if !config_path.exists() {
+    let error_msg = format!("Configuration file not found: {}", config_path.display());
+    log_ui::status(&error_msg);
     return Err(async_osc::Error::Io(std::io::Error::new(
       std::io::ErrorKind::NotFound,
       error_msg,
@@ -126,9 +128,7 @@ async fn run_giggletech_session(restart_rx: &Receiver<()>) -> Result<bool> {
       .collect(),
   );
 
-  if !quiet_reload {
-    crate::test_device_connectivity(&devices).await;
-  }
+  spawn_online_monitor(session_alive.clone(), &global_config, &devices);
 
   let mut rx_socket = giggletech_osc::setup_rx_socket(global_config.port_rx.to_string()).await?;
 
@@ -180,6 +180,60 @@ async fn run_giggletech_session(restart_rx: &Receiver<()>) -> Result<bool> {
   running.store(false, Ordering::SeqCst);
 
   Ok(should_restart)
+}
+
+fn spawn_online_monitor(
+  alive: Arc<AtomicBool>,
+  global_config: &config::GlobalConfig,
+  devices: &[config::DeviceConfig],
+) {
+  let broadcast_secs = global_config.online_status_broadcast_seconds;
+  let ping_interval_ms = if broadcast_secs > 0 {
+    broadcast_secs * 1000
+  } else {
+    5000
+  };
+  let devices_for_ping: Vec<(String, Option<String>)> = devices
+    .iter()
+    .map(|d| {
+      (
+        d.device_uri.as_ref().clone(),
+        d.online_parameter.as_ref().map(|p| p.as_ref().clone()),
+      )
+    })
+    .collect();
+
+  if !devices_for_ping.iter().any(|(_, p)| p.is_some()) {
+    return;
+  }
+
+  task::spawn(async move {
+    use std::collections::HashMap;
+    let mut last: HashMap<String, bool> = HashMap::new();
+
+    while alive.load(Ordering::SeqCst) {
+      for (ip, online_param) in devices_for_ping.iter() {
+        let current = device_ping::ping_host(ip).await;
+        let prev = last.insert(ip.clone(), current);
+        let changed = prev != Some(current);
+
+        if !changed && prev.is_some() && broadcast_secs == 0 {
+          continue;
+        }
+
+        if let Some(param) = online_param.as_ref() {
+          if vrc_osc::send_avatar_parameter(param, current)
+            .await
+            .is_ok()
+          {
+            log_ui::status(&format!("{} {}", param, current));
+          }
+        }
+      }
+
+      task::sleep(std::time::Duration::from_millis(ping_interval_ms)).await;
+    }
+  });
 }
 
 async fn process_osc_packet(

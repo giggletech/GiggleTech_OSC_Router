@@ -16,6 +16,8 @@ pub struct Device {
     pub ip: String,
     pub proximity_parameter: String,
     #[serde(default)]
+    pub online_parameter: Option<String>,
+    #[serde(default)]
     pub max_speed: Option<u32>,
     #[serde(default)]
     pub speed_scale: Option<u32>,
@@ -51,6 +53,9 @@ pub struct Setup {
     pub default_velocity_scalar: u32,
     #[serde(default)]
     pub default_velocity_smoothing_ms: u32,
+    /// Resend online OSC every N seconds (0 = only on state change).
+    #[serde(default)]
+    pub online_status_broadcast_seconds: u32,
 }
 
 /// Reads and parses a YAML configuration file.

@@ -1760,11 +1760,12 @@ window.onConfigLoaded = function(state) {
     const header = document.querySelector('header');
     const wrap = document.getElementById('config-wrap');
     const scroll = document.getElementById('config-scroll');
+    const list = document.getElementById('device-list');
     const btnRow = document.querySelector('#config-wrap .btn-row');
-    if (!wrap || !scroll || !btnRow) return;
+    if (!wrap || !scroll || !list || !btnRow) return;
 
-    // We want enough window height so the device list doesn't need to scroll on startup.
-    // Use scrollHeight (content height) rather than the current viewport height.
+    // We want enough window height to show ONE full device card + the footer row.
+    // (User can manually resize taller to see more.)
     const wrapZoom = parseFloat(getComputedStyle(wrap).zoom || '1');
     const zoom = Number.isFinite(wrapZoom) && wrapZoom > 0 ? wrapZoom : 1;
     const wrapPad = parseFloat(getComputedStyle(wrap).paddingTop || '0')
@@ -1773,10 +1774,18 @@ window.onConfigLoaded = function(state) {
     const statusEl = document.getElementById('config-status');
     const statusH = statusEl ? statusEl.getBoundingClientRect().height : 0;
     const gap = 12; // matches CSS gap in #config-wrap
-    const deviceContentH = Math.max(scroll.scrollHeight, scroll.getBoundingClientRect().height);
-    // Small extra slack to avoid clipping the last card/footer by a few pixels.
-    const slack = 60;
-    const configH = (wrapPad + statusH + deviceContentH + gap + btnRow.getBoundingClientRect().height + 24 + slack) * zoom;
+
+    const firstCard = list.querySelector('.device-card');
+    const listStyle = getComputedStyle(list);
+    const listPadTop = parseFloat(listStyle.paddingTop || '0');
+    const listPadBottom = parseFloat(listStyle.paddingBottom || '0');
+    const listGap = parseFloat(listStyle.rowGap || listStyle.gap || '0') || 0;
+    const cardH = firstCard ? firstCard.getBoundingClientRect().height : 0;
+    const deviceOneCardH = Math.max(scroll.getBoundingClientRect().height, listPadTop + cardH + listGap + listPadBottom);
+
+    // Small extra slack to avoid clipping by a few pixels.
+    const slack = 1100;
+    const configH = (wrapPad + statusH + deviceOneCardH + gap + btnRow.getBoundingClientRect().height + 24 + slack) * zoom;
     const h = Math.max(1, Math.ceil(headerH + configH));
     window.ipc.postMessage('startup-height:' + JSON.stringify({ h }));
   });

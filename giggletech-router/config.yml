@@ -2,7 +2,8 @@ devices:
 - name: Headpats
   ip: 192.168.1.69
   proximity_parameter: proximity_01
-  max_speed: 12
+  online_parameter: HeadpatsOnline
+  max_speed: 11
   speed_scale: null
   max_speed_parameter: null
   use_velocity_control: null
@@ -24,3 +25,4 @@ setup:
   default_inner_proximity: 1.0
   default_velocity_scalar: 20
   default_velocity_smoothing_ms: 80
+  online_status_broadcast_seconds: 5

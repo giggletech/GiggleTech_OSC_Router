@@ -116,24 +116,45 @@ const MIN_VELOCITY_DELTA_SECS: f32 = 0.001;
 /// Without this, `velocity_on_prox_drop` and float noise keep firing the motor.
 const PROX_VELOCITY_DEADZONE: f32 = 0.002;
 
-/// When pull-away is enabled, ignore extremely fast retreats (e.g. hand fully leaving the sensor).
-/// This prevents a huge "goodbye spike" while still allowing small pull-away motion to be felt.
-///
-/// Units are the same as `compute_proximity_velocity` output (after applying `velocity_scalar`).
-const MAX_PULLAWAY_VELOCITY: f32 = 0.8;
+/// Max |d(proximity)/dt| for pull-away (proximity units per second). Faster retreats are
+/// treated as "hand left the sensor" spikes. Applied before `velocity_scalar` so sensitivity
+/// does not change the threshold.
+const MAX_RETREAT_PROX_RATE: f32 = 4.0;
 
-/// Compute the raw velocity (positive for approach). Returns 0 when inactive/invalid.
+/// Whether this sample may contribute to velocity (approach or retreat).
+fn velocity_sample_active(
+    proximity_signal: f32,
+    prev_signal: f32,
+    retreating: bool,
+    device: &DeviceConfig,
+) -> bool {
+    if prev_signal <= 0.0 {
+        return false;
+    }
+    let current_in_band = proximity_in_band_velocity(proximity_signal, device);
+    if current_in_band {
+        return true;
+    }
+    // Pull-away often crosses below the far edge on the same motion; count the step if we
+    // were in-band on the previous sample.
+    device.velocity_on_prox_drop
+        && retreating
+        && proximity_in_band_velocity(prev_signal, device)
+}
+
+/// Compute the raw velocity (always ≥ 0). Returns 0 when inactive/invalid.
 pub fn compute_proximity_velocity(
     proximity_signal: f32,
     prev_signal: f32,
     delta_t: Duration,
     device: &DeviceConfig,
 ) -> f32 {
-    if !proximity_in_band_velocity(proximity_signal, device) || prev_signal <= 0.0 {
+    let delta = proximity_signal - prev_signal;
+    let retreating = delta < 0.0;
+    if !velocity_sample_active(proximity_signal, prev_signal, retreating, device) {
         return 0.0;
     }
 
-    let delta = proximity_signal - prev_signal;
     if delta.abs() < PROX_VELOCITY_DEADZONE {
         return 0.0;
     }
@@ -149,15 +170,17 @@ pub fn compute_proximity_velocity(
     }
     let delta_secs = delta_secs.max(MIN_VELOCITY_DELTA_SECS);
 
-    let speed = if device.velocity_on_prox_drop { delta.abs() } else { delta };
-    let vel = f32::max(0.0, speed / delta_secs * device.velocity_scalar);
-
-    // If we are retreating (delta < 0) and pull-away mode is on, drop only the *huge* spikes.
-    if device.velocity_on_prox_drop && delta < 0.0 && vel > MAX_PULLAWAY_VELOCITY {
+    let speed = if device.velocity_on_prox_drop {
+        delta.abs()
+    } else {
+        delta
+    };
+    let rate = speed / delta_secs;
+    if device.velocity_on_prox_drop && retreating && rate > MAX_RETREAT_PROX_RATE {
         return 0.0;
     }
 
-    vel
+    f32::max(0.0, rate * device.velocity_scalar)
 }
 
 /// Convert a (possibly smoothed) velocity value to a motor tx value.
@@ -181,4 +204,85 @@ pub fn motor_tx_from_velocity(vel: f32, device: &DeviceConfig) -> i32 {
 pub fn process_pat_advanced(proximity_signal: f32, prev_signal: f32, delta_t: Duration, device: &DeviceConfig) -> i32 {
     let vel = compute_proximity_velocity(proximity_signal, prev_signal, delta_t, device);
     motor_tx_from_velocity(vel, device)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::Arc;
+    use std::time::Duration;
+
+    fn test_device(velocity_on_prox_drop: bool, velocity_scalar: f32) -> DeviceConfig {
+        DeviceConfig {
+            device_uri: Arc::new("192.168.1.69".to_string()),
+            min_speed: 0.05,
+            max_speed: 0.16,
+            start_tx: 20,
+            speed_scale: 1.0,
+            proximity_parameter: Arc::new("/avatar/parameters/proximity_01".to_string()),
+            max_speed_parameter: Arc::new("/avatar/parameters/max_speed".to_string()),
+            online_parameter: None,
+            use_velocity_control: true,
+            velocity_on_prox_drop,
+            outer_proximity: 0.13,
+            inner_proximity: 1.0,
+            velocity_scalar,
+            velocity_smoothing_ms: 80,
+        }
+    }
+
+    #[test]
+    fn pullaway_matches_approach_velocity_in_band() {
+        let device = test_device(true, 43.0);
+        let dt = Duration::from_millis(33);
+        let approach =
+            compute_proximity_velocity(0.25, 0.20, dt, &device);
+        let retreat =
+            compute_proximity_velocity(0.20, 0.25, dt, &device);
+        assert!(approach > 0.0, "approach vel {:?}", approach);
+        assert!(
+            (approach - retreat).abs() < 0.01,
+            "approach {:?} retreat {:?}",
+            approach,
+            retreat
+        );
+    }
+
+    #[test]
+    fn pullaway_works_when_crossing_outer_edge() {
+        let device = test_device(true, 43.0);
+        let dt = Duration::from_millis(33);
+        // Was in band at 0.14, retreats to 0.11 (below outer 0.13) — must still register.
+        let vel = compute_proximity_velocity(0.11, 0.14, dt, &device);
+        assert!(vel > 0.0, "expected pull-away across outer edge, got {:?}", vel);
+    }
+
+    #[test]
+    fn pullaway_disabled_blocks_retreat() {
+        let device = test_device(false, 43.0);
+        let dt = Duration::from_millis(33);
+        let vel = compute_proximity_velocity(0.20, 0.25, dt, &device);
+        assert_eq!(vel, 0.0);
+    }
+
+    #[test]
+    fn pullaway_motor_tx_same_as_approach_for_same_speed() {
+        let device = test_device(true, 43.0);
+        let dt = Duration::from_millis(33);
+        let v_in = compute_proximity_velocity(0.25, 0.20, dt, &device);
+        let v_out = compute_proximity_velocity(0.20, 0.25, dt, &device);
+        let tx_in = motor_tx_from_velocity(v_in, &device);
+        let tx_out = motor_tx_from_velocity(v_out, &device);
+        assert_eq!(tx_in, tx_out);
+        assert!(tx_out > 0);
+    }
+
+    #[test]
+    fn extreme_retreat_spike_zeroed() {
+        let device = test_device(true, 100.0);
+        let dt = Duration::from_millis(16);
+        // Hand yanked away: -0.5 in 16ms → rate 31.25 > MAX_RETREAT_PROX_RATE
+        let vel = compute_proximity_velocity(0.05, 0.55, dt, &device);
+        assert_eq!(vel, 0.0);
+    }
 }

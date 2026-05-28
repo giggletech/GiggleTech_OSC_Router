@@ -252,6 +252,7 @@ pub fn save_editor_state(state: &EditorState, quiet: bool) -> Result<(), String>
           name: name_for_yaml(&effective_device_name(i, &ed.name)),
           ip: ed.ip.trim().to_string(),
           proximity_parameter: normalize_proximity_parameter(&ed.proximity_parameter),
+          online_parameter: None,
           max_speed: if ed.max_speed == default_max {
             None
           } else {

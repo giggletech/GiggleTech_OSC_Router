@@ -18,6 +18,7 @@ mod osc_timeout;
 mod router;
 mod stop_pats;
 mod terminator;
+mod vrc_osc;
 
 #[cfg(windows)]
 mod tray;
@@ -32,10 +33,11 @@ fn main() {
     log_ui::status("Starting GiggleTech OSC Router...");
 
     let no_tray = std::env::args().any(|a| a == "--no-tray");
+    let show_console = no_tray || std::env::args().any(|a| a == "--console");
 
     #[cfg(windows)]
     if !no_tray {
-        run_with_tray();
+        run_with_tray(show_console);
         return;
     }
 
@@ -43,15 +45,17 @@ fn main() {
 }
 
 #[cfg(windows)]
-fn run_with_tray() {
-    log_ui::set_console_mirror(false);
+fn run_with_tray(show_console: bool) {
+    log_ui::set_console_mirror(show_console);
 
-    unsafe {
-        use winapi::um::wincon::GetConsoleWindow;
-        use winapi::um::winuser::{ShowWindow, SW_HIDE};
-        let hwnd = GetConsoleWindow();
-        if !hwnd.is_null() {
-            ShowWindow(hwnd, SW_HIDE);
+    if !show_console {
+        unsafe {
+            use winapi::um::wincon::GetConsoleWindow;
+            use winapi::um::winuser::{ShowWindow, SW_HIDE};
+            let hwnd = GetConsoleWindow();
+            if !hwnd.is_null() {
+                ShowWindow(hwnd, SW_HIDE);
+            }
         }
     }
 
