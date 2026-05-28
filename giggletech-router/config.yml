@@ -5,11 +5,11 @@ devices:
   max_speed: 12
   speed_scale: null
   max_speed_parameter: null
-  use_velocity_control: null
+  use_velocity_control: true
   velocity_on_prox_drop: true
-  outer_proximity: 0.0
-  inner_proximity: 0.7
-  velocity_scalar: 30
+  outer_proximity: null
+  inner_proximity: null
+  velocity_scalar: null
 - name: null
   ip: 192.168.1.70
   proximity_parameter: proximity_02

@@ -36,6 +36,14 @@ pub struct EditorDevice {
   /// When true (and velocity control on), motor also fires when proximity decreases.
   #[serde(default)]
   pub velocity_on_prox_drop: bool,
+  /// Velocity band: proximity must be above this (0.0–1.0).
+  #[serde(default)]
+  pub outer_proximity: f32,
+  /// Velocity band: proximity must be below this (0.0–1.0).
+  #[serde(default)]
+  pub inner_proximity: f32,
+  #[serde(default)]
+  pub velocity_scalar: u32,
 }
 
 /// `port_rx` in config.yml: `"OSCQuery"` or a UDP port number (e.g. `"9001"`).
@@ -51,6 +59,12 @@ pub struct EditorState {
   pub default_use_velocity_control: bool,
   #[serde(default)]
   pub default_velocity_on_prox_drop: bool,
+  #[serde(default)]
+  pub default_outer_proximity: f32,
+  #[serde(default)]
+  pub default_inner_proximity: f32,
+  #[serde(default)]
+  pub default_velocity_scalar: u32,
 }
 
 fn default_port_rx() -> String {
@@ -77,6 +91,9 @@ pub fn load_editor_state() -> Result<EditorState, String> {
   let min_speed = cfg.setup.default_min_speed;
   let default_use_velocity_control = cfg.setup.default_use_velocity_control;
   let default_velocity_on_prox_drop = cfg.setup.default_velocity_on_prox_drop;
+  let default_outer_proximity = cfg.setup.default_outer_proximity as f32;
+  let default_inner_proximity = cfg.setup.default_inner_proximity as f32;
+  let default_velocity_scalar = cfg.setup.default_velocity_scalar;
 
   Ok(EditorState {
     devices: cfg
@@ -94,6 +111,15 @@ pub fn load_editor_state() -> Result<EditorState, String> {
         velocity_on_prox_drop: d
           .velocity_on_prox_drop
           .unwrap_or(default_velocity_on_prox_drop),
+        outer_proximity: d
+          .outer_proximity
+          .map(|x| x as f32)
+          .unwrap_or(default_outer_proximity),
+        inner_proximity: d
+          .inner_proximity
+          .map(|x| x as f32)
+          .unwrap_or(default_inner_proximity),
+        velocity_scalar: d.velocity_scalar.unwrap_or(default_velocity_scalar),
       })
       .collect(),
     min_speed,
@@ -101,6 +127,9 @@ pub fn load_editor_state() -> Result<EditorState, String> {
     port_rx: normalize_port_rx_for_editor(&cfg.setup.port_rx),
     default_use_velocity_control,
     default_velocity_on_prox_drop,
+    default_outer_proximity,
+    default_inner_proximity,
+    default_velocity_scalar,
   })
 }
 
@@ -153,10 +182,25 @@ pub fn save_editor_state(state: &EditorState, quiet: bool) -> Result<(), String>
     if device.max_speed > 100 {
       return Err(format!("Device {}: power cannot exceed 100%.", i + 1));
     }
+    if device.inner_proximity <= device.outer_proximity {
+      return Err(format!(
+        "Device {}: inner proximity must be greater than outer.",
+        i + 1
+      ));
+    }
+    if device.velocity_scalar < 1 || device.velocity_scalar > 100 {
+      return Err(format!(
+        "Device {}: velocity sensitivity must be between 1 and 100.",
+        i + 1
+      ));
+    }
   }
   let existing = cfg.devices.clone();
   let default_use_velocity_control = cfg.setup.default_use_velocity_control;
   let default_velocity_on_prox_drop = cfg.setup.default_velocity_on_prox_drop;
+  let default_outer_proximity = cfg.setup.default_outer_proximity;
+  let default_inner_proximity = cfg.setup.default_inner_proximity;
+  let default_velocity_scalar = cfg.setup.default_velocity_scalar;
 
   cfg.devices = state
     .devices
@@ -184,6 +228,11 @@ pub fn save_editor_state(state: &EditorState, quiet: bool) -> Result<(), String>
           } else {
             Some(ed.velocity_on_prox_drop)
           };
+        device.outer_proximity =
+          optional_f64(ed.outer_proximity, default_outer_proximity);
+        device.inner_proximity =
+          optional_f64(ed.inner_proximity, default_inner_proximity);
+        device.velocity_scalar = optional_u32(ed.velocity_scalar, default_velocity_scalar);
         device
       } else {
         Device {
@@ -207,9 +256,9 @@ pub fn save_editor_state(state: &EditorState, quiet: bool) -> Result<(), String>
           } else {
             Some(ed.velocity_on_prox_drop)
           },
-          outer_proximity: None,
-          inner_proximity: None,
-          velocity_scalar: None,
+          outer_proximity: optional_f64(ed.outer_proximity, default_outer_proximity),
+          inner_proximity: optional_f64(ed.inner_proximity, default_inner_proximity),
+          velocity_scalar: optional_u32(ed.velocity_scalar, default_velocity_scalar),
         }
       }
     })
@@ -261,6 +310,22 @@ fn strip_proximity_prefix(s: String) -> String {
     s[PREFIX.len()..].to_string()
   } else {
     s.trim_start_matches('/').to_string()
+  }
+}
+
+fn optional_f64(value: f32, default: f64) -> Option<f64> {
+  if (f64::from(value) - default).abs() < 0.0001 {
+    None
+  } else {
+    Some(f64::from(value))
+  }
+}
+
+fn optional_u32(value: u32, default: u32) -> Option<u32> {
+  if value == default {
+    None
+  } else {
+    Some(value)
   }
 }
 
