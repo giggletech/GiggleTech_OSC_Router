@@ -116,6 +116,12 @@ const MIN_VELOCITY_DELTA_SECS: f32 = 0.001;
 /// Without this, `velocity_on_prox_drop` and float noise keep firing the motor.
 const PROX_VELOCITY_DEADZONE: f32 = 0.002;
 
+/// When pull-away is enabled, ignore extremely fast retreats (e.g. hand fully leaving the sensor).
+/// This prevents a huge "goodbye spike" while still allowing small pull-away motion to be felt.
+///
+/// Units are the same as `compute_proximity_velocity` output (after applying `velocity_scalar`).
+const MAX_PULLAWAY_VELOCITY: f32 = 0.8;
+
 /// Compute the raw velocity (positive for approach). Returns 0 when inactive/invalid.
 pub fn compute_proximity_velocity(
     proximity_signal: f32,
@@ -144,7 +150,14 @@ pub fn compute_proximity_velocity(
     let delta_secs = delta_secs.max(MIN_VELOCITY_DELTA_SECS);
 
     let speed = if device.velocity_on_prox_drop { delta.abs() } else { delta };
-    f32::max(0.0, speed / delta_secs * device.velocity_scalar)
+    let vel = f32::max(0.0, speed / delta_secs * device.velocity_scalar);
+
+    // If we are retreating (delta < 0) and pull-away mode is on, drop only the *huge* spikes.
+    if device.velocity_on_prox_drop && delta < 0.0 && vel > MAX_PULLAWAY_VELOCITY {
+        return 0.0;
+    }
+
+    vel
 }
 
 /// Convert a (possibly smoothed) velocity value to a motor tx value.
