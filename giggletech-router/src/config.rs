@@ -309,7 +309,7 @@ fn parse_global_config(setup: YamlHashWrapper) -> GlobalConfig {
         .unwrap_or(false);
 
     let default_outer_proximity = setup.get_f64("default_outer_proximity").unwrap_or(0.0) as f32;
-    let default_inner_proximity = setup.get_f64("default_inner_proximity").unwrap_or(0.7) as f32;
+    let default_inner_proximity = setup.get_f64("default_inner_proximity").unwrap_or(1.0) as f32;
     let default_velocity_scalar = setup.get_f64("default_velocity_scalar").unwrap_or(20.0) as f32;
 
     // Return the GlobalConfig struct with the updated port_rx

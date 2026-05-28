@@ -537,14 +537,62 @@ header {
   justify-content: space-between;
   gap: 12px;
   margin: 0;
-  cursor: pointer;
-  user-select: none;
+}
+.panel-title-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
 }
 .velocity-panel-title {
   font-size: 1rem;
   font-weight: 600;
   color: #c4b5fd;
   letter-spacing: 0.01em;
+}
+.panel-info-btn {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  border: 1px solid #6b6b80;
+  background: #1a1a24;
+  color: #b8b8c8;
+  font-size: 0.68rem;
+  font-weight: 700;
+  font-family: Georgia, 'Times New Roman', serif;
+  font-style: italic;
+  line-height: 1;
+  padding: 0;
+  cursor: pointer;
+}
+.panel-info-btn:hover,
+.panel-info-btn[aria-expanded="true"] {
+  border-color: #a855f7;
+  color: #f3e8ff;
+  background: #2a2a36;
+}
+.panel-info-btn:focus {
+  outline: none;
+}
+.panel-info-btn:focus-visible {
+  box-shadow: 0 0 0 2px #000, 0 0 0 3px #a855f7;
+}
+.panel-info-text {
+  margin: -4px 0 0;
+  padding: 8px 10px;
+  font-size: 0.75rem;
+  line-height: 1.45;
+  color: #a1a1b5;
+  background: #0f0f14;
+  border: 1px solid #2a2a36;
+  border-radius: 6px;
+}
+.panel-info-text.hidden {
+  display: none;
+}
+.velocity-panel-header .velocity-toggle {
+  cursor: pointer;
 }
 .velocity-panel-body {
   display: flex;
@@ -565,6 +613,49 @@ header {
   gap: 8px;
 }
 .velocity-panel .speed-slider-row {
+  padding: 4px 0 6px;
+}
+.proximity-band-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: 100%;
+  margin-top: 8px;
+  padding: 14px 16px;
+  border-radius: 10px;
+  background: #12121a;
+  border: 1px solid #2a2a36;
+  box-sizing: border-box;
+}
+.proximity-band-panel.hidden {
+  display: none;
+}
+.proximity-band-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.proximity-band-panel-title {
+  font-size: 1rem;
+  font-weight: 600;
+  color: #c4b5fd;
+  letter-spacing: 0.01em;
+}
+.proximity-band-panel-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.proximity-band-panel .slider-field {
+  margin-top: 0;
+  padding: 0;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  gap: 8px;
+}
+.proximity-band-panel .speed-slider-row {
   padding: 4px 0 6px;
 }
 .velocity-toggle-row {
@@ -622,27 +713,6 @@ header {
   font-size: 0.85rem;
   color: #a1a1b5;
   font-weight: 500;
-}
-.velocity-settings-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin: 0;
-  padding: 0;
-}
-.velocity-settings-actions .btn-sm {
-  font-size: 0.75rem;
-  padding: 4px 10px;
-}
-.velocity-settings {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  margin: 0;
-  padding: 0;
-}
-.velocity-settings.hidden {
-  display: none;
 }
 .device-card label .hint {
   display: block;
@@ -859,9 +929,7 @@ let editorDevices = [];
 let editorSpeedDefaults = { min: 5, max: 25 };
 let editorVelocityDefault = false;
 let editorVelocityOnProxDropDefault = false;
-let editorVelocityProxDefaults = { outer: 0, inner: 0.7, scalar: 20 };
-/** Per-device IP: hide velocity slider panel (session only, not saved). */
-let velocitySlidersHiddenByIp = {};
+let editorVelocityProxDefaults = { outer: 0, inner: 1, scalar: 20 };
 let editorPortRx = 'OSCQuery';
 let devicePingStatus = {};
 let pingDebounceTimer = null;
@@ -933,7 +1001,7 @@ function sliderPctToProx(pct) {
   return Math.round(pct) / 100;
 }
 function formatProx(p) {
-  return (Math.round(p * 100) / 100).toFixed(2);
+  return Math.round(Math.max(0, Math.min(1, p)) * 100) + '%';
 }
 function effectiveOuterProx(d) {
   return d.outer_proximity ?? editorVelocityProxDefaults.outer;
@@ -945,46 +1013,17 @@ function effectiveVelocityScalar(d) {
   return d.velocity_scalar ?? editorVelocityProxDefaults.scalar;
 }
 
-function deviceVelocityUiKey(d, index) {
-  const ip = (d && d.ip ? String(d.ip) : '').trim();
-  return ip || ('__idx_' + index);
-}
-
-function isVelocitySlidersHidden(d, index) {
-  return !!velocitySlidersHiddenByIp[deviceVelocityUiKey(d, index)];
-}
-
-function syncVelocitySlidersUi(index) {
-  const d = editorDevices[index];
-  if (!d) return;
-  const outer = effectiveOuterProx(d);
-  const inner = effectiveInnerProx(d);
-  const scalar = effectiveVelocityScalar(d);
-  const outerInput = document.getElementById('outer-prox-' + index);
-  const innerInput = document.getElementById('inner-prox-' + index);
-  const scalarInput = document.getElementById('velocity-scalar-' + index);
-  const outerLabel = document.getElementById('outer-prox-val-' + index);
-  const innerLabel = document.getElementById('inner-prox-val-' + index);
-  const scalarLabel = document.getElementById('velocity-scalar-val-' + index);
-  if (outerInput) outerInput.value = proxToSliderPct(outer);
-  if (innerInput) innerInput.value = proxToSliderPct(inner);
-  if (scalarInput) scalarInput.value = String(scalar);
-  if (outerLabel) outerLabel.textContent = formatProx(outer);
-  if (innerLabel) innerLabel.textContent = formatProx(inner);
-  if (scalarLabel) scalarLabel.textContent = String(scalar);
-}
-
 function editorValidationOk() {
   if (!editorDevices.length) return false;
   for (const d of editorDevices) {
     if (!d.ip.trim() || !isValidIp(d.ip)) return false;
     if (!(d.proximity_parameter || '').trim()) return false;
     if (d.max_speed < editorSpeedDefaults.min || d.max_speed > 100) return false;
+    const outer = effectiveOuterProx(d);
+    const inner = effectiveInnerProx(d);
+    if (inner <= outer) return false;
     if (d.use_velocity_control) {
-      const outer = effectiveOuterProx(d);
-      const inner = effectiveInnerProx(d);
       const scalar = effectiveVelocityScalar(d);
-      if (inner <= outer) return false;
       if (scalar < 1 || scalar > 100) return false;
     }
   }
@@ -1052,13 +1091,22 @@ function renderDevices() {
             </div>
           </label>
           <section class="velocity-panel" aria-label="Velocity control for device ${i + 1}">
-            <label class="velocity-panel-header">
-              <span class="velocity-panel-title">Velocity control</span>
+            <div class="velocity-panel-header">
+              <div class="panel-title-row">
+                <span class="velocity-panel-title">Velocity control</span>
+                <button type="button" class="panel-info-btn" aria-expanded="false"
+                  aria-controls="velocity-info-${i}"
+                  aria-label="About velocity control"
+                  onclick="togglePanelInfo(event, 'velocity-info-${i}')">i</button>
+              </div>
               <input type="checkbox" class="velocity-toggle" role="switch"
                 aria-label="Enable velocity control for device ${i + 1}"
                 ${d.use_velocity_control ? 'checked' : ''}
                 onchange="onVelocityControlChange(${i}, this)">
-            </label>
+            </div>
+            <p class="panel-info-text hidden" id="velocity-info-${i}">
+              Vibratrion strength follows how fast proximity changes, not how close you are.
+            </p>
             <div class="velocity-panel-body${d.use_velocity_control ? '' : ' hidden'}">
             <label class="velocity-toggle-row velocity-sub-toggle">
               <span>Vibrate on pull-away</span>
@@ -1068,41 +1116,9 @@ function renderDevices() {
                 ${d.velocity_on_prox_drop ? 'checked' : ''}
                 onchange="onVelocityOnProxDropChange(${i}, this)">
             </label>
-            <div class="velocity-settings-actions">
-              <button type="button" class="btn btn-secondary btn-sm"
-                onclick="resetVelocitySettings(${i})">Reset to defaults</button>
-              <button type="button" class="btn btn-secondary btn-sm"
-                id="velocity-settings-toggle-${i}"
-                onclick="toggleVelocitySettingsVisible(${i})">${isVelocitySlidersHidden(d, i) ? 'Show velocity settings' : 'Hide velocity settings'}</button>
-            </div>
-            <div class="velocity-settings${isVelocitySlidersHidden(d, i) ? ' hidden' : ''}" id="velocity-settings-${i}">
             <label class="slider-field">
               <div class="slider-field-header">
-                <span class="slider-field-title">Outer proximity</span>
-                <span class="speed-value" id="outer-prox-val-${i}">${formatProx(effectiveOuterProx(d))}</span>
-              </div>
-              <div class="speed-slider-row">
-                <input type="range" id="outer-prox-${i}" min="0" max="100"
-                  value="${proxToSliderPct(effectiveOuterProx(d))}"
-                  aria-label="Outer proximity for device ${i + 1}"
-                  oninput="onOuterProxChange(${i}, this)" onchange="saveConfig(true)">
-              </div>
-            </label>
-            <label class="slider-field">
-              <div class="slider-field-header">
-                <span class="slider-field-title">Inner proximity</span>
-                <span class="speed-value" id="inner-prox-val-${i}">${formatProx(effectiveInnerProx(d))}</span>
-              </div>
-              <div class="speed-slider-row">
-                <input type="range" id="inner-prox-${i}" min="0" max="100"
-                  value="${proxToSliderPct(effectiveInnerProx(d))}"
-                  aria-label="Inner proximity for device ${i + 1}"
-                  oninput="onInnerProxChange(${i}, this)" onchange="saveConfig(true)">
-              </div>
-            </label>
-            <label class="slider-field">
-              <div class="slider-field-header">
-                <span class="slider-field-title">Velocity sensitivity</span>
+                <span class="slider-field-title">Sensitivity</span>
                 <span class="speed-value" id="velocity-scalar-val-${i}">${effectiveVelocityScalar(d)}</span>
               </div>
               <div class="speed-slider-row">
@@ -1113,6 +1129,36 @@ function renderDevices() {
               </div>
             </label>
             </div>
+          </section>
+          <section class="proximity-band-panel" aria-label="Collider adjustment for device ${i + 1}">
+            <div class="proximity-band-panel-header">
+              <span class="proximity-band-panel-title">Collider adjustment</span>
+            </div>
+            <div class="proximity-band-panel-body" id="proximity-band-${i}">
+              <label class="slider-field">
+                <div class="slider-field-header">
+                  <span class="slider-field-title">Inner</span>
+                  <span class="speed-value" id="inner-prox-val-${i}">${formatProx(effectiveOuterProx(d))}</span>
+                </div>
+                <div class="speed-slider-row">
+                  <input type="range" id="inner-prox-${i}" min="0" max="100"
+                    value="${proxToSliderPct(effectiveOuterProx(d))}"
+                    aria-label="Inner proximity (far edge) for device ${i + 1}"
+                    oninput="onInnerProxBandChange(${i}, this)" onchange="saveConfig(true)">
+                </div>
+              </label>
+              <label class="slider-field">
+                <div class="slider-field-header">
+                  <span class="slider-field-title">Outer</span>
+                  <span class="speed-value" id="outer-prox-val-${i}">${formatProx(effectiveInnerProx(d))}</span>
+                </div>
+                <div class="speed-slider-row">
+                  <input type="range" id="outer-prox-${i}" min="0" max="100"
+                    value="${proxToSliderPct(effectiveInnerProx(d))}"
+                    aria-label="Outer proximity (close edge) for device ${i + 1}"
+                    oninput="onOuterProxBandChange(${i}, this)" onchange="saveConfig(true)">
+                </div>
+              </label>
             </div>
           </section>
           <div class="device-actions">
@@ -1352,6 +1398,23 @@ function onMaxSpeedChange(index, input) {
   if (label) label.textContent = speed + '%';
 }
 
+function togglePanelInfo(event, id) {
+  if (event) {
+    event.preventDefault();
+    event.stopPropagation();
+  }
+  const el = document.getElementById(id);
+  if (!el) return;
+  const show = el.classList.contains('hidden');
+  document.querySelectorAll('.panel-info-text').forEach((node) => node.classList.add('hidden'));
+  document.querySelectorAll('.panel-info-btn').forEach((btn) => btn.setAttribute('aria-expanded', 'false'));
+  if (show) {
+    el.classList.remove('hidden');
+    const btn = event && event.currentTarget;
+    if (btn) btn.setAttribute('aria-expanded', 'true');
+  }
+}
+
 function onVelocityControlChange(index, input) {
   if (!editorDevices[index]) return;
   editorDevices[index].use_velocity_control = !!input.checked;
@@ -1365,34 +1428,36 @@ function onVelocityOnProxDropChange(index, input) {
   saveConfig(true);
 }
 
-function onOuterProxChange(index, input) {
+/** Inner slider: far edge (stored as `outer_proximity`, minimum of active band). */
+function onInnerProxBandChange(index, input) {
   const d = editorDevices[index];
   if (!d) return;
-  const outer = sliderPctToProx(parseInt(input.value, 10));
-  d.outer_proximity = outer;
-  const label = document.getElementById('outer-prox-val-' + index);
-  if (label) label.textContent = formatProx(outer);
-  if (d.inner_proximity <= outer) {
-    const inner = Math.min(1, outer + 0.01);
-    d.inner_proximity = inner;
-    const innerInput = document.getElementById('inner-prox-' + index);
-    const innerLabel = document.getElementById('inner-prox-val-' + index);
-    if (innerInput) innerInput.value = proxToSliderPct(inner);
-    if (innerLabel) innerLabel.textContent = formatProx(inner);
+  const farEdge = sliderPctToProx(parseInt(input.value, 10));
+  d.outer_proximity = farEdge;
+  const label = document.getElementById('inner-prox-val-' + index);
+  if (label) label.textContent = formatProx(farEdge);
+  if (d.inner_proximity <= farEdge) {
+    const closeEdge = Math.min(1, farEdge + 0.01);
+    d.inner_proximity = closeEdge;
+    const outerInput = document.getElementById('outer-prox-' + index);
+    const outerLabel = document.getElementById('outer-prox-val-' + index);
+    if (outerInput) outerInput.value = proxToSliderPct(closeEdge);
+    if (outerLabel) outerLabel.textContent = formatProx(closeEdge);
   }
   maybeClearConfigError();
 }
 
-function onInnerProxChange(index, input) {
+/** Outer slider: close edge (stored as `inner_proximity`, maximum of active band). */
+function onOuterProxBandChange(index, input) {
   const d = editorDevices[index];
   if (!d) return;
-  let inner = sliderPctToProx(parseInt(input.value, 10));
-  const outer = effectiveOuterProx(d);
-  if (inner <= outer) inner = Math.min(1, outer + 0.01);
-  d.inner_proximity = inner;
-  input.value = proxToSliderPct(inner);
-  const label = document.getElementById('inner-prox-val-' + index);
-  if (label) label.textContent = formatProx(inner);
+  let closeEdge = sliderPctToProx(parseInt(input.value, 10));
+  const farEdge = effectiveOuterProx(d);
+  if (closeEdge <= farEdge) closeEdge = Math.min(1, farEdge + 0.01);
+  d.inner_proximity = closeEdge;
+  input.value = proxToSliderPct(closeEdge);
+  const label = document.getElementById('outer-prox-val-' + index);
+  if (label) label.textContent = formatProx(closeEdge);
   maybeClearConfigError();
 }
 
@@ -1404,31 +1469,6 @@ function onVelocityScalarChange(index, input) {
   const label = document.getElementById('velocity-scalar-val-' + index);
   if (label) label.textContent = String(v);
   maybeClearConfigError();
-}
-
-function resetVelocitySettings(index) {
-  const d = editorDevices[index];
-  if (!d) return;
-  d.outer_proximity = editorVelocityProxDefaults.outer;
-  d.inner_proximity = editorVelocityProxDefaults.inner;
-  d.velocity_scalar = editorVelocityProxDefaults.scalar;
-  syncVelocitySlidersUi(index);
-  maybeClearConfigError();
-  saveConfig(true);
-}
-
-function toggleVelocitySettingsVisible(index) {
-  const d = editorDevices[index];
-  if (!d) return;
-  const key = deviceVelocityUiKey(d, index);
-  velocitySlidersHiddenByIp[key] = !isVelocitySlidersHidden(d, index);
-  const panel = document.getElementById('velocity-settings-' + index);
-  const btn = document.getElementById('velocity-settings-toggle-' + index);
-  const hidden = velocitySlidersHiddenByIp[key];
-  if (panel) panel.classList.toggle('hidden', hidden);
-  if (btn) {
-    btn.textContent = hidden ? 'Show velocity settings' : 'Hide velocity settings';
-  }
 }
 
 function addDevice() {

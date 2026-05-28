@@ -36,10 +36,10 @@ pub struct EditorDevice {
   /// When true (and velocity control on), motor also fires when proximity decreases.
   #[serde(default)]
   pub velocity_on_prox_drop: bool,
-  /// Velocity band: proximity must be above this (0.0–1.0).
+  /// Velocity band far edge — proximity must be above this (`outer_proximity` in config.yml).
   #[serde(default)]
   pub outer_proximity: f32,
-  /// Velocity band: proximity must be below this (0.0–1.0).
+  /// Velocity band close edge — proximity must be below this (`inner_proximity` in config.yml).
   #[serde(default)]
   pub inner_proximity: f32,
   #[serde(default)]

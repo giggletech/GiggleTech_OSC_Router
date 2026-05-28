@@ -70,8 +70,29 @@ pub fn print_speed_limit(_headpat_max_rx: f32) {
 // Pat Processor
 const MOTOR_SPEED_SCALE: f32 = 0.66; // Overvolt   Here, OEM config 0.66 going higher than this value will reduce your vibrator motor life
 
+/// Motor off only below the far edge; at/above far edge counts as in-band.
+pub fn proximity_in_band(proximity_signal: f32, device: &DeviceConfig) -> bool {
+    proximity_signal >= device.outer_proximity
+}
+
+/// Far edge → 0%, close edge → 100%, closer than close edge stays at 100%.
+pub fn proximity_normalized_in_band(proximity_signal: f32, device: &DeviceConfig) -> f32 {
+    let span = device.inner_proximity - device.outer_proximity;
+    if span <= 0.0 {
+        return 0.0;
+    }
+    let t = (proximity_signal - device.outer_proximity) / span;
+    t.clamp(0.0, 1.0)
+}
+
 pub fn process_pat(proximity_signal: f32, device: &DeviceConfig, prev_signal: f32) -> i32 {
-    let headpat_tx = (((device.max_speed - device.min_speed) * proximity_signal + device.min_speed) * MOTOR_SPEED_SCALE * device.speed_scale * 255.0).round() as i32;
+    if !proximity_in_band(proximity_signal, device) {
+        return 0;
+    }
+    // 0% at far edge of band, 100% at close edge (scaled by Power / max_speed).
+    let proximity_signal = proximity_normalized_in_band(proximity_signal, device);
+    let headpat_tx = (device.max_speed * proximity_signal * MOTOR_SPEED_SCALE * device.speed_scale * 255.0)
+        .round() as i32;
     let headpat_tx = if prev_signal == 0.0 && proximity_signal > 0.0 && headpat_tx < device.start_tx {
         device.start_tx
     } else {
@@ -89,10 +110,7 @@ const MIN_VELOCITY_DELTA_SECS: f32 = 0.001;
 const PROX_VELOCITY_DEADZONE: f32 = 0.002;
 
 pub fn process_pat_advanced(proximity_signal: f32, prev_signal: f32, delta_t: Duration, device: &DeviceConfig) -> i32 {
-    if proximity_signal > device.outer_proximity
-        && proximity_signal < device.inner_proximity
-        && prev_signal > 0.0
-    {
+    if proximity_in_band(proximity_signal, device) && prev_signal > 0.0 {
         let delta = proximity_signal - prev_signal;
         if delta.abs() < PROX_VELOCITY_DEADZONE {
             return 0;

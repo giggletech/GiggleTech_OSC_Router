@@ -74,8 +74,12 @@ pub(crate) async fn handle_proximity_parameter(
         stop_pats::stop_device_with_terminator(device_ip.as_str(), running.clone()).await?;
     } else {
         if !device.use_velocity_control {
-            giggletech_osc::send_data(&device_ip,
-                data_processing::process_pat(value, &device, last_val)).await?;
+            let headpat_tx = data_processing::process_pat(value, &device, last_val);
+            if headpat_tx == 0 {
+                stop_pats::stop_device_immediate(device_ip.as_str(), running.clone()).await?;
+            } else {
+                giggletech_osc::send_data(&device_ip, headpat_tx).await?;
+            }
         } else {
             let delta_t = match last_signal_time {
                 None => Duration::new(0, 0),

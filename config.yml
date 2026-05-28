@@ -58,5 +58,5 @@ setup:
   # Velocity Control Parameters
   # Adjust these parameters to achieve the desired effect.
   default_outer_proximity: 0
-  default_inner_proximity: 0.7
+  default_inner_proximity: 1.0
   default_velocity_scalar: 20
