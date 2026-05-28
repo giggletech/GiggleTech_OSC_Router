@@ -19,7 +19,7 @@ devices:
   max_speed: 22
   speed_scale: null
   max_speed_parameter: null
-  use_velocity_control: null
+  use_velocity_control: false
   velocity_on_prox_drop: null
   outer_proximity: null
   inner_proximity: null

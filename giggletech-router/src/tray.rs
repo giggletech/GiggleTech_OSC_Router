@@ -21,8 +21,9 @@ use tray_icon::{
 };
 use winreg::enums::*;
 use winreg::RegKey;
+use dirs::data_local_dir;
 use wry::http::Request;
-use wry::WebViewBuilder;
+use wry::{WebContext, WebViewBuilder};
 
 use serde::Deserialize;
 use tao::event_loop::EventLoopProxy;
@@ -38,6 +39,8 @@ struct StartupHeightRequest {
 }
 
 const AUTO_START_VALUE_NAME: &str = "GiggleTechOSCRouter";
+/// Passed on the Run registry command so login starts tray-only (no output window).
+pub const AUTOSTART_ARG: &str = "--autostart";
 const RUN_KEY: &str = r"Software\Microsoft\Windows\CurrentVersion\Run";
 const LOGO_PLACEHOLDER: &str = "{{LOGO_URI}}";
 const OUTPUT_WINDOW_WIDTH: f64 = 1080.0;
@@ -574,7 +577,7 @@ body.ui-large #config-wrap {
 .velocity-panel-title {
   font-size: 2rem;
   font-weight: 600;
-  color: #c4b5fd;
+  color: #e8e8f0;
   letter-spacing: 0.01em;
 }
 .panel-info-btn {
@@ -666,7 +669,7 @@ body.ui-large #config-wrap {
 .proximity-band-panel-title {
   font-size: 2rem;
   font-weight: 600;
-  color: #c4b5fd;
+  color: #e8e8f0;
   letter-spacing: 0.01em;
 }
 .proximity-band-panel-body {
@@ -745,8 +748,8 @@ body.ui-large #config-wrap {
   pointer-events: none;
 }
 .velocity-toggle-input:checked + .velocity-toggle-track {
-  border-color: #c084fc;
-  background: linear-gradient(135deg, #a855f7, #7c3aed);
+  border-color: #e879f9;
+  background: linear-gradient(135deg, #e879f9, #7c3aed);
 }
 .velocity-toggle-input:checked + .velocity-toggle-track .velocity-toggle-thumb {
   transform: translate(40px, -50%);
@@ -1971,7 +1974,16 @@ struct OutputWindow {
 
 const STATUS_FLUSH_INTERVAL: Duration = Duration::from_millis(50);
 
+fn webview_data_directory() -> PathBuf {
+  let mut path = data_local_dir().expect("Failed to get LOCALAPPDATA directory");
+  path.push("GiggleTech");
+  path.push("WebView2");
+  std::fs::create_dir_all(&path).expect("Failed to create WebView2 data directory");
+  path
+}
+
 struct UiState {
+  web_context: WebContext,
   output: Option<OutputWindow>,
   status_synced: usize,
   status_epoch: usize,
@@ -1983,6 +1995,7 @@ struct UiState {
 impl UiState {
   fn new() -> Self {
     Self {
+      web_context: WebContext::new(Some(webview_data_directory())),
       output: None,
       status_synced: 0,
       status_epoch: log_ui::buffer_epoch(),
@@ -2013,7 +2026,7 @@ impl UiState {
       .build(event_loop)
       .expect("Failed to create output window");
 
-    let webview = WebViewBuilder::new()
+    let webview = WebViewBuilder::with_web_context(&mut self.web_context)
       .with_html(output_html())
       .with_ipc_handler(move |request: Request<String>| {
         let _ = ipc_proxy.send_event(UserEvent::ConfigIpc(request.body().clone()));
@@ -2227,7 +2240,10 @@ fn handle_config_ipc(
 }
 
 /// Run the tray icon event loop on the main thread. Blocks until the user exits.
-pub fn run() {
+///
+/// When `start_minimized` is true (Windows login / `--autostart`), only the tray icon
+/// is shown until the user opens the output window.
+pub fn run(start_minimized: bool) {
   let event_loop = EventLoopBuilder::<UserEvent>::with_user_event().build();
   let event_proxy = event_loop.create_proxy();
   let ipc_proxy = event_loop.create_proxy();
@@ -2296,7 +2312,13 @@ pub fn run() {
             .expect("Failed to create tray icon"),
         );
 
-        ui_state.show_output(event_loop, &ipc_proxy);
+        if is_auto_start_enabled() {
+          let _ = set_auto_start(true);
+        }
+
+        if !start_minimized {
+          ui_state.show_output(event_loop, &ipc_proxy);
+        }
       }
 
       Event::UserEvent(UserEvent::StatusUpdated) => {
@@ -2428,7 +2450,7 @@ fn set_auto_start(enabled: bool) -> io::Result<()> {
 
   if enabled {
     let exe = current_exe_path()?;
-    let quoted = format!("\"{}\"", exe.display());
+    let quoted = format!("\"{}\" {}", exe.display(), AUTOSTART_ARG);
     run.set_value(AUTO_START_VALUE_NAME, &quoted)?;
   } else {
     let _ = run.delete_value(AUTO_START_VALUE_NAME);

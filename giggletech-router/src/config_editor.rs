@@ -5,10 +5,9 @@ use std::net::IpAddr;
 
 use serde::{Deserialize, Serialize};
 
+use crate::config::config_file_path;
 use crate::config::config_validator::{load_config, Device};
 use crate::log_ui;
-
-pub const CONFIG_PATH: &str = "config.yml";
 
 const DEFAULT_FIRST_DEVICE_NAME: &str = "Headpats";
 
@@ -91,7 +90,7 @@ pub fn load_editor_json() -> Result<String, String> {
 }
 
 pub fn load_editor_state() -> Result<EditorState, String> {
-  let cfg = load_config(CONFIG_PATH)?;
+  let cfg = load_config(config_file_path())?;
   let default_max = cfg.setup.default_max_speed;
   let min_speed = cfg.setup.default_min_speed;
   let default_use_velocity_control = cfg.setup.default_use_velocity_control;
@@ -177,7 +176,7 @@ pub fn save_editor_state(state: &EditorState, quiet: bool) -> Result<(), String>
     }
   }
 
-  let mut cfg = load_config(CONFIG_PATH)?;
+  let mut cfg = load_config(config_file_path())?;
   let min_speed = cfg.setup.default_min_speed;
   let default_max = cfg.setup.default_max_speed;
 
@@ -293,7 +292,8 @@ pub fn save_editor_state(state: &EditorState, quiet: bool) -> Result<(), String>
 
   let yaml =
     serde_yaml::to_string(&cfg).map_err(|e| format!("Failed to serialize config: {}", e))?;
-  fs::write(CONFIG_PATH, yaml).map_err(|e| format!("Failed to write config.yml: {}", e))?;
+  let path = config_file_path();
+  fs::write(&path, yaml).map_err(|e| format!("Failed to write {}: {}", path.display(), e))?;
   crate::device_test::invalidate_motor_cache();
   if quiet {
     let port_label = if cfg.setup.port_rx.eq_ignore_ascii_case("OSCQuery") {

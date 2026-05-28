@@ -24,6 +24,9 @@ mod vrc_osc;
 mod tray;
 
 fn main() {
+    // Login/auto-start often sets cwd to System32; use the exe folder when config lives there.
+    ensure_config_working_directory();
+
     std::panic::set_hook(Box::new(|panic_info| {
         let message = format!("Application panicked: {}", panic_info);
         log_ui::status(&message);
@@ -34,18 +37,37 @@ fn main() {
 
     let no_tray = std::env::args().any(|a| a == "--no-tray");
     let show_console = no_tray || std::env::args().any(|a| a == "--console");
-
     #[cfg(windows)]
     if !no_tray {
-        run_with_tray(show_console);
+        let start_minimized = std::env::args().any(|a| a == "--autostart");
+        run_with_tray(show_console, start_minimized);
         return;
     }
 
     run_console_mode();
 }
 
+/// If `config.yml` is not in the process cwd but is beside the executable, chdir there.
+fn ensure_config_working_directory() {
+    let cwd_has_config = std::env::current_dir()
+        .map(|cwd| cwd.join("config.yml").is_file())
+        .unwrap_or(false);
+    if cwd_has_config {
+        return;
+    }
+    let Ok(exe) = std::env::current_exe() else {
+        return;
+    };
+    let Some(dir) = exe.parent() else {
+        return;
+    };
+    if dir.join("config.yml").is_file() {
+        let _ = std::env::set_current_dir(dir);
+    }
+}
+
 #[cfg(windows)]
-fn run_with_tray(show_console: bool) {
+fn run_with_tray(show_console: bool, start_minimized: bool) {
     log_ui::set_console_mirror(show_console);
 
     if !show_console {
@@ -69,7 +91,7 @@ fn run_with_tray(show_console: bool) {
         });
     });
 
-    tray::run();
+    tray::run(start_minimized);
 }
 
 fn run_console_mode() {
