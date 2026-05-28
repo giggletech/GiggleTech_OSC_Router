@@ -21,6 +21,8 @@ mod terminator;
 mod vrc_osc;
 
 #[cfg(windows)]
+mod single_instance;
+#[cfg(windows)]
 mod tray;
 
 fn main() {
@@ -39,8 +41,12 @@ fn main() {
     let show_console = no_tray || std::env::args().any(|a| a == "--console");
     #[cfg(windows)]
     if !no_tray {
+        let Some(primary) = single_instance::PrimaryInstance::acquire() else {
+            single_instance::request_show_output_from_running_instance();
+            return;
+        };
         let start_minimized = std::env::args().any(|a| a == "--autostart");
-        run_with_tray(show_console, start_minimized);
+        run_with_tray(show_console, start_minimized, primary);
         return;
     }
 
@@ -67,7 +73,11 @@ fn ensure_config_working_directory() {
 }
 
 #[cfg(windows)]
-fn run_with_tray(show_console: bool, start_minimized: bool) {
+fn run_with_tray(
+    show_console: bool,
+    start_minimized: bool,
+    primary: single_instance::PrimaryInstance,
+) {
     log_ui::set_console_mirror(show_console);
 
     if !show_console {
@@ -91,7 +101,7 @@ fn run_with_tray(show_console: bool, start_minimized: bool) {
         });
     });
 
-    tray::run(start_minimized);
+    tray::run(start_minimized, primary);
 }
 
 fn run_console_mode() {

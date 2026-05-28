@@ -32,6 +32,8 @@ use crate::config_editor;
 use crate::device_ping;
 use crate::device_test;
 use crate::log_ui;
+#[cfg(windows)]
+use crate::single_instance::PrimaryInstance;
 
 #[derive(Debug, Deserialize)]
 struct StartupHeightRequest {
@@ -1960,6 +1962,7 @@ enum UserEvent {
   LiveUiFlush,
   ConfigIpc(String),
   PingResults(String),
+  ShowOutput,
 }
 
 #[derive(Debug, Deserialize)]
@@ -2243,10 +2246,15 @@ fn handle_config_ipc(
 ///
 /// When `start_minimized` is true (Windows login / `--autostart`), only the tray icon
 /// is shown until the user opens the output window.
-pub fn run(start_minimized: bool) {
+pub fn run(start_minimized: bool, primary: PrimaryInstance) {
   let event_loop = EventLoopBuilder::<UserEvent>::with_user_event().build();
   let event_proxy = event_loop.create_proxy();
   let ipc_proxy = event_loop.create_proxy();
+
+  let show_proxy = event_loop.create_proxy();
+  primary.spawn_show_listener(move || {
+    let _ = show_proxy.send_event(UserEvent::ShowOutput);
+  });
 
   log_ui::set_status_notify(move || {
     let _ = event_proxy.send_event(UserEvent::StatusUpdated);
@@ -2365,6 +2373,10 @@ pub fn run(start_minimized: bool) {
             json
           ));
         }
+      }
+
+      Event::UserEvent(UserEvent::ShowOutput) => {
+        ui_state.show_output(event_loop, &ipc_proxy);
       }
 
       Event::UserEvent(UserEvent::MenuEvent(menu_event)) => {
