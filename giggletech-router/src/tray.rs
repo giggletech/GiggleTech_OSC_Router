@@ -13,7 +13,7 @@ use tao::{
   dpi::LogicalSize,
   event::{Event, WindowEvent},
   event_loop::{ControlFlow, EventLoopBuilder, EventLoopWindowTarget},
-  window::{Window, WindowBuilder},
+  window::{Icon as TaoIcon, Window, WindowBuilder},
 };
 use tray_icon::{
   menu::{CheckMenuItem, Menu, MenuEvent, MenuItem, PredefinedMenuItem},
@@ -1912,6 +1912,7 @@ impl UiState {
     event_loop: &EventLoopWindowTarget<UserEvent>,
     ipc_proxy: tao::event_loop::EventLoopProxy<UserEvent>,
   ) {
+    let app_icon = load_tao_icon_from_ico(32);
     let window = WindowBuilder::new()
       .with_title("GiggleTech")
       .with_inner_size(LogicalSize::new(OUTPUT_WINDOW_WIDTH, OUTPUT_WINDOW_HEIGHT))
@@ -1919,6 +1920,7 @@ impl UiState {
         OUTPUT_WINDOW_MIN_WIDTH,
         OUTPUT_WINDOW_MIN_HEIGHT,
       ))
+      .with_window_icon(Some(app_icon))
       .build(event_loop)
       .expect("Failed to create output window");
 
@@ -2247,28 +2249,32 @@ pub fn run() {
 }
 
 fn create_tray_icon() -> tray_icon::Icon {
-  let width = 16u32;
-  let height = 16u32;
-  let mut rgba = vec![0u8; (width * height * 4) as usize];
-  let center_x = 7.5f64;
-  let center_y = 7.5f64;
-  let radius = 6.0f64;
+  let (rgba, width, height) = load_rgba_from_ico(16).expect("Failed to decode src/assets/bolt.ico");
+  tray_icon::Icon::from_rgba(rgba, width, height).expect("Failed to create tray icon image")
+}
 
-  for y in 0..height {
-    for x in 0..width {
-      let dx = x as f64 - center_x;
-      let dy = y as f64 - center_y;
-      let idx = ((y * width + x) * 4) as usize;
-      if dx * dx + dy * dy <= radius * radius {
-        rgba[idx] = 255;
-        rgba[idx + 1] = 0;
-        rgba[idx + 2] = 255;
-        rgba[idx + 3] = 255;
-      }
-    }
+fn load_tao_icon_from_ico(size: u32) -> TaoIcon {
+  let (rgba, width, height) = load_rgba_from_ico(size).expect("Failed to decode src/assets/bolt.ico");
+  TaoIcon::from_rgba(rgba, width, height).expect("Failed to create app icon image")
+}
+
+fn load_rgba_from_ico(size: u32) -> Result<(Vec<u8>, u32, u32), String> {
+  let bytes = include_bytes!("assets/bolt.ico");
+  let img =
+    image::load_from_memory(bytes).map_err(|e| format!("decode src/assets/bolt.ico: {}", e))?;
+  let rgba = img.to_rgba8();
+
+  if rgba.width() == size && rgba.height() == size {
+    return Ok((rgba.into_raw(), size, size));
   }
 
-  tray_icon::Icon::from_rgba(rgba, width, height).expect("Failed to create tray icon image")
+  let resized = image::imageops::resize(
+    &rgba,
+    size,
+    size,
+    image::imageops::FilterType::Nearest,
+  );
+  Ok((resized.into_raw(), size, size))
 }
 
 fn is_auto_start_enabled() -> bool {
