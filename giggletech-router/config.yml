@@ -2,27 +2,27 @@ devices:
 - name: Headpats
   ip: 192.168.1.69
   proximity_parameter: proximity_01
-  max_speed: 9
+  max_speed: 13
   speed_scale: null
   max_speed_parameter: null
   use_velocity_control: true
   velocity_on_prox_drop: true
-  outer_proximity: 0.4699999988079071
-  inner_proximity: null
-  velocity_scalar: 100
+  outer_proximity: null
+  inner_proximity: 0.699999988079071
+  velocity_scalar: 47
 - name: null
   ip: 192.168.1.70
   proximity_parameter: proximity_02
-  max_speed: 16
+  max_speed: 86
   speed_scale: null
   max_speed_parameter: null
   use_velocity_control: null
   velocity_on_prox_drop: null
   outer_proximity: null
-  inner_proximity: null
+  inner_proximity: 0.8500000238418579
   velocity_scalar: null
 setup:
-  port_rx: '9001'
+  port_rx: OSCQuery
   default_min_speed: 5
   default_max_speed: 25
   default_start_tx: 20
