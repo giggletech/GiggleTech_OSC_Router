@@ -32,11 +32,27 @@ pub struct EditorDevice {
   pub max_speed: u32,
 }
 
+/// `port_rx` in config.yml: `"OSCQuery"` or a UDP port number (e.g. `"9001"`).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EditorState {
   pub devices: Vec<EditorDevice>,
   pub min_speed: u32,
   pub max_speed_cap: u32,
+  #[serde(default = "default_port_rx")]
+  pub port_rx: String,
+}
+
+fn default_port_rx() -> String {
+  "OSCQuery".to_string()
+}
+
+fn normalize_port_rx_for_editor(port_rx: &str) -> String {
+  let s = port_rx.trim().trim_matches('\'').trim_matches('"');
+  if s.eq_ignore_ascii_case("OSCQuery") {
+    "OSCQuery".to_string()
+  } else {
+    s.to_string()
+  }
 }
 
 pub fn load_editor_json() -> Result<String, String> {
@@ -63,6 +79,7 @@ pub fn load_editor_state() -> Result<EditorState, String> {
       .collect(),
     min_speed,
     max_speed_cap: default_max.max(min_speed),
+    port_rx: normalize_port_rx_for_editor(&cfg.setup.port_rx),
   })
 }
 
@@ -155,11 +172,29 @@ pub fn save_editor_state(state: &EditorState, quiet: bool) -> Result<(), String>
     })
     .collect();
 
+  let port_rx = normalize_port_rx_for_editor(&state.port_rx);
+  if port_rx.eq_ignore_ascii_case("OSCQuery") {
+    cfg.setup.port_rx = "OSCQuery".to_string();
+  } else if port_rx.parse::<u16>().is_err() {
+    return Err(format!(
+      "Invalid OSC listen port '{}'. Use a port number or OSCQuery.",
+      port_rx
+    ));
+  } else {
+    cfg.setup.port_rx = port_rx;
+  }
+
   let yaml =
     serde_yaml::to_string(&cfg).map_err(|e| format!("Failed to serialize config: {}", e))?;
   fs::write(CONFIG_PATH, yaml).map_err(|e| format!("Failed to write config.yml: {}", e))?;
   crate::device_test::invalidate_motor_cache();
   if quiet {
+    let port_label = if cfg.setup.port_rx.eq_ignore_ascii_case("OSCQuery") {
+      "OSCQuery".to_string()
+    } else {
+      format!("port {}", cfg.setup.port_rx)
+    };
+    log_ui::status(&format!("OSC set to {}. Reloading...", port_label));
     crate::router::request_restart_quiet();
   } else {
     log_ui::status("Configuration saved. Reloading router...");

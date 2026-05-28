@@ -233,7 +233,7 @@ fn parse_global_config(setup: YamlHashWrapper) -> GlobalConfig {
     });
 
     // Check if `port_rx` is "OSCQuery" or a numeric port
-    let port_rx: Arc<String> = if port_rx_str == "OSCQuery" {
+    let port_rx: Arc<String> = if port_rx_str.eq_ignore_ascii_case("OSCQuery") {
         // If it's "OSCQuery", try to use the port from the OSCQuery server
         crate::log_ui::status("Using OSCQuery...");
         match std::panic::catch_unwind(|| {
@@ -253,7 +253,10 @@ fn parse_global_config(setup: YamlHashWrapper) -> GlobalConfig {
     } else {
         // Otherwise, assume it's a port number in string format, validate, and wrap it in Arc
         match u16::from_str_radix(&port_rx_str, 10) {
-            Ok(_) => Arc::new(port_rx_str),
+            Ok(_) => {
+                crate::log_ui::status(&format!("Using fixed OSC port {}", port_rx_str));
+                Arc::new(port_rx_str)
+            }
             Err(_) => {
                 crate::log_ui::status(&format!(
                     "Warning: invalid port '{}', using default port 9001",

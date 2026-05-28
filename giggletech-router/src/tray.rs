@@ -626,6 +626,38 @@ header {
 .btn-primary:hover { background: #6d28d9; }
 .btn-secondary { background: #2a2a36; color: #e8e8f0; }
 .btn-secondary:hover { background: #3f3f4e; }
+.osc-port-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.btn-row .btn-primary {
+  margin-left: auto;
+}
+#osc-mode-btn.osc-query-active {
+  border: 1px solid #7c3aed;
+  background: #2e1065;
+  color: #e9d5ff;
+}
+#osc-mode-btn.osc-query-active:hover { background: #4c1d95; }
+.osc-port-input {
+  display: none;
+  width: 5.5rem;
+  flex-shrink: 0;
+  padding: 9px 12px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  font-family: inherit;
+  color: #e8e8f0;
+  border-radius: 8px;
+  border: 1px solid #3f3f4e;
+  background: #0f0f14;
+  box-sizing: border-box;
+}
+.osc-port-input:focus {
+  outline: none;
+  border-color: #a855f7;
+}
 .btn-danger { background: #450a0a; color: #fca5a5; }
 .btn-danger:hover { background: #7f1d1d; }
 .hint { font-size: 0.8rem; color: #6b6b80; margin-top: 4px; }
@@ -650,7 +682,13 @@ header {
       </div>
       <div class="btn-row">
         <button type="button" class="btn btn-secondary" onclick="addDevice()">+ Add Device</button>
-        <button type="button" class="btn btn-primary" onclick="saveConfig()">Save config.yml</button>
+        <div class="osc-port-row">
+          <button type="button" class="btn btn-secondary" id="osc-mode-btn" onclick="toggleOscMode()">OSC: Query</button>
+          <input type="text" id="osc-port-input" class="osc-port-input" inputmode="numeric"
+            placeholder="9001" maxlength="5" title="UDP listen port"
+            onblur="commitOscPortInput()" onkeydown="if (event.key === 'Enter') commitOscPortInput()">
+        </div>
+        <button type="button" class="btn btn-primary" onclick="saveConfig()">Save</button>
       </div>
     </div>
     <section id="log-section">
@@ -667,6 +705,7 @@ header {
 <script>
 let editorDevices = [];
 let editorSpeedDefaults = { min: 5, max: 25 };
+let editorPortRx = 'OSCQuery';
 let devicePingStatus = {};
 let pingDebounceTimer = null;
 const PING_POLL_MS = 5000;
@@ -1058,11 +1097,67 @@ function cancelRemoveDevice() {
   renderDevices();
 }
 
+function isOscQueryPort() {
+  return String(editorPortRx || '').trim().toLowerCase() === 'oscquery';
+}
+
+function updateOscPortUi() {
+  const btn = document.getElementById('osc-mode-btn');
+  const input = document.getElementById('osc-port-input');
+  if (!btn || !input) return;
+  if (isOscQueryPort()) {
+    btn.textContent = 'OSC: Query';
+    btn.classList.add('osc-query-active');
+    input.style.display = 'none';
+    input.disabled = true;
+  } else {
+    btn.textContent = 'OSC: Port';
+    btn.classList.remove('osc-query-active');
+    input.style.display = 'block';
+    input.disabled = false;
+    input.value = String(editorPortRx || '9001');
+  }
+}
+
+function toggleOscMode() {
+  if (isOscQueryPort()) {
+    editorPortRx = '9001';
+    updateOscPortUi();
+    saveConfig(true);
+    const input = document.getElementById('osc-port-input');
+    if (input) {
+      input.focus();
+      input.select();
+    }
+  } else {
+    editorPortRx = 'OSCQuery';
+    updateOscPortUi();
+    saveConfig(true);
+  }
+}
+
+function commitOscPortInput() {
+  const input = document.getElementById('osc-port-input');
+  if (!input || isOscQueryPort()) return;
+  const raw = input.value.trim();
+  const port = raw === '' ? '9001' : raw;
+  const n = parseInt(port, 10);
+  if (!Number.isFinite(n) || n < 1 || n > 65535) {
+    setConfigStatus('OSC port must be a number from 1 to 65535.', true);
+    input.value = String(editorPortRx || '9001');
+    return;
+  }
+  editorPortRx = String(n);
+  input.value = editorPortRx;
+  saveConfig(true);
+}
+
 function saveConfig(quiet) {
   window.ipc.postMessage('save-config:' + JSON.stringify({
     devices: editorDevices,
     min_speed: editorSpeedDefaults.min,
     max_speed_cap: editorSpeedDefaults.max,
+    port_rx: editorPortRx,
     quiet: !!quiet
   }));
 }
@@ -1070,12 +1165,14 @@ function saveConfig(quiet) {
 window.onConfigLoaded = function(state) {
   if (state.min_speed != null) editorSpeedDefaults.min = state.min_speed;
   if (state.max_speed_cap != null) editorSpeedDefaults.max = state.max_speed_cap;
+  if (state.port_rx != null) editorPortRx = String(state.port_rx);
   const powerMin = editorSpeedDefaults.min;
   editorDevices = (state.devices || []).map((d) => ({
     ...d,
     max_speed: Math.max(powerMin, d.max_speed ?? powerMin),
   }));
   renderDevices();
+  updateOscPortUi();
   clearConfigStatus();
   startDevicePingLoop();
 };

@@ -129,12 +129,10 @@ async fn run_giggletech_session(restart_rx: &Receiver<()>) -> Result<bool> {
     });
   }
 
-  if !quiet_reload {
-    log_ui::status(&format!(
-      "Listening for OSC on port {} (timeout {}s)",
-      global_config.port_rx, timeout
-    ));
-  }
+  log_ui::status(&format!(
+    "Listening for OSC on port {} (timeout {}s)",
+    global_config.port_rx, timeout
+  ));
 
   let mut should_restart = false;
 
