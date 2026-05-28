@@ -32,6 +32,11 @@ use crate::device_ping;
 use crate::device_test;
 use crate::log_ui;
 
+#[derive(Debug, Deserialize)]
+struct StartupHeightRequest {
+  h: f64,
+}
+
 const AUTO_START_VALUE_NAME: &str = "GiggleTechOSCRouter";
 const RUN_KEY: &str = r"Software\Microsoft\Windows\CurrentVersion\Run";
 const LOGO_PLACEHOLDER: &str = "{{LOGO_URI}}";
@@ -39,6 +44,11 @@ const OUTPUT_WINDOW_WIDTH: f64 = 1080.0;
 const OUTPUT_WINDOW_HEIGHT: f64 = 720.0;
 const OUTPUT_WINDOW_MIN_WIDTH: f64 = 960.0;
 const OUTPUT_WINDOW_MIN_HEIGHT: f64 = 480.0;
+
+fn clamp_startup_height(h: f64) -> f64 {
+  // Per request: don't cap to monitor height; just ensure we don't go below the minimum.
+  h.max(OUTPUT_WINDOW_MIN_HEIGHT)
+}
 
 static PENDING_MOTOR_BARS: Lazy<Mutex<HashMap<String, f32>>> =
   Lazy::new(|| Mutex::new(HashMap::new()));
@@ -143,6 +153,7 @@ body.ui-large .header-inner { max-width: 2160px; }
   display: flex;
   align-items: center;
   justify-content: flex-end;
+  gap: 12px;
   /* Match right inset of #log-box (log-section padding + log-scroll padding). */
   padding: 16px 32px 0 16px;
 }
@@ -919,6 +930,17 @@ body.ui-large #config-wrap { zoom: 1; }
 .btn-danger { background: #450a0a; color: #fca5a5; }
 .btn-danger:hover { background: #7f1d1d; }
 .hint { font-size: 1.6rem; color: #6b6b80; margin-top: 8px; }
+
+#autostart-btn {
+  padding: 12px 18px;
+  font-size: 1.35rem;
+  border: 2px solid #3f3f4e;
+  background: #2a2a36;
+  color: #e8e8f0;
+}
+#autostart-btn:hover { background: #3f3f4e; }
+#autostart-btn.autostart-on { border-color: #a855f7; }
+#autostart-btn:disabled { opacity: 0.75; cursor: default; }
 </style>
 </head>
 <body>
@@ -928,6 +950,8 @@ body.ui-large #config-wrap { zoom: 1; }
       <img class="header-logo" src="{{LOGO_URI}}" alt="GiggleTech">
     </div>
     <div class="header-log-col">
+      <button type="button" class="btn btn-secondary" id="autostart-btn" aria-pressed="false"
+        onclick="toggleAutoStart()">Start with Windows</button>
       <button type="button" class="btn btn-secondary" id="ui-scale-btn" aria-pressed="false"
         onclick="toggleUiScale()">VR MODE</button>
     </div>
@@ -964,6 +988,41 @@ body.ui-large #config-wrap { zoom: 1; }
   </div>
 </div>
 <script>
+let autoStartEnabled = false;
+let autoStartBusy = false;
+
+function setAutoStartUi(enabled) {
+  autoStartEnabled = !!enabled;
+  const btn = document.getElementById('autostart-btn');
+  if (!btn) return;
+  btn.setAttribute('aria-pressed', autoStartEnabled ? 'true' : 'false');
+  btn.classList.toggle('autostart-on', autoStartEnabled);
+  btn.textContent = 'Start with Windows';
+}
+
+function setAutoStartBusy(busy) {
+  autoStartBusy = !!busy;
+  const btn = document.getElementById('autostart-btn');
+  if (!btn) return;
+  btn.disabled = autoStartBusy;
+  btn.textContent = 'Start with Windows';
+}
+
+function toggleAutoStart() {
+  if (autoStartBusy) return;
+  setAutoStartBusy(true);
+  window.ipc.postMessage('autostart-set:' + (autoStartEnabled ? '0' : '1'));
+}
+
+window.onAutoStartState = function(payload) {
+  payload = payload || {};
+  if (payload.error) setConfigStatus(payload.error, true);
+  setAutoStartUi(!!payload.enabled);
+  setAutoStartBusy(false);
+};
+
+window.ipc.postMessage('autostart-get');
+
 function setUiLarge(enabled) {
   document.body.classList.toggle('ui-large', !!enabled);
   try { localStorage.setItem('uiLarge', enabled ? '1' : '0'); } catch (_) {}
@@ -1702,6 +1761,32 @@ window.onConfigLoaded = function(state) {
   updateOscPortUi();
   clearConfigStatus();
   startDevicePingLoop();
+
+  // Startup-only: fit window height to the device-card layout (do not change width).
+  requestAnimationFrame(() => {
+    const header = document.querySelector('header');
+    const wrap = document.getElementById('config-wrap');
+    const scroll = document.getElementById('config-scroll');
+    const btnRow = document.querySelector('#config-wrap .btn-row');
+    if (!wrap || !scroll || !btnRow) return;
+
+    // We want enough window height so the device list doesn't need to scroll on startup.
+    // Use scrollHeight (content height) rather than the current viewport height.
+    const wrapZoom = parseFloat(getComputedStyle(wrap).zoom || '1');
+    const zoom = Number.isFinite(wrapZoom) && wrapZoom > 0 ? wrapZoom : 1;
+    const wrapPad = parseFloat(getComputedStyle(wrap).paddingTop || '0')
+      + parseFloat(getComputedStyle(wrap).paddingBottom || '0');
+    const headerH = header ? header.getBoundingClientRect().height : 0;
+    const statusEl = document.getElementById('config-status');
+    const statusH = statusEl ? statusEl.getBoundingClientRect().height : 0;
+    const gap = 12; // matches CSS gap in #config-wrap
+    const deviceContentH = Math.max(scroll.scrollHeight, scroll.getBoundingClientRect().height);
+    // Small extra slack to avoid clipping the last card/footer by a few pixels.
+    const slack = 60;
+    const configH = (wrapPad + statusH + deviceContentH + gap + btnRow.getBoundingClientRect().height + 24 + slack) * zoom;
+    const h = Math.max(1, Math.ceil(headerH + configH));
+    window.ipc.postMessage('startup-height:' + JSON.stringify({ h }));
+  });
 };
 
 window.onConfigSaved = function(opts) {
@@ -1890,6 +1975,7 @@ struct UiState {
   status_epoch: usize,
   status_pending: bool,
   last_status_flush: Option<Instant>,
+  startup_height_fitted: bool,
 }
 
 impl UiState {
@@ -1900,6 +1986,7 @@ impl UiState {
       status_epoch: log_ui::buffer_epoch(),
       status_pending: false,
       last_status_flush: None,
+      startup_height_fitted: false,
     }
   }
 
@@ -2068,6 +2155,39 @@ fn handle_config_ipc(
         let _ = webview.evaluate_script(&format!("window.onConfigError({});", err));
       }
     }
+  } else if msg == "autostart-get" {
+    let enabled = is_auto_start_enabled();
+    log_ui::status(&format!("Auto-start is {}.", if enabled { "ON" } else { "OFF" }));
+    let _ = webview.evaluate_script(&format!(
+      "window.onAutoStartState({{ enabled: {} }});",
+      if enabled { "true" } else { "false" }
+    ));
+  } else if let Some(flag) = msg.strip_prefix("autostart-set:") {
+    let want_enabled = flag.trim() == "1" || flag.trim().eq_ignore_ascii_case("true");
+    log_ui::status(&format!(
+      "Updating auto-start → {}...",
+      if want_enabled { "ON" } else { "OFF" }
+    ));
+    match set_auto_start(want_enabled) {
+      Ok(_) => {
+        log_ui::status("Auto-start updated.");
+        let _ = webview.evaluate_script(&format!(
+          "window.onAutoStartState({{ enabled: {} }});",
+          if want_enabled { "true" } else { "false" }
+        ));
+      }
+      Err(e) => {
+        log_ui::status(&format!("Failed to update auto-start: {}", e));
+        let err = serde_json::to_string(&format!("Failed to update auto-start: {}", e))
+          .unwrap_or_else(|_| "\"Failed to update auto-start\"".to_string());
+        let enabled = is_auto_start_enabled();
+        let _ = webview.evaluate_script(&format!(
+          "window.onAutoStartState({{ enabled: {}, error: {} }});",
+          if enabled { "true" } else { "false" },
+          err
+        ));
+      }
+    }
   } else if let Some(json) = msg.strip_prefix("save-config:") {
     match config_editor::save_editor_json(json) {
       Ok(quiet) => {
@@ -2195,7 +2315,22 @@ pub fn run() {
 
       Event::UserEvent(UserEvent::ConfigIpc(msg)) => {
         if let Some(output) = &ui_state.output {
-          handle_config_ipc(&output.webview, &ipc_proxy, &msg);
+          if let Some(json) = msg.strip_prefix("startup-height:") {
+            if !ui_state.startup_height_fitted {
+              if let Ok(req) = serde_json::from_str::<StartupHeightRequest>(json) {
+                let scale = output.window.scale_factor();
+                let current_physical = output.window.inner_size();
+                let current_logical: LogicalSize<f64> = current_physical.to_logical(scale);
+                let target_h = clamp_startup_height(req.h);
+                output
+                  .window
+                  .set_inner_size(LogicalSize::new(current_logical.width, target_h));
+                ui_state.startup_height_fitted = true;
+              }
+            }
+          } else {
+            handle_config_ipc(&output.webview, &ipc_proxy, &msg);
+          }
         }
       }
 

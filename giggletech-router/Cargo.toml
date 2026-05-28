@@ -9,6 +9,10 @@ authors = ["Giggle Tech <hello@giggletech.io>"
 ]
 build = "build.rs"
 
+[[bin]]
+name = "GiggleTech"
+path = "src/main.rs"
+
 [features]
 
 [dependencies]
