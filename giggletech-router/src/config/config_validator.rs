@@ -31,6 +31,8 @@ pub struct Device {
     pub inner_proximity: Option<f64>,
     #[serde(default)]
     pub velocity_scalar: Option<u32>,
+    #[serde(default)]
+    pub velocity_smoothing_ms: Option<u32>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -47,6 +49,8 @@ pub struct Setup {
     pub default_outer_proximity: f64,
     pub default_inner_proximity: f64,
     pub default_velocity_scalar: u32,
+    #[serde(default)]
+    pub default_velocity_smoothing_ms: u32,
 }
 
 /// Reads and parses a YAML configuration file.

@@ -989,7 +989,7 @@ let editorDevices = [];
 let editorSpeedDefaults = { min: 5, max: 25 };
 let editorVelocityDefault = false;
 let editorVelocityOnProxDropDefault = false;
-let editorVelocityProxDefaults = { outer: 0, inner: 1, scalar: 20 };
+let editorVelocityProxDefaults = { outer: 0, inner: 1, scalar: 20, smoothing_ms: 80 };
 let editorPortRx = 'OSCQuery';
 let devicePingStatus = {};
 let pingDebounceTimer = null;
@@ -1072,6 +1072,9 @@ function effectiveInnerProx(d) {
 function effectiveVelocityScalar(d) {
   return d.velocity_scalar ?? editorVelocityProxDefaults.scalar;
 }
+function effectiveVelocitySmoothingMs(d) {
+  return d.velocity_smoothing_ms ?? editorVelocityProxDefaults.smoothing_ms;
+}
 
 function editorValidationOk() {
   if (!editorDevices.length) return false;
@@ -1085,6 +1088,8 @@ function editorValidationOk() {
     if (d.use_velocity_control) {
       const scalar = effectiveVelocityScalar(d);
       if (scalar < 1 || scalar > 100) return false;
+      const smoothing = effectiveVelocitySmoothingMs(d);
+      if (smoothing < 0 || smoothing > 500) return false;
     }
   }
   return true;
@@ -1194,6 +1199,18 @@ function renderDevices() {
                   value="${effectiveVelocityScalar(d)}"
                   aria-label="Velocity sensitivity for device ${i + 1}"
                   oninput="onVelocityScalarChange(${i}, this)" onchange="saveConfig(true)">
+              </div>
+            </label>
+            <label class="slider-field">
+              <div class="slider-field-header">
+                <span class="slider-field-title">Smoothing</span>
+                <span class="speed-value" id="velocity-smoothing-val-${i}">${effectiveVelocitySmoothingMs(d)}ms</span>
+              </div>
+              <div class="speed-slider-row">
+                <input type="range" id="velocity-smoothing-${i}" min="0" max="250" step="5"
+                  value="${effectiveVelocitySmoothingMs(d)}"
+                  aria-label="Velocity smoothing for device ${i + 1}"
+                  oninput="onVelocitySmoothingChange(${i}, this)" onchange="saveConfig(true)">
               </div>
             </label>
             </div>
@@ -1539,6 +1556,16 @@ function onVelocityScalarChange(index, input) {
   maybeClearConfigError();
 }
 
+function onVelocitySmoothingChange(index, input) {
+  const d = editorDevices[index];
+  if (!d) return;
+  const v = parseInt(input.value, 10);
+  d.velocity_smoothing_ms = v;
+  const label = document.getElementById('velocity-smoothing-val-' + index);
+  if (label) label.textContent = String(v) + 'ms';
+  maybeClearConfigError();
+}
+
 function addDevice() {
   editorDevices.push({
     name: editorDevices.length === 0 ? 'Headpats' : '',
@@ -1549,7 +1576,8 @@ function addDevice() {
     velocity_on_prox_drop: editorVelocityOnProxDropDefault,
     outer_proximity: editorVelocityProxDefaults.outer,
     inner_proximity: editorVelocityProxDefaults.inner,
-    velocity_scalar: editorVelocityProxDefaults.scalar
+    velocity_scalar: editorVelocityProxDefaults.scalar,
+    velocity_smoothing_ms: editorVelocityProxDefaults.smoothing_ms
   });
   renderDevices();
 }
@@ -1655,6 +1683,9 @@ window.onConfigLoaded = function(state) {
   if (state.default_velocity_scalar != null) {
     editorVelocityProxDefaults.scalar = state.default_velocity_scalar;
   }
+  if (state.default_velocity_smoothing_ms != null) {
+    editorVelocityProxDefaults.smoothing_ms = state.default_velocity_smoothing_ms;
+  }
   if (state.port_rx != null) editorPortRx = String(state.port_rx);
   const powerMin = editorSpeedDefaults.min;
   editorDevices = (state.devices || []).map((d) => ({
@@ -1665,6 +1696,7 @@ window.onConfigLoaded = function(state) {
     outer_proximity: d.outer_proximity ?? editorVelocityProxDefaults.outer,
     inner_proximity: d.inner_proximity ?? editorVelocityProxDefaults.inner,
     velocity_scalar: d.velocity_scalar ?? editorVelocityProxDefaults.scalar,
+    velocity_smoothing_ms: d.velocity_smoothing_ms ?? editorVelocityProxDefaults.smoothing_ms,
   }));
   renderDevices();
   updateOscPortUi();

@@ -44,6 +44,9 @@ pub struct EditorDevice {
   pub inner_proximity: f32,
   #[serde(default)]
   pub velocity_scalar: u32,
+  /// EMA smoothing time constant for velocity control (milliseconds).
+  #[serde(default)]
+  pub velocity_smoothing_ms: u32,
 }
 
 /// `port_rx` in config.yml: `"OSCQuery"` or a UDP port number (e.g. `"9001"`).
@@ -65,6 +68,8 @@ pub struct EditorState {
   pub default_inner_proximity: f32,
   #[serde(default)]
   pub default_velocity_scalar: u32,
+  #[serde(default)]
+  pub default_velocity_smoothing_ms: u32,
 }
 
 fn default_port_rx() -> String {
@@ -94,6 +99,7 @@ pub fn load_editor_state() -> Result<EditorState, String> {
   let default_outer_proximity = cfg.setup.default_outer_proximity as f32;
   let default_inner_proximity = cfg.setup.default_inner_proximity as f32;
   let default_velocity_scalar = cfg.setup.default_velocity_scalar;
+  let default_velocity_smoothing_ms = cfg.setup.default_velocity_smoothing_ms;
 
   Ok(EditorState {
     devices: cfg
@@ -120,6 +126,9 @@ pub fn load_editor_state() -> Result<EditorState, String> {
           .map(|x| x as f32)
           .unwrap_or(default_inner_proximity),
         velocity_scalar: d.velocity_scalar.unwrap_or(default_velocity_scalar),
+        velocity_smoothing_ms: d
+          .velocity_smoothing_ms
+          .unwrap_or(default_velocity_smoothing_ms),
       })
       .collect(),
     min_speed,
@@ -130,6 +139,7 @@ pub fn load_editor_state() -> Result<EditorState, String> {
     default_outer_proximity,
     default_inner_proximity,
     default_velocity_scalar,
+    default_velocity_smoothing_ms,
   })
 }
 
@@ -201,6 +211,7 @@ pub fn save_editor_state(state: &EditorState, quiet: bool) -> Result<(), String>
   let default_outer_proximity = cfg.setup.default_outer_proximity;
   let default_inner_proximity = cfg.setup.default_inner_proximity;
   let default_velocity_scalar = cfg.setup.default_velocity_scalar;
+  let default_velocity_smoothing_ms = cfg.setup.default_velocity_smoothing_ms;
 
   cfg.devices = state
     .devices
@@ -233,6 +244,8 @@ pub fn save_editor_state(state: &EditorState, quiet: bool) -> Result<(), String>
         device.inner_proximity =
           optional_f64(ed.inner_proximity, default_inner_proximity);
         device.velocity_scalar = optional_u32(ed.velocity_scalar, default_velocity_scalar);
+        device.velocity_smoothing_ms =
+          optional_u32(ed.velocity_smoothing_ms, default_velocity_smoothing_ms);
         device
       } else {
         Device {
@@ -259,6 +272,7 @@ pub fn save_editor_state(state: &EditorState, quiet: bool) -> Result<(), String>
           outer_proximity: optional_f64(ed.outer_proximity, default_outer_proximity),
           inner_proximity: optional_f64(ed.inner_proximity, default_inner_proximity),
           velocity_scalar: optional_u32(ed.velocity_scalar, default_velocity_scalar),
+          velocity_smoothing_ms: optional_u32(ed.velocity_smoothing_ms, default_velocity_smoothing_ms),
         }
       }
     })

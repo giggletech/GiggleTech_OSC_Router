@@ -116,46 +116,56 @@ const MIN_VELOCITY_DELTA_SECS: f32 = 0.001;
 /// Without this, `velocity_on_prox_drop` and float noise keep firing the motor.
 const PROX_VELOCITY_DEADZONE: f32 = 0.002;
 
-pub fn process_pat_advanced(proximity_signal: f32, prev_signal: f32, delta_t: Duration, device: &DeviceConfig) -> i32 {
-    if proximity_in_band_velocity(proximity_signal, device) && prev_signal > 0.0 {
-        let delta = proximity_signal - prev_signal;
-        if delta.abs() < PROX_VELOCITY_DEADZONE {
-            return 0;
-        }
-
-        let active = if device.velocity_on_prox_drop {
-            true
-        } else {
-            delta > 0.0
-        };
-        if !active {
-            return 0;
-        }
-
-        let delta_secs = delta_t.as_secs_f32();
-        if delta_secs <= 0.0 {
-            return 0;
-        }
-        let delta_secs = delta_secs.max(MIN_VELOCITY_DELTA_SECS);
-        let speed = if device.velocity_on_prox_drop {
-            delta.abs()
-        } else {
-            delta
-        };
-        // Original velocity scaling: max_speed scales output via (max_speed - min_speed).
-        let vel = f32::max(0.0, speed / delta_secs * device.velocity_scalar);
-        let headpat_tx = (((device.max_speed - device.min_speed) * vel * device.min_speed)
-            * MOTOR_SPEED_SCALE
-            * device.speed_scale
-            * 255.0)
-            .round() as i32;
-        let max_tx = (((device.max_speed - device.min_speed) + device.min_speed)
-            * MOTOR_SPEED_SCALE
-            * device.speed_scale
-            * 255.0)
-            .round() as i32;
-        headpat_tx.min(max_tx)
-    } else {
-        0
+/// Compute the raw velocity (positive for approach). Returns 0 when inactive/invalid.
+pub fn compute_proximity_velocity(
+    proximity_signal: f32,
+    prev_signal: f32,
+    delta_t: Duration,
+    device: &DeviceConfig,
+) -> f32 {
+    if !proximity_in_band_velocity(proximity_signal, device) || prev_signal <= 0.0 {
+        return 0.0;
     }
+
+    let delta = proximity_signal - prev_signal;
+    if delta.abs() < PROX_VELOCITY_DEADZONE {
+        return 0.0;
+    }
+
+    let active = if device.velocity_on_prox_drop { true } else { delta > 0.0 };
+    if !active {
+        return 0.0;
+    }
+
+    let delta_secs = delta_t.as_secs_f32();
+    if delta_secs <= 0.0 {
+        return 0.0;
+    }
+    let delta_secs = delta_secs.max(MIN_VELOCITY_DELTA_SECS);
+
+    let speed = if device.velocity_on_prox_drop { delta.abs() } else { delta };
+    f32::max(0.0, speed / delta_secs * device.velocity_scalar)
+}
+
+/// Convert a (possibly smoothed) velocity value to a motor tx value.
+pub fn motor_tx_from_velocity(vel: f32, device: &DeviceConfig) -> i32 {
+    if vel <= 0.0 {
+        return 0;
+    }
+    let headpat_tx = (((device.max_speed - device.min_speed) * vel * device.min_speed)
+        * MOTOR_SPEED_SCALE
+        * device.speed_scale
+        * 255.0)
+        .round() as i32;
+    let max_tx = (((device.max_speed - device.min_speed) + device.min_speed)
+        * MOTOR_SPEED_SCALE
+        * device.speed_scale
+        * 255.0)
+        .round() as i32;
+    headpat_tx.min(max_tx)
+}
+
+pub fn process_pat_advanced(proximity_signal: f32, prev_signal: f32, delta_t: Duration, device: &DeviceConfig) -> i32 {
+    let vel = compute_proximity_velocity(proximity_signal, prev_signal, delta_t, device);
+    motor_tx_from_velocity(vel, device)
 }
