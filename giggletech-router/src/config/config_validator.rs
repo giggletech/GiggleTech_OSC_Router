@@ -3,16 +3,20 @@ use serde_yaml;
 use std::fs;
 use std::path::Path;
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Config {
     pub devices: Vec<Device>,
     pub setup: Setup,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Device {
+    #[serde(default)]
+    pub name: Option<String>,
     pub ip: String,
     pub proximity_parameter: String,
+    #[serde(default)]
+    pub online_parameter: Option<String>,
     #[serde(default)]
     pub max_speed: Option<u32>,
     #[serde(default)]
@@ -22,14 +26,18 @@ pub struct Device {
     #[serde(default)]
     pub use_velocity_control: Option<bool>,
     #[serde(default)]
+    pub velocity_on_prox_drop: Option<bool>,
+    #[serde(default)]
     pub outer_proximity: Option<f64>,
     #[serde(default)]
     pub inner_proximity: Option<f64>,
     #[serde(default)]
     pub velocity_scalar: Option<u32>,
+    #[serde(default)]
+    pub velocity_smoothing_ms: Option<u32>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Setup {
     pub port_rx: String,
     pub default_min_speed: u32,
@@ -38,9 +46,16 @@ pub struct Setup {
     pub default_max_speed_parameter: String,
     pub timeout: u32,
     pub default_use_velocity_control: bool,
+    #[serde(default)]
+    pub default_velocity_on_prox_drop: bool,
     pub default_outer_proximity: f64,
     pub default_inner_proximity: f64,
     pub default_velocity_scalar: u32,
+    #[serde(default)]
+    pub default_velocity_smoothing_ms: u32,
+    /// Resend online OSC every N seconds (0 = only on state change).
+    #[serde(default)]
+    pub online_status_broadcast_seconds: u32,
 }
 
 /// Reads and parses a YAML configuration file.

@@ -20,11 +20,14 @@
     - Call `start_connection_manager()` to enable automatic cleanup
 */
 
-use async_osc::{ OscSocket, Result};
+use async_osc::{OscSender, OscSocket, Result};
 use std::collections::HashMap;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use async_std::sync::RwLock;
 use std::time::{Duration, Instant};
+use once_cell::sync::Lazy;
+
+use crate::log_ui;
 
 // Connection manager for efficient socket handling
 pub struct ConnectionManager {
@@ -72,15 +75,9 @@ impl ConnectionManager {
         let now = Instant::now();
         let mut connections = self.connections.write().await;
         
-        let before_count = connections.len();
         connections.retain(|_, info| {
             now.duration_since(info.last_used) < timeout
         });
-        let after_count = connections.len();
-        
-        if before_count != after_count {
-            println!("Cleaned up {} stale connections", before_count - after_count);
-        }
     }
 
     // Get connection statistics
@@ -119,9 +116,20 @@ pub(crate) async fn setup_tx_socket(address: std::string::String) -> Result<OscS
     Ok(tx_socket)
 }
 
+static TX_SENDER: Lazy<Mutex<Option<OscSender>>> = Lazy::new(|| Mutex::new(None));
+
+async fn shared_tx_sender() -> Result<OscSender> {
+    if let Some(sender) = TX_SENDER.lock().unwrap().clone() {
+        return Ok(sender);
+    }
+    let socket = OscSocket::bind("0.0.0.0:0").await?;
+    let sender = socket.sender();
+    *TX_SENDER.lock().unwrap() = Some(sender.clone());
+    Ok(sender)
+}
+
 // Start connection manager cleanup task
 pub(crate) async fn start_connection_manager() {
-    println!("Starting connection manager with automatic cleanup...");
     async_std::task::spawn(async {
         loop {
             async_std::task::sleep(Duration::from_secs(60)).await; // Cleanup every minute
@@ -130,57 +138,21 @@ pub(crate) async fn start_connection_manager() {
     });
 }
 
-// Send data with proper connection management and timeouts
+// Send motor value over a reused UDP socket (no connect per packet).
 pub(crate) async fn send_data(device_ip: &str, value: i32) -> Result<()> {
-    let socket_address = create_socket_address(device_ip, "8888");
-    
-    // Create socket with connection timeout
-    let socket = match async_std::future::timeout(
-        Duration::from_secs(2), // 2 second connection timeout
-        setup_tx_socket(socket_address.clone())
-    ).await {
-        Ok(Ok(socket)) => socket,
-        Ok(Err(e)) => {
-            CONNECTION_MANAGER.update_connection_info(device_ip, false).await;
-            return Err(e);
-        }
-        Err(_) => {
-            CONNECTION_MANAGER.update_connection_info(device_ip, false).await;
-            return Err(async_osc::Error::Io(std::io::Error::new(
-                std::io::ErrorKind::TimedOut,
-                format!("Connection timeout to {}", device_ip)
-            )));
-        }
-    };
-
-    // Send OSC messages with send timeout
-    let send_result = async_std::future::timeout(
-        Duration::from_secs(1), // 1 second send timeout
-        async {
-            socket.send((TX_OSC_MOTOR_ADDRESS, (value,))).await?;
-            socket.send((TX_OSC_GIGGLESPARK, (value,))).await?;
-            Ok::<(), async_osc::Error>(())
-        }
-    ).await;
-
-    match send_result {
-        Ok(Ok(())) => {
-            // Success - update connection info
+    let addr = create_socket_address(device_ip, "8888");
+    let sender = shared_tx_sender().await?;
+    match sender.send_to((TX_OSC_MOTOR_ADDRESS, (value,)), &addr).await {
+        Ok(()) => {
             CONNECTION_MANAGER.update_connection_info(device_ip, true).await;
-            Ok(())
+            // Drive the UI from the actual motor TX being sent.
+            log_ui::notify_motor_tx_sent(device_ip, value);
+            sender.send_to((TX_OSC_GIGGLESPARK, (value,)), &addr).await
         }
-        Ok(Err(e)) => {
-            // Send error
+        Err(e) => {
             CONNECTION_MANAGER.update_connection_info(device_ip, false).await;
+            *TX_SENDER.lock().unwrap() = None;
             Err(e)
-        }
-        Err(_) => {
-            // Send timeout
-            CONNECTION_MANAGER.update_connection_info(device_ip, false).await;
-            Err(async_osc::Error::Io(std::io::Error::new(
-                std::io::ErrorKind::TimedOut,
-                format!("Send timeout to {}", device_ip)
-            )))
         }
     }
 }
@@ -188,18 +160,4 @@ pub(crate) async fn send_data(device_ip: &str, value: i32) -> Result<()> {
 // Get connection statistics for monitoring
 pub(crate) async fn get_connection_stats() -> HashMap<String, (u32, u32, u32)> {
     CONNECTION_MANAGER.get_stats().await
-}
-
-// Print connection statistics
-pub(crate) async fn print_connection_stats() {
-    let stats = get_connection_stats().await;
-    if !stats.is_empty() {
-        println!("\n=== Connection Statistics ===");
-        for (device_ip, (total, success, errors)) in stats {
-            let success_rate = if total > 0 { (success as f32 / total as f32) * 100.0 } else { 0.0 };
-            println!("  {}: {} total, {} success, {} errors ({:.1}% success rate)", 
-                device_ip, total, success, errors, success_rate);
-        }
-        println!("=============================\n");
-    }
 }

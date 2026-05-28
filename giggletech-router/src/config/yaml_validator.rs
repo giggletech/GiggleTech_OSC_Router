@@ -86,6 +86,7 @@ pub struct Setup {
     pub default_outer_proximity: Option<f64>,
     pub default_inner_proximity: Option<f64>,
     pub default_velocity_scalar: Option<u32>,
+    pub default_velocity_smoothing_ms: Option<u32>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -99,6 +100,7 @@ pub struct Device {
     pub outer_proximity: Option<f64>,
     pub inner_proximity: Option<f64>,
     pub velocity_scalar: Option<u32>,
+    pub velocity_smoothing_ms: Option<u32>,
 }
 
 #[derive(Debug, Deserialize)]

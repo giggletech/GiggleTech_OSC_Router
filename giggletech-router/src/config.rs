@@ -52,50 +52,50 @@
 // NOTE REMOVED  from YML still here, not really used # Maximum Speed Scalar (10-100)
 //  #default_speed_scale: 100
 
-use std::{net::IpAddr};
 use std::fs::File;
 use std::io::Read;
+use std::net::IpAddr;
+use std::path::PathBuf;
 use std::sync::Arc;
+use once_cell::sync::OnceCell;
 use yaml_rust::{YamlLoader, Yaml};
 use yaml_rust::yaml::Hash;
 mod oscq_giggletech;
 
-use std::fs::OpenOptions;
-use std::io::Write;
-use chrono::Local; // For timestamps
-
-
+pub mod config_validator;
 mod yaml_validator;
 
 use yaml_validator::{validate_yaml, Config};
 
+static CONFIG_FILE: OnceCell<PathBuf> = OnceCell::new();
 
-fn log_to_file(message: &str) {
-    let now = Local::now();
-    let timestamp = now.format("%Y-%m-%d %H:%M:%S").to_string(); // Add a timestamp
-    let mut file = OpenOptions::new()
-        .create(true)
-        .append(true)
-        .open("giggletech_log.txt")
-        .unwrap();
-    writeln!(file, "[{}] {}", timestamp, message).unwrap();
+/// Resolved path to `config.yml` (cwd, then `giggletech-router/`, then beside the exe).
+pub(crate) fn config_file_path() -> PathBuf {
+    CONFIG_FILE
+        .get_or_init(resolve_config_path)
+        .clone()
 }
 
-// Banner
-fn banner_txt(){
-    // https://fsymbols.com/generators/carty/
-    println!("");
-    println!("  ██████  ██  ██████   ██████  ██      ███████     ████████ ███████  ██████ ██   ██ ");
-    println!(" ██       ██ ██       ██       ██      ██             ██    ██      ██      ██   ██ ");
-    println!(" ██   ███ ██ ██   ███ ██   ███ ██      █████          ██    █████   ██      ███████ ");
-    println!(" ██    ██ ██ ██    ██ ██    ██ ██      ██             ██    ██      ██      ██   ██ ");
-    println!("  ██████  ██  ██████   ██████  ███████ ███████        ██    ███████  ██████ ██   ██ ");
-    println!("");
-    println!(" █▀█ █▀ █▀▀   █▀█ █▀█ █ █ ▀█▀ █▀▀ █▀█");
-    println!(" █▄█ ▄█ █▄▄   █▀▄ █▄█ █▄█  █  ██▄ █▀▄");
-    println!("");
-    println!(" v1.4.0");
-                                                                                
+fn resolve_config_path() -> PathBuf {
+    if let Ok(cwd) = std::env::current_dir() {
+        let local = cwd.join("config.yml");
+        if local.exists() {
+            return local;
+        }
+        let router_cfg = cwd.join("giggletech-router").join("config.yml");
+        if router_cfg.exists() {
+            return router_cfg;
+        }
+    }
+    if let Ok(exe) = std::env::current_exe() {
+        if let Some(dir) = exe.parent() {
+            let beside_exe = dir.join("config.yml");
+            if beside_exe.exists() {
+                return beside_exe;
+            }
+        }
+    }
+    PathBuf::from("config.yml")
 }
 
 #[derive(Clone, Debug)]
@@ -107,10 +107,32 @@ pub(crate) struct DeviceConfig {
     pub speed_scale: f32,
     pub proximity_parameter: Arc<String>,
     pub max_speed_parameter: Arc<String>,
+    /// Optional VRChat avatar parameter to send 0/1 online state to.
+    /// Stored as full OSC address (e.g. `/avatar/parameters/MyDeviceOnline`).
+    pub online_parameter: Option<Arc<String>>,
     pub use_velocity_control: bool,
+    /// When true with velocity control, motor also fires when proximity decreases (pull-away).
+    pub velocity_on_prox_drop: bool,
     pub outer_proximity: f32,
     pub inner_proximity: f32,
-    pub velocity_scalar: f32
+    pub velocity_scalar: f32,
+    /// EMA smoothing time constant for velocity control, in milliseconds.
+    pub velocity_smoothing_ms: u32,
+}
+
+fn normalize_avatar_parameter_address(s: &str) -> Option<Arc<String>> {
+    let s = s.trim();
+    if s.is_empty() || s.eq_ignore_ascii_case("null") {
+        return None;
+    }
+    if s.starts_with("/avatar/parameters/") {
+        return Some(Arc::new(s.to_string()));
+    }
+    let s = s.trim_start_matches('/');
+    if s.is_empty() {
+        return None;
+    }
+    Some(Arc::new(format!("/avatar/parameters/{}", s)))
 }
 
 #[derive(Clone, Debug)]
@@ -124,9 +146,13 @@ pub(crate) struct GlobalConfig {
     pub minimum_max_speed: f32,
     pub timeout: u64,
     pub default_use_velocity_control: bool,
+    pub default_velocity_on_prox_drop: bool,
     pub default_outer_proximity: f32,
     pub default_inner_proximity: f32,
-    pub default_velocity_scalar: f32
+    pub default_velocity_scalar: f32,
+    pub default_velocity_smoothing_ms: u32,
+    /// When > 0, resend device online OSC to VRChat every N seconds (debug; 0 = transitions only).
+    pub online_status_broadcast_seconds: u64,
 }
 
 struct YamlHashWrapper {
@@ -174,20 +200,30 @@ impl YamlHashWrapper {
 
 
 pub(crate) fn load_config() -> Result<(GlobalConfig, Vec<DeviceConfig>), String> {
-    let mut config_file = match File::open("./config.yml") {
-        Err(why) => return Err(format!("Failed to open config.yml: {}", why)),
-        Ok(f) => f
+    load_config_internal(true)
+}
+
+/// Same as `load_config` but without startup banner / validation log lines (for hot paths like device test).
+pub(crate) fn load_config_quiet() -> Result<(GlobalConfig, Vec<DeviceConfig>), String> {
+    load_config_internal(false)
+}
+
+fn load_config_internal(verbose: bool) -> Result<(GlobalConfig, Vec<DeviceConfig>), String> {
+    let config_path = config_file_path();
+    let config_path_str = config_path.to_string_lossy();
+
+    let mut config_file = match File::open(&config_path) {
+        Err(why) => return Err(format!("Failed to open {}: {}", config_path_str, why)),
+        Ok(f) => f,
     };
 
-    // Call validate_yaml function
-    match validate_yaml("./config.yml") {
-        Ok(_) => println!("Configuration file is valid."),
-        Err(e) => return Err(format!("Configuration File Error: {}", e)),
-    };
+    if let Err(e) = validate_yaml(config_path_str.as_ref()) {
+        return Err(format!("Configuration File Error: {}", e));
+    }
 
     let mut config_data = String::new();
     match config_file.read_to_string(&mut config_data) {
-        Err(why) => return Err(format!("Failed to read config.yml: {}", why)),
+        Err(why) => return Err(format!("Failed to read {}: {}", config_path_str, why)),
         Ok(_) => {}
     }
 
@@ -231,32 +267,20 @@ pub(crate) fn load_config() -> Result<(GlobalConfig, Vec<DeviceConfig>), String>
             None => return Err(format!("Device {} is not a valid map", i + 1)),
         };
         let device_data = YamlHashWrapper {yaml_hash: device_hash.clone()};
-        match parse_device_config(device_data, &global_config) {
+        match parse_device_config(device_data, &global_config, verbose) {
             Ok(device_config) => device_configs.push(device_config),
             Err(e) => return Err(format!("Error parsing device {}: {}", i + 1, e)),
         }
     }
 
-    println!("\n");
-    banner_txt();
-    println!("\n");
-    println!(" Device Maps");
-    println!("");
-    for (i, device) in device_configs.iter().enumerate() {
-        println!("  Device {i}");
-        println!("   {} => {}", device.proximity_parameter.trim_start_matches("/avatar/parameters/"), device.device_uri);
-        println!("   Vibration Configuration");
-        println!("    Startup TX Speed: {:.0}%", device.start_tx);
-        println!("    Min Speed: {:.0}%", device.min_speed * 100.0);
-        println!("    Max Speed: {:.0}%", device.max_speed * 100.0);
-        println!("    Scale Factor: {:.0}%", device.speed_scale * 100.0);
-        println!("    Advanced Mode: {}", device.use_velocity_control);
-        println!("");
+    if verbose {
+        crate::log_ui::status("GiggleTech OSC Router v1.4.0");
+        crate::log_ui::status(&format!(
+            "Loaded {} device(s) from {}",
+            device_configs.len(),
+            config_path.display()
+        ));
     }
-
-    println!("\n Listening for OSC on port: {}", global_config.port_rx);
-    println!(" Timeout: {}s", global_config.timeout);
-    println!("\nWaiting for pats...");
 
     Ok((global_config, device_configs))
 }
@@ -266,32 +290,40 @@ pub(crate) fn load_config() -> Result<(GlobalConfig, Vec<DeviceConfig>), String>
 fn parse_global_config(setup: YamlHashWrapper) -> GlobalConfig {
     // Retrieve the value of `port_rx` from the YAML file with fallback
     let port_rx_str = setup.get_str("port_rx").unwrap_or_else(|| {
-        println!("Warning: port_rx not found in config, using default port 9001");
+        crate::log_ui::status("Warning: port_rx not found in config, using default port 9001");
         "9001".to_string()
     });
 
     // Check if `port_rx` is "OSCQuery" or a numeric port
-    let port_rx: Arc<String> = if port_rx_str == "OSCQuery" {
+    let port_rx: Arc<String> = if port_rx_str.eq_ignore_ascii_case("OSCQuery") {
         // If it's "OSCQuery", try to use the port from the OSCQuery server
-        println!("\nAttempting to use OSCQuery...");
+        crate::log_ui::status("Using OSCQuery...");
         match std::panic::catch_unwind(|| {
             oscq_giggletech::initialize_and_get_udp_port()
         }) {
             Ok(udp_port) => {
-                println!("OSCQuery initialized successfully. UDP port: {}", udp_port);
+                crate::log_ui::status(&format!("OSCQuery ready (UDP port {})", udp_port));
                 Arc::new(udp_port.to_string())
             }
             Err(_) => {
-                println!("OSCQuery initialization failed. Falling back to default port 9001.");
+                crate::log_ui::status(
+                    "OSCQuery initialization failed. Falling back to default port 9001.",
+                );
                 Arc::new("9001".to_string())
             }
         }
     } else {
         // Otherwise, assume it's a port number in string format, validate, and wrap it in Arc
         match u16::from_str_radix(&port_rx_str, 10) {
-            Ok(_) => Arc::new(port_rx_str),
+            Ok(_) => {
+                crate::log_ui::status(&format!("Using fixed OSC port {}", port_rx_str));
+                Arc::new(port_rx_str)
+            }
             Err(_) => {
-                println!("Warning: Invalid port number '{}', using default port 9001", port_rx_str);
+                crate::log_ui::status(&format!(
+                    "Warning: invalid port '{}', using default port 9001",
+                    port_rx_str
+                ));
                 Arc::new("9001".to_string())
             }
         }
@@ -326,9 +358,23 @@ fn parse_global_config(setup: YamlHashWrapper) -> GlobalConfig {
         })
         .unwrap_or(false); // Default to `false` if the key is missing or invalid
 
+    let default_velocity_on_prox_drop = setup
+        .get_bool("default_velocity_on_prox_drop")
+        .or_else(|| {
+            setup
+                .get_str("default_velocity_on_prox_drop")
+                .map(|s| s.to_lowercase() == "true")
+        })
+        .unwrap_or(false);
+
     let default_outer_proximity = setup.get_f64("default_outer_proximity").unwrap_or(0.0) as f32;
-    let default_inner_proximity = setup.get_f64("default_inner_proximity").unwrap_or(0.7) as f32;
+    let default_inner_proximity = setup.get_f64("default_inner_proximity").unwrap_or(1.0) as f32;
     let default_velocity_scalar = setup.get_f64("default_velocity_scalar").unwrap_or(20.0) as f32;
+    let default_velocity_smoothing_ms =
+        setup.get_i64("default_velocity_smoothing_ms").unwrap_or(80).max(0) as u32;
+
+    let online_status_broadcast_seconds =
+        setup.get_i64("online_status_broadcast_seconds").unwrap_or(0).max(0) as u64;
 
     // Return the GlobalConfig struct with the updated port_rx
     GlobalConfig {
@@ -341,14 +387,21 @@ fn parse_global_config(setup: YamlHashWrapper) -> GlobalConfig {
         default_speed_scale,
         timeout,
         default_use_velocity_control,
+        default_velocity_on_prox_drop,
         default_outer_proximity,
         default_inner_proximity,
         default_velocity_scalar,
+        default_velocity_smoothing_ms,
+        online_status_broadcast_seconds,
     }
 }
 
 
-fn parse_device_config(device_data: YamlHashWrapper, global_config: &GlobalConfig) -> Result<DeviceConfig, String> {
+fn parse_device_config(
+    device_data: YamlHashWrapper,
+    global_config: &GlobalConfig,
+    _verbose: bool,
+) -> Result<DeviceConfig, String> {
     let ip = match device_data.get_str("ip") {
         Some(ip_str) => {
             match ip_str.parse::<IpAddr>() {
@@ -370,6 +423,10 @@ fn parse_device_config(device_data: YamlHashWrapper, global_config: &GlobalConfi
         }
     };
 
+    let online_parameter = device_data
+        .get_str("online_parameter")
+        .and_then(|s| normalize_avatar_parameter_address(&s));
+
     let min_speed = device_data.get_f64("min_speed").map(|x| x as f32 / 100.0).unwrap_or(global_config.default_min_speed);
     if min_speed < 0.0 {
         return Err("Min speed cannot be negative".to_string());
@@ -380,15 +437,16 @@ fn parse_device_config(device_data: YamlHashWrapper, global_config: &GlobalConfi
     let speed_scale = device_data.get_f64("speed_scale").map(|x| x as f32 / 100.0).unwrap_or(global_config.default_speed_scale);
     let max_speed_parameter = device_data.get_str("max_speed_parameter").map(|x| Arc::new(format!("/avatar/parameters/{}", x))).unwrap_or(global_config.default_max_speed_parameter.clone());
     let use_velocity_control = device_data.get_bool("use_velocity_control").unwrap_or(global_config.default_use_velocity_control);
+    let velocity_on_prox_drop = device_data
+        .get_bool("velocity_on_prox_drop")
+        .unwrap_or(global_config.default_velocity_on_prox_drop);
     let outer_proximity = device_data.get_f64("outer_proximity").map(|x| x as f32).unwrap_or(global_config.default_outer_proximity);
     let inner_proximity = device_data.get_f64("inner_proximity").map(|x| x as f32).unwrap_or(global_config.default_inner_proximity);
     let velocity_scalar = device_data.get_f64("velocity_scalar").map(|x| x as f32).unwrap_or(global_config.default_velocity_scalar);
-
-    // Log device settings
-    log_to_file(&format!(
-        "Device IP: {}\nMin Speed: {:.0}%\nMax Speed: {:.0}%\nSpeed Scale: {:.0}%\nProximity Parameter: {}\nVelocity Control: {}\nOuter Proximity: {:.2}\nInner Proximity: {:.2}\n",
-        ip, min_speed * 100.0, max_speed * 100.0, speed_scale * 100.0, proximity_parameter, use_velocity_control, outer_proximity, inner_proximity
-    ));
+    let velocity_smoothing_ms = device_data
+        .get_i64("velocity_smoothing_ms")
+        .unwrap_or(global_config.default_velocity_smoothing_ms as i64)
+        .max(0) as u32;
 
     Ok(DeviceConfig {
         device_uri: ip,
@@ -398,9 +456,12 @@ fn parse_device_config(device_data: YamlHashWrapper, global_config: &GlobalConfi
         start_tx,
         speed_scale,
         max_speed_parameter,
+        online_parameter,
         use_velocity_control,
+        velocity_on_prox_drop,
         outer_proximity,
         inner_proximity,
-        velocity_scalar
+        velocity_scalar,
+        velocity_smoothing_ms,
     })
 }

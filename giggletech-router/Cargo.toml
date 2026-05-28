@@ -7,6 +7,11 @@ edition = "2018"
 keywords = ["osc", "vrchat", "async-std"]
 authors = ["Giggle Tech <hello@giggletech.io>"
 ]
+build = "build.rs"
+
+[[bin]]
+name = "GiggleTech"
+path = "src/main.rs"
 
 [features]
 
@@ -32,7 +37,14 @@ rocket = "0.5.0-rc.1"
 hyper = { version = "0.14", features = ["full"] }
 async-h1 = "2.3.4"
 tide = "0.16"
-chrono = "0.4"
+tray-icon = "0.19"
+tao = "0.30"
+winapi = { version = "0.3", features = ["winuser", "wincon", "winbase", "winnt", "synchapi", "errhandlingapi", "handleapi"] }
+winreg = "0.52"
+wry = "0.48"
+serde_json = "1.0"
+base64 = "0.22"
+image = { version = "0.25", default-features = false, features = ["ico", "png", "bmp"] }
 
 
 
@@ -40,3 +52,6 @@ chrono = "0.4"
 
 [dev-dependencies]
 async-std = { version = "1.9.0", features = ["unstable", "attributes"] }
+
+[build-dependencies]
+winres = "0.1"

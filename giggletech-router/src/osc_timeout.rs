@@ -24,6 +24,7 @@
 
 
 use std::collections::HashMap;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 use anyhow::Result;
@@ -35,8 +36,12 @@ lazy_static! {
         Arc::new(Mutex::new(HashMap::new()));
 }
 
-pub async fn osc_timeout(device_ip: &str, timeout: u64) -> Result<()> {
-    loop {
+pub async fn osc_timeout(
+    device_ip: &str,
+    timeout: u64,
+    session_alive: Arc<AtomicBool>,
+) -> Result<()> {
+    while session_alive.load(Ordering::Relaxed) {
         async_std::task::sleep(Duration::from_secs(1)).await;
         
         // Handle mutex lock safely
@@ -48,7 +53,10 @@ pub async fn osc_timeout(device_ip: &str, timeout: u64) -> Result<()> {
                 elapsed
             }
             Err(_) => {
-                eprintln!("Warning: Mutex poisoned for device {}, skipping timeout check", device_ip);
+                crate::log_ui::status(&format!(
+                    "Warning: Mutex poisoned for device {}, skipping timeout check",
+                    device_ip
+                ));
                 continue;
             }
         };
@@ -60,7 +68,10 @@ pub async fn osc_timeout(device_ip: &str, timeout: u64) -> Result<()> {
                 }
                 Err(e) => {
                     // Log the error but don't panic - just continue monitoring
-                    eprintln!("Timeout: Failed to send stop signal to {}: {}", device_ip, e);
+                    crate::log_ui::status(&format!(
+                        "Timeout: Failed to send stop signal to {}: {}",
+                        device_ip, e
+                    ));
                 }
             }
             
@@ -68,8 +79,12 @@ pub async fn osc_timeout(device_ip: &str, timeout: u64) -> Result<()> {
             if let Ok(mut device_last_signal_times) = DEVICE_LAST_SIGNAL_TIME.lock() {
                 device_last_signal_times.insert(device_ip.to_string(), Instant::now());
             } else {
-                eprintln!("Warning: Failed to update signal time for device {}", device_ip);
+                crate::log_ui::status(&format!(
+                    "Warning: Failed to update signal time for device {}",
+                    device_ip
+                ));
             }
         }
     }
+    Ok(())
 }

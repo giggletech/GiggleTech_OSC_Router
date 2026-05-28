@@ -35,12 +35,16 @@ use crate::osc_timeout;
 use crate::terminator;
 use crate::giggletech_osc;
 use crate::data_processing;
+use crate::log_ui;
+use crate::stop_pats;
 use lazy_static::lazy_static;
 use crate::config::DeviceConfig;
 
 
 lazy_static! {
     pub static ref DEVICE_LAST_VALUE: Arc<Mutex<HashMap<String, f32>>> =
+        Arc::new(Mutex::new(HashMap::new()));
+    pub static ref DEVICE_VELOCITY_EMA: Arc<Mutex<HashMap<String, f32>>> =
         Arc::new(Mutex::new(HashMap::new()));
 }
 
@@ -60,25 +64,61 @@ pub(crate) async fn handle_proximity_parameter(
     let mut device_last_values = DEVICE_LAST_VALUE.lock().await;
     let last_val = device_last_values.insert(device_ip.to_string(), value).unwrap_or(0.0);
 
-    if value == 0.0 {
-        println!("Stopping pats...");
-        terminator::start(running.clone(), &device_ip).await?;
+    let pat_graph = if value > 0.0 {
+        data_processing::proximity_graph(value)
+    } else {
+        String::new()
+    };
+    log_ui::notify_pat_bar(device.proximity_parameter.as_str(), &pat_graph);
 
-        for _ in 0..5 {
-            giggletech_osc::send_data(&device_ip, 0i32).await?;  
-        }
+    if value == 0.0 {
+        // Reset smoothing when proximity fully clears.
+        DEVICE_VELOCITY_EMA.lock().await.remove(device_ip.as_str());
+        stop_pats::stop_device_with_terminator(device_ip.as_str(), running.clone()).await?;
     } else {
         if !device.use_velocity_control {
-            giggletech_osc::send_data(&device_ip,
-                data_processing::process_pat(value, &device, last_val)).await?;
+            let headpat_tx = data_processing::process_pat(value, &device, last_val);
+            if headpat_tx == 0 {
+                stop_pats::stop_device_immediate(device_ip.as_str(), running.clone()).await?;
+            } else {
+                giggletech_osc::send_data(&device_ip, headpat_tx).await?;
+            }
         } else {
             let delta_t = match last_signal_time {
                 None => Duration::new(0, 0),
                 Some(t_prev) => Instant::now().duration_since(t_prev),
             };
 
-            giggletech_osc::send_data(&device_ip,
-                data_processing::process_pat_advanced(value, last_val, delta_t, &device)).await?;
+            // Simple smoothing: EMA on computed velocity (per device).
+            // Higher tau => smoother but more latency.
+            let vel_smooth_tau_secs = (device.velocity_smoothing_ms as f32) / 1000.0;
+            let raw_vel = data_processing::compute_proximity_velocity(value, last_val, delta_t, &device);
+            let dt = delta_t.as_secs_f32();
+            let alpha = if dt <= 0.0 || vel_smooth_tau_secs <= 0.0 {
+                1.0
+            } else {
+                1.0 - (-dt / vel_smooth_tau_secs).exp()
+            }
+            .clamp(0.0, 1.0);
+
+            let mut ema_map = DEVICE_VELOCITY_EMA.lock().await;
+            let prev_ema = *ema_map.get(device_ip.as_str()).unwrap_or(&0.0);
+            let ema_vel = prev_ema + alpha * (raw_vel - prev_ema);
+            if ema_vel <= 0.0 {
+                ema_map.remove(device_ip.as_str());
+            } else {
+                ema_map.insert(device_ip.to_string(), ema_vel);
+            }
+            drop(ema_map);
+
+            let headpat_tx = data_processing::motor_tx_from_velocity(ema_vel, &device);
+            if headpat_tx == 0 {
+                // Proximity still non-zero but no velocity pulse — latch motor off (single 0 is often not enough).
+                DEVICE_VELOCITY_EMA.lock().await.remove(device_ip.as_str());
+                stop_pats::stop_device_immediate(device_ip.as_str(), running.clone()).await?;
+            } else {
+                giggletech_osc::send_data(&device_ip, headpat_tx).await?;
+            }
         }
     }
     Ok(())

@@ -70,10 +70,10 @@ fn run_giggletech() -> Child {
     executable_path.push("giggletech_oscq.exe");
 
     // Display a message indicating the process is being started and the directory it's being started from
-    println!(
-        "Starting OSCQ Server from the directory: {}",
+    crate::log_ui::status(&format!(
+        "Starting OSCQuery server ({})",
         executable_path.display()
-    );
+    ));
 
     Command::new(executable_path)
         .spawn()
@@ -110,19 +110,17 @@ pub fn initialize_and_get_udp_port() -> i32 {
         match get_udp_port(config.httpPort) {
             Ok(0) => {
                 // If UDP port is 0, send the start command
-                println!("UDP port is 0, sending start command...");
                 if let Err(e) = start_server(config.httpPort) {
-                    eprintln!("Failed to start server: {}", e);
+                    crate::log_ui::status(&format!("Failed to start OSCQuery server: {}", e));
                 }
             }
             Ok(port_value) => {
                 // If we get a valid non-zero port, return it
-                println!("UDP port: {}", port_value);
                 return port_value;
             }
             Err(_) => {
                 // If the request fails, restart the process
-                eprintln!("Failed to retrieve UDP port, restarting giggletech process...");
+                crate::log_ui::status("OSCQuery not responding, restarting...");
                 let _ = process.kill(); // Kill the current process
                 process = run_giggletech(); // Restart the process
             }
