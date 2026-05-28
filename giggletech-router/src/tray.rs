@@ -588,6 +588,7 @@ header {
   background: #0f0f14;
   border: 2px solid #3f3f4e;
   border-radius: 10px;
+  overflow: hidden;
   cursor: pointer;
   touch-action: none;
   user-select: none;
@@ -628,7 +629,6 @@ header {
   height: 0%;
   z-index: 1;
   background: linear-gradient(to top, #7c3aed, #e879f9);
-  border-radius: 0 0 8px 8px;
   pointer-events: none;
 }
 .device-actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-top: 16px; }
