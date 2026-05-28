@@ -674,10 +674,24 @@ body.ui-large #config-wrap {
   color: #e8e8f0;
   letter-spacing: 0.01em;
 }
+.proximity-band-hide-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-shrink: 0;
+}
+.proximity-band-hide-label {
+  font-size: 1.5rem;
+  color: #a1a1b5;
+  font-weight: 500;
+}
 .proximity-band-panel-body {
   display: flex;
   flex-direction: column;
   gap: 24px;
+}
+.proximity-band-panel-body.hidden {
+  display: none;
 }
 .proximity-band-panel .slider-field {
   margin-top: 0;
@@ -1067,6 +1081,13 @@ const PING_POLL_MS = 5000;
 let pingPollTimer = null;
 let pingInFlight = false;
 let pendingRemoveIndex = null;
+let colliderAdjustmentVisible = (() => {
+  try {
+    const v = localStorage.getItem('colliderAdjustmentVisible');
+    if (v === null) return false;
+    return v === '1';
+  } catch (_) { return false; }
+})();
 let activeTestDrag = null;
 let testSliderSafetyReady = false;
 const SPEED_SLIDER_STEPS = 1000;
@@ -1144,6 +1165,16 @@ function effectiveVelocityScalar(d) {
 }
 function effectiveVelocitySoftcap(d) {
   return d.velocity_softcap ?? editorVelocityProxDefaults.softcap;
+}
+/** Damping slider 0–100: left = none, right = max. Stored softcap is inverted (backend unchanged). */
+function velocitySoftcapToDampingPct(softcap) {
+  return Math.min(100, Math.max(0, 100 - softcap));
+}
+function dampingPctToVelocitySoftcap(dampingPct) {
+  return Math.max(1, Math.min(100, 100 - dampingPct));
+}
+function effectiveVelocityDampingPct(d) {
+  return velocitySoftcapToDampingPct(effectiveVelocitySoftcap(d));
 }
 function effectiveVelocitySmoothingMs(d) {
   return d.velocity_smoothing_ms ?? editorVelocityProxDefaults.smoothing_ms;
@@ -1279,11 +1310,11 @@ function renderDevices() {
             <label class="slider-field">
               <div class="slider-field-header">
                 <span class="slider-field-title">High-speed damping</span>
-                <span class="speed-value" id="velocity-softcap-val-${i}">${effectiveVelocitySoftcap(d)}%</span>
+                <span class="speed-value" id="velocity-softcap-val-${i}">${effectiveVelocityDampingPct(d)}%</span>
               </div>
               <div class="speed-slider-row">
-                <input type="range" id="velocity-softcap-${i}" min="1" max="100"
-                  value="${effectiveVelocitySoftcap(d)}"
+                <input type="range" id="velocity-softcap-${i}" min="0" max="100"
+                  value="${effectiveVelocityDampingPct(d)}"
                   aria-label="Velocity high-speed damping for device ${i + 1}"
                   oninput="onVelocitySoftcapChange(${i}, this)" onchange="saveConfig(true)">
               </div>
@@ -1305,8 +1336,20 @@ function renderDevices() {
           <section class="proximity-band-panel" aria-label="Collider adjustment for device ${i + 1}">
             <div class="proximity-band-panel-header">
               <span class="proximity-band-panel-title">Collider adjustment</span>
+              <div class="proximity-band-hide-row">
+                <span class="proximity-band-hide-label">Hide</span>
+                <label class="velocity-switch">
+                  <input type="checkbox" class="velocity-toggle-input" role="switch"
+                    aria-label="Show collider adjustment sliders for device ${i + 1}"
+                    ${colliderAdjustmentVisible ? 'checked' : ''}
+                    onchange="onColliderAdjustmentVisibleChange(${i}, this)">
+                  <span class="velocity-toggle-track" aria-hidden="true">
+                    <span class="velocity-toggle-thumb"></span>
+                  </span>
+                </label>
+              </div>
             </div>
-            <div class="proximity-band-panel-body" id="proximity-band-${i}">
+            <div class="proximity-band-panel-body${colliderAdjustmentVisible ? '' : ' hidden'}" id="proximity-band-${i}">
               <label class="slider-field">
                 <div class="slider-field-header">
                   <span class="slider-field-title">Inner</span>
@@ -1581,6 +1624,17 @@ function onVelocityControlChange(index, input) {
   saveConfig(true);
 }
 
+function onColliderAdjustmentVisibleChange(_index, input) {
+  colliderAdjustmentVisible = !!input.checked;
+  try { localStorage.setItem('colliderAdjustmentVisible', colliderAdjustmentVisible ? '1' : '0'); } catch (_) {}
+  document.querySelectorAll('.proximity-band-panel .velocity-toggle-input').forEach((el) => {
+    el.checked = colliderAdjustmentVisible;
+  });
+  document.querySelectorAll('.proximity-band-panel-body').forEach((el) => {
+    el.classList.toggle('hidden', !colliderAdjustmentVisible);
+  });
+}
+
 function onVelocityOnProxDropChange(index, input) {
   if (!editorDevices[index]) return;
   editorDevices[index].velocity_on_prox_drop = !!input.checked;
@@ -1633,10 +1687,10 @@ function onVelocityScalarChange(index, input) {
 function onVelocitySoftcapChange(index, input) {
   const d = editorDevices[index];
   if (!d) return;
-  const v = parseInt(input.value, 10);
-  d.velocity_softcap = v;
+  const dampingPct = parseInt(input.value, 10);
+  d.velocity_softcap = dampingPctToVelocitySoftcap(dampingPct);
   const label = document.getElementById('velocity-softcap-val-' + index);
-  if (label) label.textContent = String(v) + '%';
+  if (label) label.textContent = String(dampingPct) + '%';
   maybeClearConfigError();
 }
 
@@ -2103,6 +2157,7 @@ impl UiState {
       sync_status_to_webview(&output.webview, &mut self.status_synced, &mut self.status_epoch);
       self.status_pending = false;
       self.last_status_flush = Some(Instant::now());
+      flush_live_ui(&output.webview);
     }
   }
 
@@ -2381,10 +2436,15 @@ pub fn run(start_minimized: bool, primary: PrimaryInstance) {
       }
 
       Event::UserEvent(UserEvent::LiveUiFlush) => {
-        if ui_state.is_output_visible() {
-          if let Some(output) = &ui_state.output {
+        if let Some(output) = &ui_state.output {
+          if ui_state.is_output_visible() {
             flush_live_ui(&output.webview);
+          } else {
+            // Window hidden to tray: keep queued values but allow new flush events.
+            LIVE_UI_FLUSH_PENDING.store(false, Ordering::Release);
           }
+        } else {
+          LIVE_UI_FLUSH_PENDING.store(false, Ordering::Release);
         }
       }
 
