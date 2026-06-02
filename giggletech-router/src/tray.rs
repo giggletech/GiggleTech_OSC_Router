@@ -1589,7 +1589,8 @@ function onDeviceIpChange(index) {
 window.onDevicePingResults = function(payload) {
   pingInFlight = false;
   (payload.results || []).forEach(r => {
-    if (r.ip) devicePingStatus[r.ip] = r.online ? 'online' : 'offline';
+    if (!r.ip || r.known === false) return;
+    devicePingStatus[r.ip] = r.online ? 'online' : 'offline';
   });
   updatePingBadges();
 };
@@ -2452,15 +2453,12 @@ fn handle_config_ipc(
       Ok(r) => r,
       Err(_) => return,
     };
-    let proxy = event_proxy.clone();
-    std::thread::spawn(move || {
-      let results = async_std::task::block_on(device_ping::ping_hosts(&req.ips));
-      let payload = match serde_json::to_string(&serde_json::json!({ "results": results })) {
-        Ok(p) => p,
-        Err(_) => return,
-      };
-      let _ = proxy.send_event(UserEvent::PingResults(payload));
-    });
+    let ping_monitor = device_ping::monitor();
+    ping_monitor.sync_ips(&req.ips);
+    let results = ping_monitor.snapshot_for_ips(&req.ips);
+    if let Ok(payload) = serde_json::to_string(&serde_json::json!({ "results": results })) {
+      let _ = event_proxy.send_event(UserEvent::PingResults(payload));
+    }
   } else if let Some(json) = msg.strip_prefix("mdns-check:") {
     let req: MdnsCheckRequest = match serde_json::from_str(json) {
       Ok(r) => r,

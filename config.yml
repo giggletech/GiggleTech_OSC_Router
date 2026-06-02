@@ -14,23 +14,9 @@ devices:
   velocity_softcap: 21
   velocity_smoothing_ms: 190
 - name: null
-  ip: 192.168.1.69
+  ip: 192.168.1.70
   proximity_parameter: proximity_01
-  online_parameter: null
-  max_speed: null
-  speed_scale: null
-  max_speed_parameter: null
-  use_velocity_control: null
-  velocity_on_prox_drop: null
-  outer_proximity: null
-  inner_proximity: null
-  velocity_scalar: null
-  velocity_softcap: null
-  velocity_smoothing_ms: null
-- name: null
-  ip: 192.168.1.69
-  proximity_parameter: proximity_01
-  online_parameter: null
+  online_parameter: proximity_01
   max_speed: null
   speed_scale: null
   max_speed_parameter: null

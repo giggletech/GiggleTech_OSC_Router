@@ -128,10 +128,16 @@ fn run_console_mode() {
 pub(crate) async fn test_device_connectivity(devices: &[config::DeviceConfig]) {
     log_ui::status("Checking device connectivity...");
 
+    let monitor = device_ping::monitor();
+    monitor.sync_ips(devices.iter().map(|d| d.device_uri.as_ref().clone()));
+
     for (i, device) in devices.iter().enumerate() {
-        let device_ip = &device.device_uri;
-        let is_reachable = device_ping::ping_host(device_ip).await;
-        let label = if is_reachable { "online" } else { "offline" };
+        let device_ip = device.device_uri.as_ref();
+        let label = match monitor.get(device_ip) {
+            Some(true) => "online",
+            Some(false) => "offline",
+            None => "checking",
+        };
         log_ui::status(&format!("Device {} ({}): {}", i + 1, device_ip, label));
     }
 }

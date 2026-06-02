@@ -128,7 +128,10 @@ async fn run_giggletech_session(restart_rx: &Receiver<()>) -> Result<bool> {
       .collect(),
   );
 
-  spawn_online_monitor(session_alive.clone(), &global_config, &devices);
+  let ping_interval_ms = online_monitor_interval_ms(&global_config);
+  device_ping::monitor().sync_ips(devices.iter().map(|d| d.device_uri.as_ref().clone()));
+  device_ping::monitor().set_interval_ms(ping_interval_ms);
+  spawn_online_monitor(session_alive.clone(), &global_config, &devices, ping_interval_ms);
 
   let mut rx_socket = giggletech_osc::setup_rx_socket(global_config.port_rx.to_string()).await?;
 
@@ -182,38 +185,46 @@ async fn run_giggletech_session(restart_rx: &Receiver<()>) -> Result<bool> {
   Ok(should_restart)
 }
 
+fn online_monitor_interval_ms(global_config: &config::GlobalConfig) -> u64 {
+  let broadcast_secs = global_config.online_status_broadcast_seconds;
+  if broadcast_secs > 0 {
+    broadcast_secs * 1000
+  } else {
+    5000
+  }
+}
+
 fn spawn_online_monitor(
   alive: Arc<AtomicBool>,
   global_config: &config::GlobalConfig,
   devices: &[config::DeviceConfig],
+  poll_interval_ms: u64,
 ) {
   let broadcast_secs = global_config.online_status_broadcast_seconds;
-  let ping_interval_ms = if broadcast_secs > 0 {
-    broadcast_secs * 1000
-  } else {
-    5000
-  };
-  let devices_for_ping: Vec<(String, Option<String>)> = devices
+  let vrc_targets: Vec<(String, String)> = devices
     .iter()
-    .map(|d| {
-      (
-        d.device_uri.as_ref().clone(),
-        d.online_parameter.as_ref().map(|p| p.as_ref().clone()),
-      )
+    .filter_map(|d| {
+      d.online_parameter.as_ref().map(|p| {
+        (d.device_uri.as_ref().clone(), p.as_ref().clone())
+      })
     })
     .collect();
 
-  if !devices_for_ping.iter().any(|(_, p)| p.is_some()) {
+  if vrc_targets.is_empty() {
     return;
   }
+
+  let monitor = device_ping::monitor();
 
   task::spawn(async move {
     use std::collections::HashMap;
     let mut last: HashMap<String, bool> = HashMap::new();
 
     while alive.load(Ordering::SeqCst) {
-      for (ip, online_param) in devices_for_ping.iter() {
-        let current = device_ping::ping_host(ip).await;
+      for (ip, param) in vrc_targets.iter() {
+        let Some(current) = monitor.get(ip) else {
+          continue;
+        };
         let prev = last.insert(ip.clone(), current);
         let changed = prev != Some(current);
 
@@ -221,19 +232,17 @@ fn spawn_online_monitor(
           continue;
         }
 
-        if let Some(param) = online_param.as_ref() {
-          let pulse = changed && current;
-          if vrc_osc::send_avatar_parameter(param, current, pulse)
-            .await
-            .is_ok()
-            && changed
-          {
-            log_ui::status(&format!("{} {}", param, current));
-          }
+        let pulse = changed && current;
+        if vrc_osc::send_avatar_parameter(param, current, pulse)
+          .await
+          .is_ok()
+          && changed
+        {
+          log_ui::status(&format!("{} {}", param, current));
         }
       }
 
-      task::sleep(std::time::Duration::from_millis(ping_interval_ms)).await;
+      task::sleep(std::time::Duration::from_millis(poll_interval_ms)).await;
     }
   });
 }
