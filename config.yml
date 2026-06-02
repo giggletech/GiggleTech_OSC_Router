@@ -2,8 +2,8 @@ devices:
 - name: Headpats
   ip: 192.168.1.69
   proximity_parameter: proximity_01
-  online_parameter: HeadpatsOnline
-  max_speed: null
+  online_parameter: Headpats_online
+  max_speed: 32
   speed_scale: null
   max_speed_parameter: null
   use_velocity_control: false
@@ -13,11 +13,11 @@ devices:
   velocity_scalar: 100
   velocity_softcap: 21
   velocity_smoothing_ms: 190
-- name: null
+- name: Device 2
   ip: 192.168.1.70
   proximity_parameter: proximity_01
-  online_parameter: proximity_01
-  max_speed: null
+  online_parameter: Device_2_online
+  max_speed: 100
   speed_scale: null
   max_speed_parameter: null
   use_velocity_control: null

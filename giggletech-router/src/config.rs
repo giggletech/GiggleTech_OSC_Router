@@ -123,6 +123,31 @@ pub(crate) struct DeviceConfig {
     pub velocity_smoothing_ms: u32,
 }
 
+const DEFAULT_FIRST_DEVICE_NAME: &str = "Headpats";
+
+/// Display name for a device (matches config UI placeholders).
+pub(crate) fn effective_device_name(index: usize, name: &str) -> String {
+    let trimmed = name.trim();
+    if !trimmed.is_empty() {
+        return trimmed.to_string();
+    }
+    if index == 0 {
+        DEFAULT_FIRST_DEVICE_NAME.to_string()
+    } else {
+        format!("Device {}", index + 1)
+    }
+}
+
+/// Short VRChat parameter name (no `/avatar/parameters/` prefix), e.g. `Headpats_online`.
+pub(crate) fn default_online_parameter_short(index: usize, name: &str) -> String {
+    let base = effective_device_name(index, name).replace(' ', "_");
+    format!("{}_online", base)
+}
+
+fn default_online_parameter(index: usize, name: &str) -> Option<Arc<String>> {
+    normalize_avatar_parameter_address(&default_online_parameter_short(index, name))
+}
+
 fn normalize_avatar_parameter_address(s: &str) -> Option<Arc<String>> {
     let s = s.trim();
     if s.is_empty() || s.eq_ignore_ascii_case("null") {
@@ -192,6 +217,24 @@ impl YamlHashWrapper {
 
     fn get_bool(&self, key: &str) -> Option<bool> {
         self.yaml_hash.get(&Yaml::String(key.to_string()))?.as_bool()
+    }
+
+    fn get_yaml(&self, key: &str) -> Option<&Yaml> {
+        self.yaml_hash.get(&Yaml::String(key.to_string()))
+    }
+}
+
+fn resolve_online_parameter_from_yaml(
+    device_data: &YamlHashWrapper,
+    device_index: usize,
+    raw_name: &str,
+) -> Option<Arc<String>> {
+    match device_data.get_yaml("online_parameter") {
+        None | Some(Yaml::Null) => default_online_parameter(device_index, raw_name),
+        Some(yaml) => yaml
+            .as_str()
+            .and_then(|s| normalize_avatar_parameter_address(s))
+            .or_else(|| default_online_parameter(device_index, raw_name)),
     }
 }
 
@@ -271,7 +314,7 @@ fn load_config_internal(verbose: bool) -> Result<(GlobalConfig, Vec<DeviceConfig
             None => return Err(format!("Device {} is not a valid map", i + 1)),
         };
         let device_data = YamlHashWrapper {yaml_hash: device_hash.clone()};
-        match parse_device_config(device_data, &global_config, verbose) {
+        match parse_device_config(device_data, &global_config, i, verbose) {
             Ok(device_config) => device_configs.push(device_config),
             Err(e) => return Err(format!("Error parsing device {}: {}", i + 1, e)),
         }
@@ -408,6 +451,7 @@ fn parse_global_config(setup: YamlHashWrapper) -> GlobalConfig {
 fn parse_device_config(
     device_data: YamlHashWrapper,
     global_config: &GlobalConfig,
+    device_index: usize,
     _verbose: bool,
 ) -> Result<DeviceConfig, String> {
     let ip = match device_data.get_str("ip") {
@@ -431,9 +475,9 @@ fn parse_device_config(
         }
     };
 
-    let online_parameter = device_data
-        .get_str("online_parameter")
-        .and_then(|s| normalize_avatar_parameter_address(&s));
+    let device_name = device_data.get_str("name").unwrap_or_default();
+    let online_parameter =
+        resolve_online_parameter_from_yaml(&device_data, device_index, &device_name);
 
     let min_speed = device_data.get_f64("min_speed").map(|x| x as f32 / 100.0).unwrap_or(global_config.default_min_speed);
     if min_speed < 0.0 {

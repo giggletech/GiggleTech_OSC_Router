@@ -7,18 +7,8 @@ use serde::{Deserialize, Serialize};
 
 use crate::config::config_file_path;
 use crate::config::config_validator::{load_config, Device};
+use crate::config::{default_online_parameter_short, effective_device_name};
 use crate::log_ui;
-
-const DEFAULT_FIRST_DEVICE_NAME: &str = "Headpats";
-
-fn effective_device_name(index: usize, name: &str) -> String {
-  let trimmed = name.trim();
-  if index == 0 && trimmed.is_empty() {
-    DEFAULT_FIRST_DEVICE_NAME.to_string()
-  } else {
-    trimmed.to_string()
-  }
-}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EditorDevice {
@@ -261,13 +251,18 @@ pub fn save_editor_state(state: &EditorState, quiet: bool) -> Result<(), String>
         device.velocity_softcap = optional_u32(ed.velocity_softcap, default_velocity_softcap);
         device.velocity_smoothing_ms =
           optional_u32(ed.velocity_smoothing_ms, default_velocity_smoothing_ms);
+        device.online_parameter = Some(resolve_online_parameter_for_save(
+          i,
+          &ed.name,
+          device.online_parameter.as_deref(),
+        ));
         device
       } else {
         Device {
           name: name_for_yaml(&effective_device_name(i, &ed.name)),
           ip: ed.ip.trim().to_string(),
           proximity_parameter: normalize_proximity_parameter(&ed.proximity_parameter),
-          online_parameter: None,
+          online_parameter: Some(resolve_online_parameter_for_save(i, &ed.name, None)),
           max_speed: if ed.max_speed == default_max {
             None
           } else {
@@ -333,6 +328,32 @@ fn name_for_yaml(name: &str) -> Option<String> {
     None
   } else {
     Some(name.to_string())
+  }
+}
+
+/// Write `Headpats_online`-style default when YAML has null/missing; keep explicit custom values.
+fn resolve_online_parameter_for_save(
+  index: usize,
+  editor_name: &str,
+  existing: Option<&str>,
+) -> String {
+  let default_online = default_online_parameter_short(index, editor_name);
+  match existing {
+    None => default_online,
+    Some(value) if value.trim().is_empty() || value.eq_ignore_ascii_case("null") => default_online,
+    Some(value) => {
+      const PREFIX: &str = "/avatar/parameters/";
+      let short = if value.starts_with(PREFIX) {
+        value[PREFIX.len()..].to_string()
+      } else {
+        value.trim_start_matches('/').to_string()
+      };
+      if short.is_empty() {
+        default_online
+      } else {
+        short
+      }
+    }
   }
 }
 
