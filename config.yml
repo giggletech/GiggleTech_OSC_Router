@@ -3,21 +3,21 @@ devices:
   ip: 192.168.1.69
   proximity_parameter: proximity_01
   online_parameter: Headpats_online
-  max_speed: 37
+  max_speed: 20
   speed_scale: null
   max_speed_parameter: null
   use_velocity_control: null
-  velocity_on_prox_drop: null
+  velocity_on_prox_drop: true
   outer_proximity: null
   inner_proximity: null
-  velocity_scalar: 100
-  velocity_softcap: 21
+  velocity_scalar: 15
+  velocity_softcap: 61
   velocity_smoothing_ms: 190
 - name: Device 2
   ip: 192.168.1.70
   proximity_parameter: proximity_02
   online_parameter: Device_2_online
-  max_speed: 100
+  max_speed: null
   speed_scale: null
   max_speed_parameter: null
   use_velocity_control: null
@@ -27,6 +27,20 @@ devices:
   velocity_scalar: null
   velocity_softcap: null
   velocity_smoothing_ms: null
+- name: Device 3
+  ip: 192.168.1.70
+  proximity_parameter: proximity_03
+  online_parameter: Device_3_online
+  max_speed: null
+  speed_scale: null
+  max_speed_parameter: null
+  use_velocity_control: null
+  velocity_on_prox_drop: true
+  outer_proximity: null
+  inner_proximity: null
+  velocity_scalar: null
+  velocity_softcap: null
+  velocity_smoothing_ms: 135
 setup:
   port_rx: '9001'
   default_min_speed: 5

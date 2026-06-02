@@ -337,15 +337,24 @@ body.ui-large #config-wrap {
 }
 .device-card.is-collapsed .device-card-layout {
   min-height: 0;
+  align-items: flex-start;
 }
 .device-card.is-collapsed .device-card-body {
   display: none;
 }
 .device-card.is-collapsed .test-slider-col {
+  align-self: flex-start;
+  flex: 0 0 144px;
+}
+.device-card.is-collapsed .test-slider-track {
   display: none;
 }
-.device-card.is-collapsed .device-main {
-  width: 100%;
+.device-card.is-collapsed .motor-indicator-square {
+  display: block;
+  pointer-events: auto;
+  cursor: pointer;
+  touch-action: none;
+  user-select: none;
 }
 .device-card.is-collapsed .device-actions {
   margin-top: 0;
@@ -750,15 +759,23 @@ body.ui-large #config-wrap {
   letter-spacing: 0.01em;
 }
 .proximity-band-hide-row {
-  display: flex;
-  align-items: center;
-  gap: 16px;
   flex-shrink: 0;
 }
-.proximity-band-hide-label {
-  font-size: 1.5rem;
-  color: #a1a1b5;
-  font-weight: 500;
+.proximity-band-hide-row .btn-sm {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px 20px;
+  border-radius: 999px;
+  border: 2px solid #3f3f4e;
+  background: #2a2a36;
+  color: #e8e8f0;
+  font-size: 1.6rem;
+  font-weight: 600;
+  line-height: 1;
+}
+.proximity-band-hide-row .btn-sm:hover {
+  background: #3f3f4e;
 }
 .proximity-band-panel-body {
   display: flex;
@@ -928,6 +945,31 @@ body.ui-large #config-wrap {
   z-index: 1;
   background: linear-gradient(to top, #7c3aed, #e879f9);
   pointer-events: none;
+}
+.motor-indicator-square {
+  display: none;
+  position: relative;
+  flex-shrink: 0;
+  width: var(--test-slider-track-width);
+  height: var(--test-slider-track-width);
+  --motor-level: 0;
+  border: 4px solid #3f3f4e;
+  border-radius: 20px;
+  background: #0f0f14;
+  box-sizing: border-box;
+  overflow: hidden;
+  pointer-events: none;
+}
+.motor-indicator-square::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: #a855f7;
+  opacity: var(--motor-level);
+  transition: opacity 0.08s ease-out;
+}
+.motor-indicator-square.active {
+  border-color: #a855f7;
 }
 .device-actions { display: flex; gap: 16px; flex-wrap: wrap; align-items: center; margin-top: 32px; width: 100%; }
 .device-actions .device-card-toggle-btn { margin-left: auto; }
@@ -1206,6 +1248,12 @@ function applyDeviceCardCollapsedUi(index, collapsed) {
     btn.textContent = collapsed ? 'Show' : 'Hide';
     btn.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
   }
+  if (collapsed) {
+    const d = editorDevices[index];
+    const paramKey = d ? (d.proximity_parameter || '').trim() : '';
+    const level = paramKey && motorBarByParam[paramKey] != null ? motorBarByParam[paramKey] : 0;
+    setMotorVisualForDevice(index, level);
+  }
 }
 let activeTestDrag = null;
 let testSliderSafetyReady = false;
@@ -1461,16 +1509,10 @@ function renderDevices() {
             <div class="proximity-band-panel-header">
               <span class="proximity-band-panel-title">Collider adjustment</span>
               <div class="proximity-band-hide-row">
-                <span class="proximity-band-hide-label">Hide</span>
-                <label class="velocity-switch">
-                  <input type="checkbox" class="velocity-toggle-input" role="switch"
-                    aria-label="Show collider adjustment sliders for device ${i + 1}"
-                    ${isColliderAdjustmentVisible(i) ? 'checked' : ''}
-                    onchange="onColliderAdjustmentVisibleChange(${i}, this)">
-                  <span class="velocity-toggle-track" aria-hidden="true">
-                    <span class="velocity-toggle-thumb"></span>
-                  </span>
-                </label>
+                <button type="button" class="btn btn-secondary btn-sm" id="collider-adjust-toggle-${i}"
+                  aria-expanded="${isColliderAdjustmentVisible(i) ? 'true' : 'false'}"
+                  aria-label="${isColliderAdjustmentVisible(i) ? 'Hide' : 'Show'} collider adjustment for device ${i + 1}"
+                  onclick="toggleColliderAdjustment(${i})">${isColliderAdjustmentVisible(i) ? 'Hide' : 'Show'}</button>
               </div>
             </div>
             <div class="proximity-band-panel-body${isColliderAdjustmentVisible(i) ? '' : ' hidden'}" id="proximity-band-${i}">
@@ -1519,6 +1561,8 @@ function renderDevices() {
             <span class="test-slider-arrow" aria-hidden="true"></span>
             <div class="test-slider-fill"></div>
           </div>
+          <div class="motor-indicator-square" data-index="${i}"
+            aria-label="Motor test at full power for device ${i + 1}"></div>
         </div>
       </div>
     </div>
@@ -1679,6 +1723,19 @@ function setSliderVisual(trackEl, value) {
   }
 }
 
+function setMotorSquareVisual(squareEl, value) {
+  value = Math.max(0, Math.min(1, value));
+  squareEl.style.setProperty('--motor-level', String(value));
+  squareEl.classList.toggle('active', value > 0);
+}
+
+function setMotorVisualForDevice(index, value) {
+  const track = document.querySelector('.test-slider-track[data-index="' + index + '"]');
+  if (track) setSliderVisual(track, value);
+  const square = document.querySelector('.motor-indicator-square[data-index="' + index + '"]');
+  if (square) setMotorSquareVisual(square, value);
+}
+
 function endActiveTestDrag() {
   if (!activeTestDrag) return;
   const drag = activeTestDrag;
@@ -1697,7 +1754,11 @@ function endActiveTestDrag() {
       drag.trackEl.releasePointerCapture(drag.pointerId);
     }
   } catch (_) {}
-  if (drag.trackEl) setSliderVisual(drag.trackEl, 0);
+  if (drag.trackEl) {
+    const idx = parseInt(drag.trackEl.dataset.index, 10);
+    if (!Number.isNaN(idx)) setMotorVisualForDevice(idx, 0);
+    else setSliderVisual(drag.trackEl, 0);
+  }
   if (drag.ip) {
     window.ipc.postMessage('device-motor:' + JSON.stringify({ ip: drag.ip, value: 0 }));
     window.ipc.postMessage('device-stop:' + drag.ip);
@@ -1733,6 +1794,44 @@ function bindDeviceSliders() {
       beginSliderDrag(index, trackEl, e);
     };
   });
+  document.querySelectorAll('.motor-indicator-square').forEach((squareEl) => {
+    const index = parseInt(squareEl.dataset.index, 10);
+    squareEl.onpointerdown = (e) => {
+      const card = squareEl.closest('.device-card');
+      if (!card || !card.classList.contains('is-collapsed')) return;
+      e.preventDefault();
+      endActiveTestDrag();
+      squareEl.setPointerCapture(e.pointerId);
+      beginMotorSquarePress(index, squareEl, e);
+    };
+  });
+}
+
+function beginMotorSquarePress(index, squareEl, e) {
+  const ip = (editorDevices[index] && editorDevices[index].ip || '').trim();
+  if (!ip) {
+    setConfigStatus('Enter an IP address before testing.', true);
+    try { squareEl.releasePointerCapture(e.pointerId); } catch (_) {}
+    return;
+  }
+
+  const drag = {
+    pointerId: e.pointerId,
+    trackEl: squareEl,
+    ip,
+    dragEnded: false,
+    pendingSend: null,
+    lastSent: 100,
+    onMove: null,
+    onLostCapture: null,
+  };
+  activeTestDrag = drag;
+
+  setMotorVisualForDevice(index, 1);
+  window.ipc.postMessage('device-motor:' + JSON.stringify({ ip: ip, value: 1 }));
+
+  drag.onLostCapture = () => endActiveTestDrag();
+  squareEl.addEventListener('lostpointercapture', drag.onLostCapture);
 }
 
 function beginSliderDrag(index, trackEl, e) {
@@ -1762,7 +1861,7 @@ function beginSliderDrag(index, trackEl, e) {
   drag.onMove = (ev) => {
     if (drag.dragEnded || activeTestDrag !== drag) return;
     const value = sliderValueFromEvent(trackEl, ev);
-    setSliderVisual(trackEl, value);
+    setMotorVisualForDevice(index, value);
     const stepped = Math.round(value * 100);
     if (stepped === drag.lastSent) return;
     drag.lastSent = stepped;
@@ -1809,11 +1908,17 @@ function onVelocityControlChange(index, input) {
   saveConfig(true);
 }
 
-function onColliderAdjustmentVisibleChange(index, input) {
-  const visible = !!input.checked;
+function toggleColliderAdjustment(index) {
+  const visible = !isColliderAdjustmentVisible(index);
   setColliderAdjustmentVisible(index, visible);
   const body = document.getElementById('proximity-band-' + index);
   if (body) body.classList.toggle('hidden', !visible);
+  const btn = document.getElementById('collider-adjust-toggle-' + index);
+  if (btn) {
+    btn.textContent = visible ? 'Hide' : 'Show';
+    btn.setAttribute('aria-expanded', visible ? 'true' : 'false');
+    btn.setAttribute('aria-label', (visible ? 'Hide' : 'Show') + ' collider adjustment for device ' + (index + 1));
+  }
 }
 
 function toggleDeviceCardCollapse(index) {
@@ -2109,8 +2214,7 @@ function applyMotorBars(updates) {
     }
     editorDevices.forEach((d, i) => {
       if ((d.proximity_parameter || '').trim() !== paramKey) return;
-      const track = document.querySelector('.test-slider-track[data-index="' + i + '"]');
-      if (track) setSliderVisual(track, motorBarByParam[paramKey]);
+      setMotorVisualForDevice(i, motorBarByParam[paramKey]);
     });
   }
 }
