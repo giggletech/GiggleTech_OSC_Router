@@ -3,6 +3,7 @@
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 
+use chrono::Local;
 use once_cell::sync::OnceCell;
 
 const MAX_LINES: usize = 100;
@@ -132,18 +133,23 @@ pub fn snapshot() -> Vec<String> {
     .unwrap_or_default()
 }
 
+fn timestamp_prefix() -> String {
+  Local::now().format("[%H:%M:%S] ").to_string()
+}
+
 fn push_line(line: &str) {
+  let line = format!("{}{}", timestamp_prefix(), line);
+  if CONSOLE_MIRROR.load(Ordering::Relaxed) {
+    println!("{}", line);
+  }
+
   if let Ok(mut lines) = STATUS_LINES.lock() {
-    lines.push(line.to_string());
+    lines.push(line);
     if lines.len() > MAX_LINES {
       let excess = lines.len() - MAX_LINES;
       lines.drain(0..excess);
       BUFFER_EPOCH.fetch_add(1, Ordering::Release);
     }
-  }
-
-  if CONSOLE_MIRROR.load(Ordering::Relaxed) {
-    println!("{}", line);
   }
 
   if let Some(notify) = STATUS_NOTIFY.get() {

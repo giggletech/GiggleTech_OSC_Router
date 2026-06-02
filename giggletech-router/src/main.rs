@@ -9,6 +9,7 @@
 
 use std::io;
 
+mod _version;
 mod config;
 mod config_editor;
 mod device_discovery;

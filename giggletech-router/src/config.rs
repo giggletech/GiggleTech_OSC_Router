@@ -321,7 +321,7 @@ fn load_config_internal(verbose: bool) -> Result<(GlobalConfig, Vec<DeviceConfig
     }
 
     if verbose {
-        crate::log_ui::status("GiggleTech OSC Router v1.4.0");
+        crate::log_ui::status(&crate::_version::display_name());
         crate::log_ui::status(&format!(
             "Loaded {} device(s) from {}",
             device_configs.len(),

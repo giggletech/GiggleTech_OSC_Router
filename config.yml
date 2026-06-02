@@ -3,7 +3,7 @@ devices:
   ip: 192.168.1.69
   proximity_parameter: proximity_01
   online_parameter: Headpats_online
-  max_speed: 32
+  max_speed: 37
   speed_scale: null
   max_speed_parameter: null
   use_velocity_control: false
