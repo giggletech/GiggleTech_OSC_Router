@@ -337,14 +337,18 @@ body.ui-large #config-wrap {
 }
 .device-card.is-collapsed .device-card-layout {
   min-height: 0;
-  align-items: flex-start;
+  align-items: stretch;
 }
 .device-card.is-collapsed .device-card-body {
   display: none;
 }
 .device-card.is-collapsed .test-slider-col {
-  align-self: flex-start;
+  align-self: stretch;
   flex: 0 0 144px;
+  background: #16161e;
+  border-left: 2px solid #2a2a36;
+  border-radius: 0 18px 18px 0;
+  justify-content: flex-start;
 }
 .device-card.is-collapsed .test-slider-track {
   display: none;
@@ -967,9 +971,6 @@ body.ui-large #config-wrap {
   background: #a855f7;
   opacity: var(--motor-level);
   transition: opacity 0.08s ease-out;
-}
-.motor-indicator-square.active {
-  border-color: #a855f7;
 }
 .device-actions { display: flex; gap: 16px; flex-wrap: wrap; align-items: center; margin-top: 32px; width: 100%; }
 .device-actions .device-card-toggle-btn { margin-left: auto; }
