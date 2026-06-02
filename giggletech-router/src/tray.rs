@@ -335,6 +335,24 @@ body.ui-large #config-wrap {
   border-radius: 20px;
   overflow: hidden;
 }
+.device-card.is-collapsed .device-card-layout {
+  min-height: 0;
+}
+.device-card.is-collapsed .device-card-body {
+  display: none;
+}
+.device-card.is-collapsed .test-slider-col {
+  display: none;
+}
+.device-card.is-collapsed .device-main {
+  width: 100%;
+}
+.device-card.is-collapsed .device-actions {
+  margin-top: 0;
+}
+.device-card.is-collapsed .device-actions > .btn-danger {
+  display: none;
+}
 .device-card-layout {
   display: flex;
   flex-direction: row;
@@ -911,7 +929,8 @@ body.ui-large #config-wrap {
   background: linear-gradient(to top, #7c3aed, #e879f9);
   pointer-events: none;
 }
-.device-actions { display: flex; gap: 16px; flex-wrap: wrap; align-items: center; margin-top: 32px; }
+.device-actions { display: flex; gap: 16px; flex-wrap: wrap; align-items: center; margin-top: 32px; width: 100%; }
+.device-actions .device-card-toggle-btn { margin-left: auto; }
 .device-actions .btn[disabled] { opacity: 0.55; cursor: default; }
 .device-actions .btn-sm {
   /* Make Confirm/Cancel match pill sizing. */
@@ -1158,6 +1177,36 @@ function setColliderAdjustmentVisible(index, visible) {
     localStorage.setItem('colliderAdjustmentVisibleByIndex', JSON.stringify(colliderAdjustmentVisibleByIndex));
   } catch (_) {}
 }
+
+let deviceCardCollapsedByIndex = (() => {
+  try {
+    const v = localStorage.getItem('deviceCardCollapsedByIndex');
+    if (v) return JSON.parse(v);
+  } catch (_) {}
+  return {};
+})();
+
+function isDeviceCardCollapsed(index) {
+  return !!deviceCardCollapsedByIndex[index];
+}
+
+function setDeviceCardCollapsed(index, collapsed) {
+  deviceCardCollapsedByIndex[index] = collapsed;
+  try {
+    localStorage.setItem('deviceCardCollapsedByIndex', JSON.stringify(deviceCardCollapsedByIndex));
+  } catch (_) {}
+}
+
+function applyDeviceCardCollapsedUi(index, collapsed) {
+  const card = document.querySelector('.device-card[data-device-index="' + index + '"]');
+  if (!card) return;
+  card.classList.toggle('is-collapsed', collapsed);
+  const btn = document.getElementById('device-card-toggle-' + index);
+  if (btn) {
+    btn.textContent = collapsed ? 'Show' : 'Hide';
+    btn.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
+  }
+}
 let activeTestDrag = null;
 let testSliderSafetyReady = false;
 const SPEED_SLIDER_STEPS = 1000;
@@ -1298,7 +1347,7 @@ function renderDevices() {
     return;
   }
   list.innerHTML = editorDevices.map((d, i) => `
-    <div class="device-card">
+    <div class="device-card${isDeviceCardCollapsed(i) ? ' is-collapsed' : ''}" data-device-index="${i}">
       <div class="device-card-layout">
         <div class="device-main">
           <div class="device-name-row">
@@ -1309,6 +1358,7 @@ function renderDevices() {
             <span class="device-status unknown" id="device-status-${i}">—</span>
             <button type="button" class="btn btn-secondary btn-sm" onclick="pingDevice(${i}, true)">Ping</button>
           </div>
+          <div class="device-card-body">
           <div class="device-fields">
             <label>IP address
               <div class="ip-input-row">
@@ -1450,12 +1500,17 @@ function renderDevices() {
               </label>
             </div>
           </section>
+          </div>
           <div class="device-actions">
             ${pendingRemoveIndex === i
               ? `<button type="button" class="btn btn-danger" onclick="cancelRemoveDevice()">Remove</button>
                  <button type="button" class="btn btn-secondary btn-sm" onclick="cancelRemoveDevice()">Cancel</button>
                  <button type="button" class="btn btn-primary btn-sm" onclick="confirmRemoveDevice(${i})">Confirm</button>`
               : `<button type="button" class="btn btn-danger" onclick="requestRemoveDevice(${i})">Remove</button>`}
+            <button type="button" class="btn btn-secondary btn-sm device-card-toggle-btn" id="device-card-toggle-${i}"
+              aria-expanded="${isDeviceCardCollapsed(i) ? 'false' : 'true'}"
+              aria-label="${isDeviceCardCollapsed(i) ? 'Show' : 'Hide'} device card details for device ${i + 1}"
+              onclick="toggleDeviceCardCollapse(${i})">${isDeviceCardCollapsed(i) ? 'Show' : 'Hide'}</button>
           </div>
         </div>
         <div class="test-slider-col">
@@ -1759,6 +1814,14 @@ function onColliderAdjustmentVisibleChange(index, input) {
   setColliderAdjustmentVisible(index, visible);
   const body = document.getElementById('proximity-band-' + index);
   if (body) body.classList.toggle('hidden', !visible);
+}
+
+function toggleDeviceCardCollapse(index) {
+  const collapsed = !isDeviceCardCollapsed(index);
+  setDeviceCardCollapsed(index, collapsed);
+  applyDeviceCardCollapsedUi(index, collapsed);
+  if (collapsed) endActiveTestDrag();
+  syncLogSectionLayout();
 }
 
 function onVelocityOnProxDropChange(index, input) {

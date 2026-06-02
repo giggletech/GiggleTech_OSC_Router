@@ -6,7 +6,7 @@ devices:
   max_speed: 37
   speed_scale: null
   max_speed_parameter: null
-  use_velocity_control: false
+  use_velocity_control: null
   velocity_on_prox_drop: null
   outer_proximity: null
   inner_proximity: null
@@ -15,7 +15,7 @@ devices:
   velocity_smoothing_ms: 190
 - name: Device 2
   ip: 192.168.1.70
-  proximity_parameter: proximity_01
+  proximity_parameter: proximity_02
   online_parameter: Device_2_online
   max_speed: 100
   speed_scale: null
