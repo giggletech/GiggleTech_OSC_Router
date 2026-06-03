@@ -71,8 +71,8 @@ fn queue_live_ui_flush(proxy: &EventLoopProxy<UserEvent>) {
   }
 }
 
-fn queue_motor_bar(param: String, value: f32, proxy: &EventLoopProxy<UserEvent>) {
-  PENDING_MOTOR_BARS.lock().unwrap().insert(param, value);
+fn queue_motor_bar(device_ip: String, value: f32, proxy: &EventLoopProxy<UserEvent>) {
+  PENDING_MOTOR_BARS.lock().unwrap().insert(device_ip, value);
   queue_live_ui_flush(proxy);
 }
 
@@ -1251,8 +1251,8 @@ function applyDeviceCardCollapsedUi(index, collapsed) {
   }
   if (collapsed) {
     const d = editorDevices[index];
-    const paramKey = d ? (d.proximity_parameter || '').trim() : '';
-    const level = paramKey && motorBarByParam[paramKey] != null ? motorBarByParam[paramKey] : 0;
+    const ipKey = d ? (d.ip || '').trim() : '';
+    const level = ipKey && motorBarByIp[ipKey] != null ? motorBarByIp[ipKey] : 0;
     setMotorVisualForDevice(index, level);
   }
 }
@@ -1319,8 +1319,12 @@ function proxToSliderPct(p) {
 function sliderPctToProx(pct) {
   return Math.round(pct) / 100;
 }
-function formatProx(p) {
-  return Math.round(Math.max(0, Math.min(1, p)) * 100) + '%';
+/** Collider sliders: left = close/high proximity, right = far/low (inverted range input). */
+function proxToColliderSliderPct(p) {
+  return 100 - proxToSliderPct(p);
+}
+function colliderSliderPctToProx(pct) {
+  return sliderPctToProx(100 - pct);
 }
 function effectiveOuterProx(d) {
   return d.outer_proximity ?? editorVelocityProxDefaults.outer;
@@ -1520,24 +1524,22 @@ function renderDevices() {
               <label class="slider-field">
                 <div class="slider-field-header">
                   <span class="slider-field-title">Inner</span>
-                  <span class="speed-value" id="inner-prox-val-${i}">${formatProx(effectiveOuterProx(d))}</span>
                 </div>
                 <div class="speed-slider-row">
                   <input type="range" id="inner-prox-${i}" min="0" max="100"
-                    value="${proxToSliderPct(effectiveOuterProx(d))}"
-                    aria-label="Inner proximity (far edge) for device ${i + 1}"
+                    value="${proxToColliderSliderPct(effectiveInnerProx(d))}"
+                    aria-label="Inner proximity (close edge) for device ${i + 1}"
                     oninput="onInnerProxBandChange(${i}, this)" onchange="saveConfig(true)">
                 </div>
               </label>
               <label class="slider-field">
                 <div class="slider-field-header">
                   <span class="slider-field-title">Outer</span>
-                  <span class="speed-value" id="outer-prox-val-${i}">${formatProx(effectiveInnerProx(d))}</span>
                 </div>
                 <div class="speed-slider-row">
                   <input type="range" id="outer-prox-${i}" min="0" max="100"
-                    value="${proxToSliderPct(effectiveInnerProx(d))}"
-                    aria-label="Outer proximity (close edge) for device ${i + 1}"
+                    value="${proxToColliderSliderPct(effectiveOuterProx(d))}"
+                    aria-label="Outer proximity (far edge) for device ${i + 1}"
                     oninput="onOuterProxBandChange(${i}, this)" onchange="saveConfig(true)">
                 </div>
               </label>
@@ -1713,6 +1715,7 @@ function sliderValueFromEvent(trackEl, ev) {
 }
 
 function setSliderVisual(trackEl, value) {
+  value = Math.max(0, Math.min(1, value));
   const fill = trackEl.querySelector('.test-slider-fill');
   if (fill) fill.style.height = Math.round(value * 100) + '%';
   trackEl.classList.toggle('active', value > 0);
@@ -1731,9 +1734,11 @@ function setMotorSquareVisual(squareEl, value) {
 }
 
 function setMotorVisualForDevice(index, value) {
-  const track = document.querySelector('.test-slider-track[data-index="' + index + '"]');
+  const card = document.querySelector('.device-card[data-device-index="' + index + '"]');
+  if (!card) return;
+  const track = card.querySelector('.test-slider-track');
   if (track) setSliderVisual(track, value);
-  const square = document.querySelector('.motor-indicator-square[data-index="' + index + '"]');
+  const square = card.querySelector('.motor-indicator-square');
   if (square) setMotorSquareVisual(square, value);
 }
 
@@ -1936,36 +1941,30 @@ function onVelocityOnProxDropChange(index, input) {
   saveConfig(true);
 }
 
-/** Inner slider: far edge (stored as `outer_proximity`, minimum of active band). */
+/** Inner slider: close edge (`inner_proximity`, maximum of active band). */
 function onInnerProxBandChange(index, input) {
   const d = editorDevices[index];
   if (!d) return;
-  const farEdge = sliderPctToProx(parseInt(input.value, 10));
-  d.outer_proximity = farEdge;
-  const label = document.getElementById('inner-prox-val-' + index);
-  if (label) label.textContent = formatProx(farEdge);
-  if (d.inner_proximity <= farEdge) {
-    const closeEdge = Math.min(1, farEdge + 0.01);
-    d.inner_proximity = closeEdge;
-    const outerInput = document.getElementById('outer-prox-' + index);
-    const outerLabel = document.getElementById('outer-prox-val-' + index);
-    if (outerInput) outerInput.value = proxToSliderPct(closeEdge);
-    if (outerLabel) outerLabel.textContent = formatProx(closeEdge);
-  }
-  maybeClearConfigError();
-}
-
-/** Outer slider: close edge (stored as `inner_proximity`, maximum of active band). */
-function onOuterProxBandChange(index, input) {
-  const d = editorDevices[index];
-  if (!d) return;
-  let closeEdge = sliderPctToProx(parseInt(input.value, 10));
+  let closeEdge = colliderSliderPctToProx(parseInt(input.value, 10));
   const farEdge = effectiveOuterProx(d);
   if (closeEdge <= farEdge) closeEdge = Math.min(1, farEdge + 0.01);
   d.inner_proximity = closeEdge;
-  input.value = proxToSliderPct(closeEdge);
-  const label = document.getElementById('outer-prox-val-' + index);
-  if (label) label.textContent = formatProx(closeEdge);
+  input.value = proxToColliderSliderPct(closeEdge);
+  maybeClearConfigError();
+}
+
+/** Outer slider: far edge (`outer_proximity`, minimum of active band). */
+function onOuterProxBandChange(index, input) {
+  const d = editorDevices[index];
+  if (!d) return;
+  const farEdge = colliderSliderPctToProx(parseInt(input.value, 10));
+  d.outer_proximity = farEdge;
+  if (d.inner_proximity <= farEdge) {
+    const closeEdge = Math.min(1, farEdge + 0.01);
+    d.inner_proximity = closeEdge;
+    const innerInput = document.getElementById('inner-prox-' + index);
+    if (innerInput) innerInput.value = proxToColliderSliderPct(closeEdge);
+  }
   maybeClearConfigError();
 }
 
@@ -2190,32 +2189,33 @@ window.onConfigError = function(msg) {
 };
 
 const patBarByParam = {};
-const motorBarByParam = {};
+/** Live motor level per device IP (matches router `device_uri` / editor `ip`). */
+const motorBarByIp = {};
 
 function applyMotorBars(updates) {
   if (activeTestDrag) return;
-  for (const param in updates) {
-    const target = Math.max(0, Math.min(1, updates[param]));
-    const paramKey = (param || '').trim();
-    if (!paramKey) continue;
+  for (const ip in updates) {
+    const target = Math.max(0, Math.min(1, updates[ip]));
+    const ipKey = (ip || '').trim();
+    if (!ipKey) continue;
 
     // Smooth motor output so the live indicator looks stable (EMA),
     // but snap hard to 0 on power-down so it never looks "stuck".
     if (target <= 0) {
-      motorBarByParam[paramKey] = 0;
+      motorBarByIp[ipKey] = 0;
     } else if (target >= 0.999) {
       // If the real motor out is at full-scale, show it hitting the top.
-      motorBarByParam[paramKey] = 1;
+      motorBarByIp[ipKey] = 1;
     } else {
       // Higher alpha responds faster; lower alpha looks smoother.
-      const prev = (motorBarByParam[paramKey] != null) ? motorBarByParam[paramKey] : target;
+      const prev = (motorBarByIp[ipKey] != null) ? motorBarByIp[ipKey] : target;
       const alpha = (target > prev) ? 0.35 : 0.18;
       const value = prev + (target - prev) * alpha;
-      motorBarByParam[paramKey] = value;
+      motorBarByIp[ipKey] = value;
     }
     editorDevices.forEach((d, i) => {
-      if ((d.proximity_parameter || '').trim() !== paramKey) return;
-      setMotorVisualForDevice(i, motorBarByParam[paramKey]);
+      if ((d.ip || '').trim() !== ipKey) return;
+      setMotorVisualForDevice(i, motorBarByIp[ipKey]);
     });
   }
 }
@@ -2266,20 +2266,20 @@ function statusViewportLines() {
 function renderStatus(lines) {
   const el = document.getElementById('log');
   if (!el) return;
-  const tail = lines.slice(-statusViewportLines());
-  el.textContent = tail.join('\n');
+  const head = lines.slice(0, statusViewportLines());
+  el.textContent = head.join('\n');
 }
 
 function setStatusLines(lines) {
-  lastStatusLines = lines.slice(-STATUS_MAX_LINES);
+  lastStatusLines = lines.slice(-STATUS_MAX_LINES).reverse();
   renderStatus(lastStatusLines);
 }
 
 function appendStatusLines(lines) {
   if (!lines || !lines.length) return;
-  lastStatusLines = lastStatusLines.concat(lines);
+  lastStatusLines = lines.slice().reverse().concat(lastStatusLines);
   if (lastStatusLines.length > STATUS_MAX_LINES) {
-    lastStatusLines = lastStatusLines.slice(-STATUS_MAX_LINES);
+    lastStatusLines = lastStatusLines.slice(0, STATUS_MAX_LINES);
   }
   renderStatus(lastStatusLines);
 }
@@ -2669,9 +2669,9 @@ pub fn run(start_minimized: bool, primary: PrimaryInstance) {
     let _ = event_proxy.send_event(UserEvent::StatusUpdated);
   });
 
-  let prox_proxy = event_loop.create_proxy();
-  log_ui::set_proximity_notify(move |param, value| {
-    queue_motor_bar(param.to_string(), value, &prox_proxy);
+  let motor_proxy = event_loop.create_proxy();
+  log_ui::set_proximity_notify(move |device_ip, value| {
+    queue_motor_bar(device_ip.to_string(), value, &motor_proxy);
   });
 
   let pat_proxy = event_loop.create_proxy();

@@ -251,9 +251,11 @@ pub fn save_editor_state(state: &EditorState, quiet: bool) -> Result<(), String>
         device.velocity_softcap = optional_u32(ed.velocity_softcap, default_velocity_softcap);
         device.velocity_smoothing_ms =
           optional_u32(ed.velocity_smoothing_ms, default_velocity_smoothing_ms);
+        let previous_name = existing[i].name.as_deref().unwrap_or("");
         device.online_parameter = Some(resolve_online_parameter_for_save(
           i,
           &ed.name,
+          previous_name,
           device.online_parameter.as_deref(),
         ));
         device
@@ -262,7 +264,12 @@ pub fn save_editor_state(state: &EditorState, quiet: bool) -> Result<(), String>
           name: name_for_yaml(&effective_device_name(i, &ed.name)),
           ip: ed.ip.trim().to_string(),
           proximity_parameter: normalize_proximity_parameter(&ed.proximity_parameter),
-          online_parameter: Some(resolve_online_parameter_for_save(i, &ed.name, None)),
+          online_parameter: Some(resolve_online_parameter_for_save(
+            i,
+            &ed.name,
+            "",
+            None,
+          )),
           max_speed: if ed.max_speed == default_max {
             None
           } else {
@@ -331,30 +338,41 @@ fn name_for_yaml(name: &str) -> Option<String> {
   }
 }
 
-/// Write `Headpats_online`-style default when YAML has null/missing; keep explicit custom values.
+/// Write `{name}_online` when YAML has null/missing, or when the stored value still matches
+/// the auto-generated name for the previous device name. Keep values the user set manually.
 fn resolve_online_parameter_for_save(
   index: usize,
   editor_name: &str,
+  previous_yaml_name: &str,
   existing: Option<&str>,
 ) -> String {
   let default_online = default_online_parameter_short(index, editor_name);
-  match existing {
-    None => default_online,
-    Some(value) if value.trim().is_empty() || value.eq_ignore_ascii_case("null") => default_online,
-    Some(value) => {
-      const PREFIX: &str = "/avatar/parameters/";
-      let short = if value.starts_with(PREFIX) {
-        value[PREFIX.len()..].to_string()
-      } else {
-        value.trim_start_matches('/').to_string()
-      };
-      if short.is_empty() {
-        default_online
-      } else {
-        short
-      }
-    }
+  let Some(short) = online_parameter_to_short(existing) else {
+    return default_online;
+  };
+  if short.is_empty() || short.eq_ignore_ascii_case("null") {
+    return default_online;
   }
+  let previous_default = default_online_parameter_short(index, previous_yaml_name);
+  if short == previous_default {
+    default_online
+  } else {
+    short
+  }
+}
+
+fn online_parameter_to_short(existing: Option<&str>) -> Option<String> {
+  let value = existing?.trim();
+  if value.is_empty() {
+    return None;
+  }
+  const PREFIX: &str = "/avatar/parameters/";
+  let short = if value.starts_with(PREFIX) {
+    value[PREFIX.len()..].to_string()
+  } else {
+    value.trim_start_matches('/').to_string()
+  };
+  Some(short)
 }
 
 fn strip_proximity_prefix(s: String) -> String {

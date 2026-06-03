@@ -42,7 +42,7 @@ pub fn set_status_notify(notify: impl Fn() + Send + Sync + 'static) {
   let _ = STATUS_NOTIFY.set(Box::new(notify));
 }
 
-/// Register a callback for live proximity (motor bars in the output window).
+/// Register a callback for live motor bars in the output window (`key` = device IP).
 pub fn set_proximity_notify(notify: impl Fn(&str, f32) + Send + Sync + 'static) {
   let _ = PROXIMITY_NOTIFY.set(Box::new(notify));
 }
@@ -82,7 +82,8 @@ pub fn notify_motor_tx_sent(device_ip: &str, motor_tx: i32) {
     .and_then(|m| m.get(device_ip).cloned());
   let Some(params) = params else { return; };
   let motor_out = (motor_tx as f32 / params.max_tx).clamp(0.0, 1.0);
-  notify_proximity(&params.proximity_parameter, motor_out);
+  // Key live motor UI by device IP so bars never cross onto another card.
+  notify_proximity(device_ip, motor_out);
 }
 
 /// Register a callback for live pat bars (`---->`), separate from the status console.
