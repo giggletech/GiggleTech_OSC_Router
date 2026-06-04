@@ -5,6 +5,15 @@
   const CHART_SCALE_MAX = 100;
   const TRAIL_MAX = 48;
   const TRAIL_ANGLE = -Math.PI / 2;
+  /** Touch ring canvas targets 2× the default layout size when space allows. */
+  const RING_LAYOUT_SCALE = 2;
+  const RING_LAYOUT_SCALE_VR = 4;
+
+  function ringLayoutScale() {
+    return document.body && document.body.classList.contains('ui-large')
+      ? RING_LAYOUT_SCALE_VR
+      : RING_LAYOUT_SCALE;
+  }
 
   const instances = new Map();
   let globalTickRaf = 0;
@@ -312,10 +321,10 @@
   function chartPlotMetrics(w, h, dpr) {
     return {
       maxV: CHART_SCALE_MAX,
-      padL: 40 * dpr,
-      padR: 20 * dpr,
+      padL: 12 * dpr,
+      padR: 12 * dpr,
       padT: 16 * dpr,
-      padB: 26 * dpr
+      padB: 20 * dpr
     };
   }
 
@@ -335,21 +344,13 @@
     const plotH = h - plot.padT - plot.padB;
     const x0 = plot.padL;
     const x1 = w - plot.padR;
-    const labelStyle = 'rgba(107, 107, 128, 0.85)';
     const gridStyle = 'rgba(107, 107, 128, 0.22)';
-    ctx.font = 8 * dpr + 'px Segoe UI, system-ui, sans-serif';
-    ctx.fillStyle = labelStyle;
-    ctx.textAlign = 'right';
-    ctx.textBaseline = 'middle';
     const y100 = plot.padT;
     const y50 = plot.padT + plotH * 0.5;
     const y0 = h - plot.padB;
     drawHLine(ctx, x0, x1, y100, gridStyle, dpr, true);
     drawHLine(ctx, x0, x1, y50, gridStyle, dpr, true);
     drawHLine(ctx, x0, x1, y0, gridStyle, dpr, false);
-    ctx.fillText('100', plot.padL - 8 * dpr, y100);
-    ctx.fillText('50', plot.padL - 8 * dpr, y50);
-    ctx.fillText('0', plot.padL - 8 * dpr, y0);
     return plot;
   }
 
@@ -453,13 +454,14 @@
     if (!col || !inst.diagramWrap) return;
     const plotW = Math.floor(col.getBoundingClientRect().width);
     if (plotW < 24) return;
-    let ringSide = plotW;
+    const scale = ringLayoutScale();
+    let ringSide = plotW * scale;
     if (ringPanel && ringBlock) {
       const head = ringBlock.querySelector('.panel-head');
       const blockGap = 6;
       const overhead = (head ? head.offsetHeight : 0) + blockGap;
       const availH = Math.floor(ringPanel.clientHeight - overhead);
-      if (availH > 24) ringSide = Math.min(plotW, availH);
+      if (availH > 24) ringSide = Math.min(plotW * scale, availH);
     }
     inst.diagramWrap.style.width = '100%';
     inst.diagramWrap.style.height = ringSide + 'px';
@@ -690,6 +692,7 @@
     applyProxSample: applyProxSample,
     applyHeadpatTelemetry: applyHeadpatTelemetry,
     applyMotorSample: applyMotorSample,
-    applyFlush: applyFlush
+    applyFlush: applyFlush,
+    relayoutAll: scheduleGlobalLayout
   };
 })();

@@ -385,8 +385,12 @@ body.ui-large #config-wrap .config-footer {
   background: #000;
   overflow: hidden;
 }
-#log-section:not(.console-expanded) #log-cards-scroll,
-#log-section:not(.console-expanded) #log-bottom-spacer {
+/* Log column visible when console and/or any visualizer is open. */
+#log-section:not(.log-column-open) #log-cards-scroll,
+#log-section:not(.log-column-open) #log-bottom-spacer {
+  display: none !important;
+}
+#log-section:not(.console-expanded) .log-console-card {
   display: none !important;
 }
 #log-cards-scroll {
@@ -403,7 +407,13 @@ body.ui-large #config-wrap .config-footer {
 #log-cards-list {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 20px;
+  width: 100%;
+}
+#log-viz-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
   width: 100%;
 }
 .log-card {
@@ -454,9 +464,19 @@ body.ui-large #config-wrap .config-footer {
   min-height: 0;
 }
 .log-viz-card .log-card-body {
-  min-height: 280px;
-  max-height: 420px;
-  overflow: hidden;
+  min-height: 480px;
+  max-height: 720px;
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+body.ui-large .log-viz-card {
+  overflow: visible;
+}
+body.ui-large .log-viz-card .log-card-body {
+  min-height: 0;
+  max-height: none;
+  overflow-x: hidden;
+  overflow-y: visible;
 }
 .log-console-card .log-card-body {
   min-height: 10rem;
@@ -1681,6 +1701,11 @@ function setUiLarge(enabled) {
     btn.setAttribute('aria-pressed', enabled ? 'true' : 'false');
   }
   syncLogSectionLayout();
+  requestAnimationFrame(() => {
+    if (window.colliderVizApi && window.colliderVizApi.relayoutAll) {
+      window.colliderVizApi.relayoutAll();
+    }
+  });
 }
 
 function toggleUiScale() {
@@ -1707,14 +1732,24 @@ function persistConsoleExpanded(expanded) {
   } catch (_) {}
 }
 
-function applyConsolePanelUi() {
+function hasOpenColliderViz() {
+  const list = document.getElementById('log-viz-cards');
+  return !!(list && list.querySelector('.log-viz-card'));
+}
+
+function isLogColumnOpen() {
+  return consoleExpanded || hasOpenColliderViz();
+}
+
+function applyLogColumnUi() {
   const section = document.getElementById('log-section');
-  if (section) {
-    if (consoleExpanded) section.classList.add('console-expanded');
-    else section.classList.remove('console-expanded');
-  }
   const main = document.getElementById('main');
-  if (main) main.classList.toggle('devices-centered-layout', !consoleExpanded);
+  const logOpen = isLogColumnOpen();
+  if (section) {
+    section.classList.toggle('log-column-open', logOpen);
+    section.classList.toggle('console-expanded', consoleExpanded);
+  }
+  if (main) main.classList.toggle('devices-centered-layout', !logOpen);
   const btn = document.getElementById('console-panel-toggle');
   if (btn) {
     btn.setAttribute('aria-expanded', consoleExpanded ? 'true' : 'false');
@@ -1727,6 +1762,15 @@ function applyConsolePanelUi() {
   if (consoleExpanded && typeof lastStatusLines !== 'undefined' && lastStatusLines.length) {
     requestAnimationFrame(() => renderStatus(lastStatusLines));
   }
+  requestAnimationFrame(() => {
+    if (window.colliderVizApi && window.colliderVizApi.relayoutAll) {
+      window.colliderVizApi.relayoutAll();
+    }
+  });
+}
+
+function applyConsolePanelUi() {
+  applyLogColumnUi();
 }
 
 function toggleConsolePanel() {
@@ -2001,14 +2045,6 @@ function colliderVizPayload(index) {
 
 const COLLIDER_VIZ_CARD_INNER_HTML = {{COLLIDER_VIZ_CARD_INNER}};
 
-function ensureLogColumnVisible() {
-  if (!consoleExpanded) {
-    consoleExpanded = true;
-    persistConsoleExpanded(true);
-    applyConsolePanelUi();
-  }
-}
-
 function openColliderVizCard(payload) {
   const index = payload.index;
   const list = document.getElementById('log-viz-cards');
@@ -2034,10 +2070,7 @@ function openColliderVizCard(payload) {
     if (h3) h3.textContent = name;
   }
   if (window.colliderVizApi) window.colliderVizApi.applyState(payload);
-  requestAnimationFrame(() => {
-    if (lastStatusLines.length) renderStatus(lastStatusLines);
-    syncLogSectionLayout();
-  });
+  applyLogColumnUi();
 }
 
 function isColliderVizOpen(index) {
@@ -2063,7 +2096,7 @@ function closeColliderViz(index) {
   }
   window.ipc.postMessage('collider-viz-close:' + index);
   updateColliderVizButton(index);
-  syncLogSectionLayout();
+  applyLogColumnUi();
 }
 
 function syncColliderViz(index) {
@@ -2083,7 +2116,6 @@ function openColliderViz(index) {
   }
   const p = colliderVizPayload(index);
   if (!p) return;
-  ensureLogColumnVisible();
   openColliderVizCard(p);
   window.ipc.postMessage('collider-viz-open:' + JSON.stringify(p));
   updateColliderVizButton(index);
@@ -2363,9 +2395,9 @@ function renderDevices() {
 function syncLogSectionLayout() {
   const footer = document.querySelector('#config-wrap .config-footer');
   const spacer = document.getElementById('log-bottom-spacer');
-  const consoleOpen = consoleExpanded;
+  const logColumnOpen = isLogColumnOpen();
   if (spacer) {
-    if (footer && consoleOpen) {
+    if (footer && logColumnOpen) {
       spacer.style.height = footer.offsetHeight + 'px';
     } else {
       spacer.style.height = '0px';
@@ -3061,7 +3093,7 @@ function fitStartupWindowHeight() {
       const slack = 32;
       let h = Math.ceil(headerH + configColumnH + slack);
 
-      if (consoleExpanded) {
+      if (isLogColumnOpen()) {
         h = Math.max(h, 720);
       } else {
         h = Math.max(h, 480);
@@ -3459,8 +3491,7 @@ impl UiState {
       for state in self.collider_viz_open.values() {
         let json = serde_json::to_string(state).unwrap_or_else(|_| "{}".to_string());
         let _ = output.webview.evaluate_script(&format!(
-          "if(typeof ensureLogColumnVisible==='function')ensureLogColumnVisible();\
-           if(typeof openColliderVizCard==='function')openColliderVizCard({json});"
+          "if(typeof openColliderVizCard==='function')openColliderVizCard({json});"
         ));
       }
     }

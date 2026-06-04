@@ -227,7 +227,7 @@ impl YamlHashWrapper {
     }
 }
 
-/// Per-device VRChat max-speed OSC address. Empty/null in YAML = no VRChat power control.
+/// Per-device VRChat max-speed OSC address. Empty/null in YAML = use the Power slider only (no VRChat max-speed OSC).
 fn resolve_max_speed_parameter_from_yaml(device_data: &YamlHashWrapper) -> Option<Arc<String>> {
     if let Some(param) = device_data.get_str("max_speed_parameter") {
         let short = param.trim();

@@ -110,8 +110,11 @@ pub const COLLIDER_VIZ_STYLES: &str = r#"
 .collider-viz-root .cv-viz-column {
   width: 100%;
   display: grid;
-  grid-template-rows: minmax(140px, auto) minmax(110px, auto);
+  grid-template-rows: minmax(280px, auto) minmax(110px, auto);
   gap: 10px;
+}
+body.ui-large .collider-viz-root .cv-viz-column {
+  grid-template-rows: minmax(560px, auto) minmax(110px, auto);
 }
 .collider-viz-root .cv-title {
   font-size: 0.95rem;
@@ -130,8 +133,14 @@ pub const COLLIDER_VIZ_STYLES: &str = r#"
 }
 .collider-viz-root .cv-chart-panel {
   overflow: hidden;
-  padding-top: 8px;
+  padding: 8px 0 5px;
   border-top: 1px solid #2a2a36;
+}
+.collider-viz-root .chart-wrap {
+  width: 100%;
+  aspect-ratio: 5 / 3;
+  padding: 6px 8px 7px;
+  box-sizing: border-box;
 }
 .collider-viz-root .section-title {
   font-size: 0.75rem;
@@ -173,11 +182,6 @@ pub const COLLIDER_VIZ_STYLES: &str = r#"
 .collider-viz-root .swatch.raw { background: #5b8def; }
 .collider-viz-root .swatch.smooth { background: #ffb020; }
 .collider-viz-root .swatch.motor { background: #e8e8f0; }
-.collider-viz-root .chart-wrap {
-  width: 100%;
-  aspect-ratio: 5 / 3;
-  padding: 6px 8px 8px;
-}
 .collider-viz-root .chart-wrap canvas {
   display: block;
   width: 100%;
