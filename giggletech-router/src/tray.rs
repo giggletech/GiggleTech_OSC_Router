@@ -544,6 +544,25 @@ body.ui-large .log-viz-card .log-card-body {
   white-space: pre-wrap;
   overflow-wrap: anywhere;
   word-break: break-word;
+  scrollbar-color: #3f3f4e #16161e;
+  scrollbar-gutter: stable;
+}
+#log::-webkit-scrollbar {
+  width: 12px;
+}
+#log::-webkit-scrollbar-track {
+  background: #16161e;
+}
+#log::-webkit-scrollbar-thumb {
+  background: #3f3f4e;
+  border-radius: 6px;
+  border: 2px solid #16161e;
+}
+#log::-webkit-scrollbar-thumb:hover {
+  background: #5b5b70;
+}
+#log::-webkit-scrollbar-corner {
+  background: #16161e;
 }
 #config-status {
   flex-shrink: 0;
@@ -3228,12 +3247,6 @@ function setupPaneScroll(wrapId, scrollId) {
 setupPaneScroll('config-wrap', 'config-scroll');
 setupPaneScroll('log-section', 'log-cards-scroll');
 setupTestSliderSafety();
-const logBox = document.getElementById('log-box');
-if (logBox) {
-  new ResizeObserver(() => {
-    if (lastStatusLines.length) renderStatus(lastStatusLines);
-  }).observe(logBox);
-}
 const configScroll = document.getElementById('config-scroll');
 if (configScroll) {
   configScroll.addEventListener('scroll', () => syncLogSectionLayout(), { passive: true });
