@@ -47,22 +47,19 @@ const AUTO_START_VALUE_NAME: &str = "GiggleTechOSCRouter";
 pub const AUTOSTART_ARG: &str = "--autostart";
 const RUN_KEY: &str = r"Software\Microsoft\Windows\CurrentVersion\Run";
 const LOGO_PLACEHOLDER: &str = "{{LOGO_URI}}";
-const OUTPUT_WINDOW_WIDTH: f64 = 1080.0;
+const COLLIDER_VIZ_STYLES_PLACEHOLDER: &str = "{{COLLIDER_VIZ_STYLES}}";
+const COLLIDER_VIZ_RUNTIME_PLACEHOLDER: &str = "{{COLLIDER_VIZ_RUNTIME}}";
+const COLLIDER_VIZ_CARD_INNER_PLACEHOLDER: &str = "{{COLLIDER_VIZ_CARD_INNER}}";
+const OUTPUT_WINDOW_MIN_WIDTH: f64 = 960.0;
+/// Initial width matches minimum so the window opens as narrow as allowed.
+const OUTPUT_WINDOW_WIDTH: f64 = OUTPUT_WINDOW_MIN_WIDTH;
 /// Initial height before JS measures content (kept modest; refined on config load).
 const OUTPUT_WINDOW_HEIGHT: f64 = 520.0;
-const OUTPUT_WINDOW_MIN_WIDTH: f64 = 960.0;
 const OUTPUT_WINDOW_MIN_HEIGHT: f64 = 480.0;
 /// Cap one-time startup fit so a measurement glitch cannot spawn a huge window.
 const OUTPUT_WINDOW_STARTUP_MAX_HEIGHT: f64 = 1250.0;
 /// When the log column is visible, never shrink below this on startup.
 const OUTPUT_WINDOW_STARTUP_CONSOLE_MIN_HEIGHT: f64 = 720.0;
-/// Same width as the device column in the output window (`#main` is two equal columns).
-const COLLIDER_VIZ_WIDTH: f64 = OUTPUT_WINDOW_WIDTH / 2.0;
-/// Taller than the output window so ring + chart fit without clipping the chart.
-const COLLIDER_VIZ_HEIGHT: f64 = OUTPUT_WINDOW_HEIGHT + 100.0;
-const COLLIDER_VIZ_MIN_WIDTH: f64 = 280.0;
-const COLLIDER_VIZ_MIN_HEIGHT: f64 = 420.0;
-
 fn clamp_startup_height(h: f64) -> f64 {
   h.max(OUTPUT_WINDOW_MIN_HEIGHT)
     .min(OUTPUT_WINDOW_STARTUP_MAX_HEIGHT)
@@ -181,14 +178,46 @@ header {
   background: #000;
 }
 .header-inner {
-  display: flex;
-  justify-content: center;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   align-items: center;
   width: 100%;
   max-width: 1080px;
-  padding: 12px 16px 0;
+  min-height: 88px;
 }
 body.ui-large .header-inner { max-width: 2160px; }
+body:has(#main.devices-centered-layout) .header-inner {
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+}
+body:has(#main.devices-centered-layout) .header-col-config {
+  grid-column: 2;
+}
+body:has(#main.devices-centered-layout) .header-col-log {
+  grid-column: 3;
+}
+.header-col-config {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-width: 0;
+}
+.header-logo-col {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+.header-col-log {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  min-width: 0;
+  padding: 0 32px 0 16px;
+  box-sizing: border-box;
+}
+.header-right .btn {
+  padding: 12px 18px;
+  font-size: 1.35rem;
+}
 .header-logo {
   display: block;
   height: 88px;
@@ -231,7 +260,7 @@ body.ui-large #main.devices-centered-layout #config-wrap {
   max-width: 2160px;
 }
 #main.devices-centered-layout #config-scroll {
-  direction: ltr;
+  direction: rtl;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -247,14 +276,16 @@ body.ui-large #main.devices-centered-layout #config-wrap {
   width: 100%;
   max-width: 960px;
 }
-#main.devices-centered-layout #config-wrap .btn-row {
+#main.devices-centered-layout #config-wrap .config-footer {
   padding-left: 32px;
   padding-right: 32px;
-  justify-content: center;
   max-width: 960px;
   width: 100%;
   box-sizing: border-box;
   margin: 0 auto;
+}
+#main.devices-centered-layout #config-wrap .footer-toolbar {
+  justify-content: center;
 }
 #main.devices-centered-layout #config-status {
   margin-left: auto;
@@ -296,30 +327,53 @@ body.ui-large #config-wrap {
   scrollbar-gutter: stable;
   overscroll-behavior: contain;
   -webkit-overflow-scrolling: touch;
-  direction: rtl;
-}
-#device-list,
-#device-list .device-card {
   direction: ltr;
 }
-#config-wrap .btn-row,
+#device-list,
+#device-list .device-card,
+.device-list-actions {
+  direction: ltr;
+}
+#config-wrap .config-footer,
 #config-wrap > .hint {
   flex-shrink: 0;
 }
-#config-wrap .btn-row {
-  /* Match #device-list inset so buttons line up with card edges. */
-  padding-left: 70px;
-  padding-right: 6px;
-  padding-bottom: 40px;
-  padding-top: 32px;
-  justify-content: flex-start;
-  align-items: center;
+#config-wrap .config-footer {
+  flex-shrink: 0;
+  padding: 16px 6px 28px 70px;
+  box-sizing: border-box;
+  /* Stay the same visual size when VR MODE sets #config-wrap zoom to 1. */
+  zoom: 1;
+  transform-origin: bottom left;
 }
-#config-wrap .btn-row .app-settings-group {
+body.ui-large #config-wrap .config-footer {
+  zoom: 0.5;
+}
+#main.devices-centered-layout #config-wrap .config-footer {
+  transform-origin: bottom center;
+}
+#config-wrap .footer-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-start;
+  width: 100%;
+}
+#config-wrap .footer-group {
   display: inline-flex;
   align-items: center;
-  gap: 16px;
+  gap: 12px;
   flex-wrap: wrap;
+}
+#config-wrap .footer-group-settings {
+  gap: 12px;
+}
+#config-wrap .footer-group-settings .btn {
+  min-height: 2.85rem;
+  white-space: nowrap;
+}
+#config-wrap .footer-group-settings .osc-port-row {
+  gap: 12px;
 }
 #log-section {
   min-width: 0;
@@ -331,20 +385,94 @@ body.ui-large #config-wrap {
   background: #000;
   overflow: hidden;
 }
-#log-section:not(.console-expanded) #log-scroll,
+#log-section:not(.console-expanded) #log-cards-scroll,
 #log-section:not(.console-expanded) #log-bottom-spacer {
   display: none !important;
 }
-#log-scroll {
+#log-cards-scroll {
   flex: 1 1 0;
   min-width: 0;
   min-height: 0;
-  overflow: hidden;
-  box-sizing: border-box;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
   padding-right: 16px;
-  background: transparent;
-  border-radius: 0;
-  border: none;
+  box-sizing: border-box;
+}
+#log-cards-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: 100%;
+}
+.log-card {
+  width: 100%;
+  background: #16161e;
+  border: 1px solid #2a2a36;
+  border-radius: 10px;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+.log-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 10px 12px;
+  border-bottom: 1px solid #2a2a36;
+  background: #12121a;
+}
+.log-card-header h3 {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: #c4b5fd;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.log-card-close {
+  flex-shrink: 0;
+  width: 1.75rem;
+  height: 1.75rem;
+  padding: 0;
+  border-radius: 50%;
+  border: 1px solid #3f3f4e;
+  background: #2a2a36;
+  color: #e8e8f0;
+  font-size: 1.1rem;
+  line-height: 1;
+  cursor: pointer;
+  font-family: inherit;
+}
+.log-card-close:hover {
+  background: #3f3f4e;
+}
+.log-card-body {
+  min-height: 0;
+}
+.log-viz-card .log-card-body {
+  min-height: 280px;
+  max-height: 420px;
+  overflow: hidden;
+}
+.log-console-card .log-card-body {
+  min-height: 10rem;
+  max-height: 14rem;
+  display: flex;
+  flex-direction: column;
+}
+#log-box {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 0;
+  min-height: 0;
+  width: 100%;
+  padding: 10px 12px;
+  box-sizing: border-box;
+  overflow: hidden;
 }
 #log-bottom-spacer {
   flex-shrink: 0;
@@ -352,18 +480,7 @@ body.ui-large #config-wrap {
   box-sizing: border-box;
   padding-bottom: 16px;
 }
-#log-box {
-  display: flex;
-  flex-direction: column;
-  width: 100%;
-  height: 100%;
-  background: #16161e;
-  border-radius: 10px;
-  border: 1px solid #2a2a36;
-  padding: 10px 12px;
-  box-sizing: border-box;
-  overflow: hidden;
-}
+{{COLLIDER_VIZ_STYLES}}
 #pat-bars {
   flex-shrink: 0;
   font-family: "Cascadia Code", "Consolas", monospace;
@@ -416,6 +533,26 @@ body.ui-large #config-wrap {
   gap: 20px;
   padding-left: 32px;
   padding-right: 6px;
+}
+.device-list-actions {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+  padding: 24px 6px 8px 32px;
+  box-sizing: border-box;
+  width: 100%;
+}
+.device-list-actions .btn {
+  min-height: 3.25rem;
+  white-space: nowrap;
+}
+#main.devices-centered-layout .device-list-actions {
+  max-width: 960px;
+  padding-left: 32px;
+  padding-right: 32px;
+  margin-left: auto;
+  margin-right: auto;
 }
 .device-card {
   width: 100%;
@@ -1283,6 +1420,11 @@ button.device-status {
   border-color: #a78bfa;
   color: #f3e8ff;
 }
+.device-actions .btn-secondary.btn-sm.device-viz-btn.device-viz-btn-active {
+  border-color: #a855f7;
+  background: #2e1065;
+  color: #f3e8ff;
+}
 .device-actions .btn-primary.btn-sm {
   border: 2px solid #7f1d1d;
   background: #450a0a;
@@ -1365,7 +1507,6 @@ button.device-status {
 .disclosure-toggle-btn[aria-expanded="true"] .disclosure-toggle-icon {
   transform: rotate(180deg);
 }
-.btn-row { display: flex; gap: 16px; flex-wrap: wrap; }
 .btn {
   padding: 18px 28px;
   font-size: 1.7rem;
@@ -1384,9 +1525,6 @@ button.device-status {
   align-items: center;
   gap: 16px;
 }
-.btn-row .btn-primary {
-  margin-left: auto;
-}
 #osc-mode-btn.osc-query-active {
   border: 2px solid #7c3aed;
   background: #2e1065;
@@ -1401,11 +1539,13 @@ button.device-status {
 }
 .osc-port-input {
   display: none;
-  width: 11rem;
+  width: calc(5ch + 52px);
+  min-width: calc(5ch + 52px);
   flex-shrink: 0;
   padding: 18px 24px;
   font-size: 1.7rem;
   font-weight: 600;
+  font-variant-numeric: tabular-nums;
   font-family: inherit;
   color: #e8e8f0;
   border-radius: 16px;
@@ -1431,7 +1571,17 @@ button.device-status {
 <body>
 <header>
   <div class="header-inner">
-    <img class="header-logo" src="{{LOGO_URI}}" alt="GiggleTech">
+    <div class="header-col-config">
+      <div class="header-logo-col">
+        <img class="header-logo" src="{{LOGO_URI}}" alt="GiggleTech">
+      </div>
+    </div>
+    <div class="header-col-log">
+      <div class="header-right">
+        <button type="button" class="btn btn-secondary" id="ui-scale-btn" aria-pressed="false"
+          onclick="toggleUiScale()">VR MODE</button>
+      </div>
+    </div>
   </div>
 </header>
 <div id="main-center">
@@ -1441,37 +1591,51 @@ button.device-status {
       <div id="config-status"></div>
       <div id="config-scroll">
         <div id="device-list"></div>
-      </div>
-      <div class="btn-row">
-        <button type="button" class="btn btn-secondary" onclick="addDevice()">+ Add Device</button>
-        <div class="osc-port-row">
-          <button type="button" class="btn btn-secondary" id="osc-mode-btn" onclick="toggleOscMode()">OSC: Query</button>
-          <input type="text" id="osc-port-input" class="osc-port-input" inputmode="numeric"
-            placeholder="9001" maxlength="5" title="UDP listen port"
-            onblur="commitOscPortInput()" onkeydown="if (event.key === 'Enter') commitOscPortInput()">
+        <div class="device-list-actions">
+          <button type="button" class="btn btn-secondary" onclick="addDevice()">+ Add Device</button>
+          <button type="button" class="btn btn-primary footer-save" onclick="saveConfig()">Save</button>
         </div>
-        <div class="app-settings-group">
-          <button type="button" class="btn btn-secondary" id="autostart-btn" aria-pressed="false"
-            onclick="toggleAutoStart()">Start with Windows</button>
-          <button type="button" class="btn btn-secondary" id="ui-scale-btn" aria-pressed="false"
-            onclick="toggleUiScale()">VR MODE</button>
-          <button type="button" class="btn btn-secondary" id="console-panel-toggle" aria-pressed="false"
-            aria-controls="log-scroll" onclick="toggleConsolePanel()">Show Console</button>
-        </div>
-        <button type="button" class="btn btn-primary" onclick="saveConfig()">Save</button>
       </div>
+      <footer class="config-footer">
+        <div class="footer-toolbar">
+          <div class="footer-group footer-group-settings">
+            <div class="osc-port-row">
+              <button type="button" class="btn btn-secondary" id="osc-mode-btn" onclick="toggleOscMode()">OSC: Query</button>
+              <input type="text" id="osc-port-input" class="osc-port-input" inputmode="numeric"
+                placeholder="9001" maxlength="5" title="UDP listen port"
+                onblur="commitOscPortInput()" onkeydown="if (event.key === 'Enter') commitOscPortInput()">
+            </div>
+            <button type="button" class="btn btn-secondary" id="autostart-btn" aria-pressed="false"
+              onclick="toggleAutoStart()">Start with Windows</button>
+            <button type="button" class="btn btn-secondary" id="console-panel-toggle" aria-pressed="false"
+              aria-controls="log-cards-scroll" aria-label="Show console"
+              onclick="toggleConsolePanel()">Console</button>
+          </div>
+        </div>
+      </footer>
     </div>
     <section id="log-section">
-      <div id="log-scroll">
-        <div id="log-box">
-          <pre id="pat-bars" aria-live="polite"></pre>
-          <pre id="log"></pre>
+      <div id="log-cards-scroll">
+        <div id="log-cards-list">
+          <div id="log-viz-cards"></div>
+          <div class="log-card log-console-card" id="log-console-card">
+            <div class="log-card-header">
+              <h3>Console</h3>
+            </div>
+            <div class="log-card-body">
+              <div id="log-box">
+                <pre id="pat-bars" aria-live="polite"></pre>
+                <pre id="log"></pre>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
       <div id="log-bottom-spacer" aria-hidden="true"></div>
     </section>
   </div>
 </div>
+<script>{{COLLIDER_VIZ_RUNTIME}}</script>
 <script>
 let autoStartEnabled = false;
 let autoStartBusy = false;
@@ -1556,8 +1720,8 @@ function applyConsolePanelUi() {
     btn.setAttribute('aria-expanded', consoleExpanded ? 'true' : 'false');
     btn.setAttribute('aria-pressed', consoleExpanded ? 'true' : 'false');
     btn.classList.toggle('console-visible', consoleExpanded);
-    btn.textContent = consoleExpanded ? 'Hide Console' : 'Show Console';
-    btn.setAttribute('aria-label', consoleExpanded ? 'Hide console log' : 'Show console log');
+    btn.textContent = 'Console';
+    btn.setAttribute('aria-label', consoleExpanded ? 'Hide console' : 'Show console');
   }
   syncLogSectionLayout();
   if (consoleExpanded && typeof lastStatusLines !== 'undefined' && lastStatusLines.length) {
@@ -1835,14 +1999,94 @@ function colliderVizPayload(index) {
   };
 }
 
+const COLLIDER_VIZ_CARD_INNER_HTML = {{COLLIDER_VIZ_CARD_INNER}};
+
+function ensureLogColumnVisible() {
+  if (!consoleExpanded) {
+    consoleExpanded = true;
+    persistConsoleExpanded(true);
+    applyConsolePanelUi();
+  }
+}
+
+function openColliderVizCard(payload) {
+  const index = payload.index;
+  const list = document.getElementById('log-viz-cards');
+  if (!list) return;
+  const name = (payload.name || '').trim() || ('Device ' + (index + 1));
+  let card = list.querySelector('.log-viz-card[data-viz-index="' + index + '"]');
+  if (!card) {
+    card = document.createElement('div');
+    card.className = 'log-card log-viz-card';
+    card.dataset.vizIndex = String(index);
+    card.innerHTML =
+      '<div class="log-card-header">' +
+        '<h3>' + escapeHtml(name) + '</h3>' +
+        '<button type="button" class="log-card-close" aria-label="Close visualizer for device ' + (index + 1) + '" ' +
+          'onclick="closeColliderViz(' + index + ')">&times;</button>' +
+      '</div>' +
+      '<div class="log-card-body">' + COLLIDER_VIZ_CARD_INNER_HTML + '</div>';
+    list.appendChild(card);
+    const root = card.querySelector('.collider-viz-root');
+    if (root && window.colliderVizApi) window.colliderVizApi.mount(root, index);
+  } else {
+    const h3 = card.querySelector('.log-card-header h3');
+    if (h3) h3.textContent = name;
+  }
+  if (window.colliderVizApi) window.colliderVizApi.applyState(payload);
+  requestAnimationFrame(() => {
+    if (lastStatusLines.length) renderStatus(lastStatusLines);
+    syncLogSectionLayout();
+  });
+}
+
+function isColliderVizOpen(index) {
+  const list = document.getElementById('log-viz-cards');
+  return !!(list && list.querySelector('.log-viz-card[data-viz-index="' + index + '"]'));
+}
+
+function updateColliderVizButton(index) {
+  const btn = document.querySelector('.device-viz-btn[data-viz-btn-index="' + index + '"]');
+  if (!btn) return;
+  const open = isColliderVizOpen(index);
+  btn.classList.toggle('device-viz-btn-active', open);
+  btn.setAttribute('aria-pressed', open ? 'true' : 'false');
+  btn.setAttribute('aria-label', (open ? 'Close' : 'Open') + ' visualizer for device ' + (index + 1));
+}
+
+function closeColliderViz(index) {
+  const list = document.getElementById('log-viz-cards');
+  const card = list && list.querySelector('.log-viz-card[data-viz-index="' + index + '"]');
+  if (card) {
+    if (window.colliderVizApi) window.colliderVizApi.unmount(index);
+    card.remove();
+  }
+  window.ipc.postMessage('collider-viz-close:' + index);
+  updateColliderVizButton(index);
+  syncLogSectionLayout();
+}
+
 function syncColliderViz(index) {
   const p = colliderVizPayload(index);
-  if (p) window.ipc.postMessage('collider-viz-update:' + JSON.stringify(p));
+  if (!p) return;
+  const list = document.getElementById('log-viz-cards');
+  if (list && list.querySelector('.log-viz-card[data-viz-index="' + index + '"]')) {
+    if (window.colliderVizApi) window.colliderVizApi.applyState(p);
+  }
+  window.ipc.postMessage('collider-viz-update:' + JSON.stringify(p));
 }
 
 function openColliderViz(index) {
+  if (isColliderVizOpen(index)) {
+    closeColliderViz(index);
+    return;
+  }
   const p = colliderVizPayload(index);
-  if (p) window.ipc.postMessage('collider-viz-open:' + JSON.stringify(p));
+  if (!p) return;
+  ensureLogColumnVisible();
+  openColliderVizCard(p);
+  window.ipc.postMessage('collider-viz-open:' + JSON.stringify(p));
+  updateColliderVizButton(index);
 }
 
 function editorValidationOk() {
@@ -2092,8 +2336,9 @@ function renderDevices() {
                    onclick="requestRemoveDevice(${i})">${removeDeviceIconMarkup()}</button>`}
             </div>
             <div class="device-actions-end">
-              ${pendingRemoveIndex !== i ? `<button type="button" class="btn btn-sm btn-secondary device-viz-btn"
-                aria-label="Open visualizer for device ${i + 1}"
+              ${pendingRemoveIndex !== i ? `<button type="button" class="btn btn-sm btn-secondary device-viz-btn${isColliderVizOpen(i) ? ' device-viz-btn-active' : ''}"
+                data-viz-btn-index="${i}" aria-pressed="${isColliderVizOpen(i) ? 'true' : 'false'}"
+                aria-label="${isColliderVizOpen(i) ? 'Close' : 'Open'} visualizer for device ${i + 1}"
                 onclick="openColliderViz(${i})">Visualizer</button>` : ''}
             </div>
           </div>
@@ -2116,12 +2361,12 @@ function renderDevices() {
 }
 
 function syncLogSectionLayout() {
-  const btnRow = document.querySelector('#config-wrap .btn-row');
+  const footer = document.querySelector('#config-wrap .config-footer');
   const spacer = document.getElementById('log-bottom-spacer');
   const consoleOpen = consoleExpanded;
   if (spacer) {
-    if (btnRow && consoleOpen) {
-      spacer.style.height = btnRow.offsetHeight + 'px';
+    if (footer && consoleOpen) {
+      spacer.style.height = footer.offsetHeight + 'px';
     } else {
       spacer.style.height = '0px';
     }
@@ -2785,8 +3030,8 @@ function fitStartupWindowHeight() {
       const header = document.querySelector('header');
       const wrap = document.getElementById('config-wrap');
       const list = document.getElementById('device-list');
-      const btnRow = document.querySelector('#config-wrap .btn-row');
-      if (!wrap || !list || !btnRow) return;
+      const footer = document.querySelector('#config-wrap .config-footer');
+      if (!wrap || !list || !footer) return;
 
       const headerH = header ? header.getBoundingClientRect().height : 0;
       const statusEl = document.getElementById('config-status');
@@ -2809,8 +3054,10 @@ function fitStartupWindowHeight() {
         listContentH = hint.getBoundingClientRect().height;
       }
 
-      const btnH = btnRow.getBoundingClientRect().height;
-      const configColumnH = wrapPadY + statusH + listPadY + listContentH + gap + btnH;
+      const actionsBar = document.querySelector('.device-list-actions');
+      const actionsH = actionsBar ? actionsBar.getBoundingClientRect().height : 0;
+      const btnH = footer.getBoundingClientRect().height;
+      const configColumnH = wrapPadY + statusH + listPadY + listContentH + actionsH + gap + btnH;
       const slack = 32;
       let h = Math.ceil(headerH + configColumnH + slack);
 
@@ -2948,6 +3195,7 @@ function setupPaneScroll(wrapId, scrollId) {
 }
 
 setupPaneScroll('config-wrap', 'config-scroll');
+setupPaneScroll('log-section', 'log-cards-scroll');
 setupTestSliderSafety();
 const logBox = document.getElementById('log-box');
 if (logBox) {
@@ -2960,11 +3208,11 @@ if (configScroll) {
   configScroll.addEventListener('scroll', () => syncLogSectionLayout(), { passive: true });
 }
 window.addEventListener('resize', () => syncLogSectionLayout());
-const configBtnRow = document.querySelector('#config-wrap .btn-row');
+const configFooter = document.querySelector('#config-wrap .config-footer');
 const deviceList = document.getElementById('device-list');
 if (typeof ResizeObserver !== 'undefined') {
-  if (configBtnRow) {
-    new ResizeObserver(() => syncLogSectionLayout()).observe(configBtnRow);
+  if (configFooter) {
+    new ResizeObserver(() => syncLogSectionLayout()).observe(configFooter);
   }
   if (deviceList) {
     new ResizeObserver(() => syncLogSectionLayout()).observe(deviceList);
@@ -2983,7 +3231,13 @@ fn output_html() -> String {
     "data:image/png;base64,{}",
     STANDARD.encode(include_bytes!("assets/Giggletech_Black.png"))
   );
-  OUTPUT_HTML.replace(LOGO_PLACEHOLDER, &uri)
+  let card_inner =
+    serde_json::to_string(collider_viz::COLLIDER_VIZ_CARD_INNER).unwrap_or_else(|_| "\"\"".to_string());
+  OUTPUT_HTML
+    .replace(LOGO_PLACEHOLDER, &uri)
+    .replace(COLLIDER_VIZ_STYLES_PLACEHOLDER, collider_viz::COLLIDER_VIZ_STYLES)
+    .replace(COLLIDER_VIZ_RUNTIME_PLACEHOLDER, collider_viz::COLLIDER_VIZ_RUNTIME)
+    .replace(COLLIDER_VIZ_CARD_INNER_PLACEHOLDER, &card_inner)
 }
 
 enum UserEvent {
@@ -2995,6 +3249,7 @@ enum UserEvent {
   ConfigIpc(String),
   ColliderVizOpen(String),
   ColliderVizUpdate(String),
+  ColliderVizClose(usize),
   PingResults(String),
   MdnsLookupResult(String),
   MaxSpeedFromVrc(String),
@@ -3016,12 +3271,6 @@ struct OutputWindow {
   webview: wry::WebView,
 }
 
-struct ColliderVizEntry {
-  window: Window,
-  webview: wry::WebView,
-  state: ColliderVizState,
-}
-
 const STATUS_FLUSH_INTERVAL: Duration = Duration::from_millis(50);
 
 fn webview_data_directory() -> PathBuf {
@@ -3035,7 +3284,7 @@ fn webview_data_directory() -> PathBuf {
 struct UiState {
   web_context: WebContext,
   output: Option<OutputWindow>,
-  collider_viz: HashMap<usize, ColliderVizEntry>,
+  collider_viz_open: HashMap<usize, ColliderVizState>,
   status_synced: usize,
   status_epoch: usize,
   status_pending: bool,
@@ -3048,7 +3297,7 @@ impl UiState {
     Self {
       web_context: WebContext::new(Some(webview_data_directory())),
       output: None,
-      collider_viz: HashMap::new(),
+      collider_viz_open: HashMap::new(),
       status_synced: 0,
       status_epoch: log_ui::buffer_epoch(),
       status_pending: false,
@@ -3061,18 +3310,16 @@ impl UiState {
     self.output.as_ref().map(|o| o.window.id())
   }
 
-  fn push_collider_viz_state(entry: &ColliderVizEntry, state: &ColliderVizState) {
-    let _ = entry
-      .webview
-      .evaluate_script(&collider_viz::state_script(state));
+  fn push_collider_viz_state(webview: &wry::WebView, state: &ColliderVizState) {
+    let _ = webview.evaluate_script(&collider_viz::state_script(state));
   }
 
   fn flush_collider_live_to(
-    entry: &ColliderVizEntry,
+    webview: &wry::WebView,
+    active: &ColliderVizState,
     prox_batch: &HashMap<String, f32>,
     headpat_batch: &HashMap<String, String>,
   ) {
-    let active = &entry.state;
     let active_key = collider_viz::batch_key(&active.device_ip, &active.proximity_parameter);
     let prox = prox_batch.get(&active_key).copied();
     let device_ip = active.device_ip.trim();
@@ -3092,106 +3339,61 @@ impl UiState {
       let script = motor_live
         .map(|motor| merge_headpat_telemetry_motor(&json, motor))
         .unwrap_or(json);
-      let script = collider_viz::collider_flush_script(prox, Some(&script), append);
+      let script =
+        collider_viz::collider_flush_script(active.index, prox, Some(&script), append);
       if !script.is_empty() {
-        let _ = entry.webview.evaluate_script(&script);
+        let _ = webview.evaluate_script(&script);
       }
     } else if let Some(p) = prox {
-      let _ = entry
-        .webview
-        .evaluate_script(&collider_viz::prox_sample_script(p));
+      let _ = webview.evaluate_script(&collider_viz::prox_sample_script(active.index, p));
     } else if let Some(motor) = motor_live {
-      let _ = entry
-        .webview
-        .evaluate_script(&collider_viz::headpat_motor_script(motor));
+      let _ = webview.evaluate_script(&collider_viz::headpat_motor_script(active.index, motor));
     }
   }
 
   fn flush_collider_live(&mut self) {
-    if self.collider_viz.is_empty() {
+    if self.collider_viz_open.is_empty() {
       return;
     }
+    let Some(output) = &self.output else {
+      return;
+    };
     let prox_batch: HashMap<String, f32> = PENDING_PROX_SIGNALS.lock().unwrap().drain().collect();
     let headpat_batch: HashMap<String, String> =
       PENDING_HEADPAT_TELEMETRY.lock().unwrap().drain().collect();
-    for entry in self.collider_viz.values() {
-      Self::flush_collider_live_to(entry, &prox_batch, &headpat_batch);
+    for state in self.collider_viz_open.values() {
+      Self::flush_collider_live_to(&output.webview, state, &prox_batch, &headpat_batch);
     }
   }
 
-  fn collider_viz_title(state: &ColliderVizState) -> String {
-    let name = state.name.trim();
-    if name.is_empty() {
-      format!("Device {}", state.index + 1)
-    } else {
-      name.to_string()
-    }
-  }
-
-  fn show_collider_viz(
-    &mut self,
-    event_loop: &EventLoopWindowTarget<UserEvent>,
-    state: ColliderVizState,
-  ) {
-    if let Some(entry) = self.collider_viz.get_mut(&state.index) {
-      entry.state = state.clone();
-      entry.window.set_title(&Self::collider_viz_title(&state));
-      entry.window.set_visible(true);
-      entry.window.set_focus();
-      Self::push_collider_viz_state(entry, &state);
-      let _ = entry
+  fn show_collider_viz(&mut self, state: ColliderVizState) {
+    self.collider_viz_open.insert(state.index, state.clone());
+    if let Some(output) = &self.output {
+      let json = serde_json::to_string(&state).unwrap_or_else(|_| "{}".to_string());
+      let _ = output
         .webview
-        .evaluate_script("requestAnimationFrame(layoutAll);");
-      return;
+        .evaluate_script(&format!("openColliderVizCard({json});"));
+      Self::push_collider_viz_state(&output.webview, &state);
     }
-
-    let window = WindowBuilder::new()
-      .with_title(Self::collider_viz_title(&state))
-      .with_inner_size(LogicalSize::new(COLLIDER_VIZ_WIDTH, COLLIDER_VIZ_HEIGHT))
-      .with_min_inner_size(LogicalSize::new(
-        COLLIDER_VIZ_MIN_WIDTH,
-        COLLIDER_VIZ_MIN_HEIGHT,
-      ))
-      .with_resizable(true)
-      .with_window_icon(Some(load_tao_icon_from_ico(32)))
-      .build(event_loop)
-      .expect("Failed to create collider viz window");
-
-    let webview = WebViewBuilder::with_web_context(&mut self.web_context)
-      .with_html(collider_viz::COLLIDER_VIZ_HTML.to_string())
-      .build(&window)
-      .expect("Failed to create collider viz webview");
-
-    let entry = ColliderVizEntry {
-      window,
-      webview,
-      state: state.clone(),
-    };
-    entry.window.set_visible(true);
-    entry.window.set_focus();
-    Self::push_collider_viz_state(&entry, &state);
-    let _ = entry
-      .webview
-      .evaluate_script("requestAnimationFrame(layoutAll);");
-    self.collider_viz.insert(state.index, entry);
   }
 
-  fn close_collider_viz_if_window(&mut self, window_id: tao::window::WindowId) -> bool {
-    if let Some(index) = self
-      .collider_viz
-      .iter()
-      .find(|(_, e)| e.window.id() == window_id)
-      .map(|(i, _)| *i)
-    {
-      self.collider_viz.remove(&index);
-      true
-    } else {
-      false
-    }
+  fn close_collider_viz(&mut self, index: usize) {
+    self.collider_viz_open.remove(&index);
   }
 
   fn close_all_collider_viz(&mut self) {
-    self.collider_viz.clear();
+    self.collider_viz_open.clear();
+    if let Some(output) = &self.output {
+      let _ = output.webview.evaluate_script(
+        "(function(){var list=document.getElementById('log-viz-cards');\
+         if(!list)return;\
+         list.querySelectorAll('.log-viz-card').forEach(function(c){\
+           var i=parseInt(c.dataset.vizIndex,10);\
+           if(window.colliderVizApi)window.colliderVizApi.unmount(i);\
+         });\
+         list.innerHTML='';})();",
+      );
+    }
   }
 
   fn create_output_window(
@@ -3254,6 +3456,13 @@ impl UiState {
       self.status_pending = false;
       self.last_status_flush = Some(Instant::now());
       flush_live_ui(&output.webview);
+      for state in self.collider_viz_open.values() {
+        let json = serde_json::to_string(state).unwrap_or_else(|_| "{}".to_string());
+        let _ = output.webview.evaluate_script(&format!(
+          "if(typeof ensureLogColumnVisible==='function')ensureLogColumnVisible();\
+           if(typeof openColliderVizCard==='function')openColliderVizCard({json});"
+        ));
+      }
     }
   }
 
@@ -3453,6 +3662,10 @@ fn handle_config_ipc(
     let _ = event_proxy.send_event(UserEvent::ColliderVizOpen(json.to_string()));
   } else if let Some(json) = msg.strip_prefix("collider-viz-update:") {
     let _ = event_proxy.send_event(UserEvent::ColliderVizUpdate(json.to_string()));
+  } else if let Some(index_str) = msg.strip_prefix("collider-viz-close:") {
+    if let Ok(index) = index_str.trim().parse::<usize>() {
+      let _ = event_proxy.send_event(UserEvent::ColliderVizClose(index));
+    }
   }
 }
 
@@ -3643,18 +3856,23 @@ pub fn run(start_minimized: bool, primary: PrimaryInstance) {
 
       Event::UserEvent(UserEvent::ColliderVizOpen(json)) => {
         if let Some(state) = collider_viz::parse_state(&json) {
-          ui_state.show_collider_viz(event_loop, state);
+          ui_state.show_collider_viz(state);
         }
       }
 
       Event::UserEvent(UserEvent::ColliderVizUpdate(json)) => {
         if let Some(state) = collider_viz::parse_state(&json) {
-          if let Some(entry) = ui_state.collider_viz.get_mut(&state.index) {
-            entry.state = state.clone();
-            entry.window.set_title(&UiState::collider_viz_title(&state));
-            UiState::push_collider_viz_state(entry, &state);
+          if ui_state.collider_viz_open.contains_key(&state.index) {
+            ui_state.collider_viz_open.insert(state.index, state.clone());
+            if let Some(output) = &ui_state.output {
+              UiState::push_collider_viz_state(&output.webview, &state);
+            }
           }
         }
+      }
+
+      Event::UserEvent(UserEvent::ColliderVizClose(index)) => {
+        ui_state.close_collider_viz(index);
       }
 
       Event::UserEvent(UserEvent::ShowOutput) => {
@@ -3695,12 +3913,6 @@ pub fn run(start_minimized: bool, primary: PrimaryInstance) {
       } if Some(window_id) == ui_state.output_window_id() => {
         ui_state.hide_output();
       }
-
-      Event::WindowEvent {
-        window_id,
-        event: WindowEvent::CloseRequested,
-        ..
-      } if ui_state.close_collider_viz_if_window(window_id) => {}
 
       _ => {}
     }
