@@ -262,7 +262,8 @@ body.ui-large #main.devices-centered-layout #config-wrap {
 #main.devices-centered-layout #config-scroll {
   display: flex;
   flex-direction: column;
-  align-items: center;
+  /* Parent is direction: rtl (scrollbar left); flex-end pins card-width rows to the visual left. */
+  align-items: flex-end;
 }
 #main.devices-centered-layout #device-list {
   width: 100%;
@@ -275,20 +276,17 @@ body.ui-large #main.devices-centered-layout #config-wrap {
   width: 100%;
   max-width: 960px;
 }
+#main.devices-centered-layout .footer-actions,
 #main.devices-centered-layout #config-wrap .config-footer {
   padding-left: 32px;
   padding-right: 32px;
   max-width: 960px;
   width: 100%;
   box-sizing: border-box;
-  margin: 0 auto;
-}
-#main.devices-centered-layout #config-wrap .footer-toolbar {
-  justify-content: center;
 }
 #main.devices-centered-layout #config-status {
-  margin-left: auto;
-  margin-right: auto;
+  margin: 0;
+  align-self: flex-start;
   max-width: 960px;
 }
 #config-wrap {
@@ -338,33 +336,37 @@ body:not(.ui-large) #config-scroll::-webkit-scrollbar-thumb {
 }
 #device-list,
 #device-list .device-card,
-.device-list-actions {
+.footer-actions,
+#config-wrap .config-footer {
   direction: ltr;
 }
+.footer-actions,
 #config-wrap .config-footer,
 #config-wrap > .hint {
   flex-shrink: 0;
 }
+.footer-actions {
+  position: sticky;
+  bottom: 0;
+  z-index: 2;
+  width: 100%;
+  padding: 16px 32px 12px 6px;
+  box-sizing: border-box;
+  background: #000;
+}
 #config-wrap .config-footer {
   flex-shrink: 0;
-  padding: 16px 6px 28px 70px;
+  width: 100%;
+  padding: 12px 32px 28px 6px;
   box-sizing: border-box;
-  /* Stay the same visual size when VR MODE sets #config-wrap zoom to 1. */
+  background: #000;
   zoom: 1;
   transform-origin: bottom left;
 }
-body.ui-large #config-wrap .config-footer {
+/* VR MODE: only Add Device + Save scale up; keep settings row at normal visual size. */
+body.ui-large #config-wrap .footer-group-settings {
   zoom: 0.5;
-}
-#main.devices-centered-layout #config-wrap .config-footer {
-  transform-origin: bottom center;
-}
-#config-wrap .footer-toolbar {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: flex-start;
-  width: 100%;
+  transform-origin: bottom left;
 }
 #config-wrap .footer-group {
   display: inline-flex;
@@ -372,9 +374,11 @@ body.ui-large #config-wrap .config-footer {
   gap: 12px;
   flex-wrap: wrap;
 }
+#config-wrap .footer-group-primary,
 #config-wrap .footer-group-settings {
   gap: 12px;
 }
+#config-wrap .footer-group-primary .btn,
 #config-wrap .footer-group-settings .btn {
   min-height: 2.85rem;
   white-space: nowrap;
@@ -580,26 +584,6 @@ body.ui-large .log-viz-card .log-card-body {
   gap: 20px;
   padding-left: 6px;
   padding-right: 32px;
-}
-.device-list-actions {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  flex-wrap: wrap;
-  padding: 24px 32px 8px 6px;
-  box-sizing: border-box;
-  width: 100%;
-}
-.device-list-actions .btn {
-  min-height: 3.25rem;
-  white-space: nowrap;
-}
-#main.devices-centered-layout .device-list-actions {
-  max-width: 960px;
-  padding-left: 32px;
-  padding-right: 32px;
-  margin-left: auto;
-  margin-right: auto;
 }
 .device-card {
   width: 100%;
@@ -1633,26 +1617,26 @@ button.device-status {
       <div id="config-status"></div>
       <div id="config-scroll">
         <div id="device-list"></div>
-        <div class="device-list-actions">
-          <button type="button" class="btn btn-secondary" onclick="addDevice()">+ Add Device</button>
-          <button type="button" class="btn btn-primary footer-save" onclick="saveConfig()">Save</button>
+        <div class="footer-actions">
+          <div class="footer-group footer-group-primary">
+            <button type="button" class="btn btn-primary footer-save" onclick="saveConfig()">Save</button>
+            <button type="button" class="btn btn-secondary" onclick="addDevice()">+ Add Device</button>
+          </div>
         </div>
       </div>
       <footer class="config-footer">
-        <div class="footer-toolbar">
-          <div class="footer-group footer-group-settings">
-            <div class="osc-port-row">
-              <button type="button" class="btn btn-secondary" id="osc-mode-btn" onclick="toggleOscMode()">OSC: Query</button>
-              <input type="text" id="osc-port-input" class="osc-port-input" inputmode="numeric"
-                placeholder="9001" maxlength="5" title="UDP listen port"
-                onblur="commitOscPortInput()" onkeydown="if (event.key === 'Enter') commitOscPortInput()">
-            </div>
-            <button type="button" class="btn btn-secondary" id="autostart-btn" aria-pressed="false"
-              onclick="toggleAutoStart()">Start with Windows</button>
-            <button type="button" class="btn btn-secondary" id="console-panel-toggle" aria-pressed="false"
-              aria-controls="log-cards-scroll" aria-label="Show console"
-              onclick="toggleConsolePanel()">Console</button>
+        <div class="footer-group footer-group-settings">
+          <div class="osc-port-row">
+            <button type="button" class="btn btn-secondary" id="osc-mode-btn" onclick="toggleOscMode()">OSC: Query</button>
+            <input type="text" id="osc-port-input" class="osc-port-input" inputmode="numeric"
+              placeholder="9001" maxlength="5" title="UDP listen port"
+              onblur="commitOscPortInput()" onkeydown="if (event.key === 'Enter') commitOscPortInput()">
           </div>
+          <button type="button" class="btn btn-secondary" id="autostart-btn" aria-pressed="false"
+            onclick="toggleAutoStart()">Start with Windows</button>
+          <button type="button" class="btn btn-secondary" id="console-panel-toggle" aria-pressed="false"
+            aria-controls="log-cards-scroll" aria-label="Show console"
+            onclick="toggleConsolePanel()">Console</button>
         </div>
       </footer>
     </div>
@@ -3086,6 +3070,7 @@ function fitStartupWindowHeight() {
       const wrap = document.getElementById('config-wrap');
       const list = document.getElementById('device-list');
       const footer = document.querySelector('#config-wrap .config-footer');
+      const primaryActions = document.querySelector('.footer-actions');
       if (!wrap || !list || !footer) return;
 
       const headerH = header ? header.getBoundingClientRect().height : 0;
@@ -3109,10 +3094,9 @@ function fitStartupWindowHeight() {
         listContentH = hint.getBoundingClientRect().height;
       }
 
-      const actionsBar = document.querySelector('.device-list-actions');
-      const actionsH = actionsBar ? actionsBar.getBoundingClientRect().height : 0;
-      const btnH = footer.getBoundingClientRect().height;
-      const configColumnH = wrapPadY + statusH + listPadY + listContentH + actionsH + gap + btnH;
+      const primaryH = primaryActions ? primaryActions.getBoundingClientRect().height : 0;
+      const settingsH = footer.getBoundingClientRect().height;
+      const configColumnH = wrapPadY + statusH + listPadY + listContentH + primaryH + gap + settingsH;
       const slack = 32;
       let h = Math.ceil(headerH + configColumnH + slack);
 
@@ -3249,10 +3233,14 @@ if (configScroll) {
 }
 window.addEventListener('resize', () => syncLogSectionLayout());
 const configFooter = document.querySelector('#config-wrap .config-footer');
+const footerActions = document.querySelector('.footer-actions');
 const deviceList = document.getElementById('device-list');
 if (typeof ResizeObserver !== 'undefined') {
   if (configFooter) {
     new ResizeObserver(() => syncLogSectionLayout()).observe(configFooter);
+  }
+  if (footerActions) {
+    new ResizeObserver(() => syncLogSectionLayout()).observe(footerActions);
   }
   if (deviceList) {
     new ResizeObserver(() => syncLogSectionLayout()).observe(deviceList);

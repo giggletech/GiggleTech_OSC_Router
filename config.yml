@@ -6,7 +6,7 @@ devices:
   max_speed: null
   speed_scale: null
   max_speed_parameter: max_speed
-  use_velocity_control: false
+  use_velocity_control: null
   velocity_on_prox_drop: true
   outer_proximity: null
   inner_proximity: null
