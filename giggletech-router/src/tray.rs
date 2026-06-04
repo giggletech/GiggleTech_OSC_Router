@@ -48,9 +48,14 @@ pub const AUTOSTART_ARG: &str = "--autostart";
 const RUN_KEY: &str = r"Software\Microsoft\Windows\CurrentVersion\Run";
 const LOGO_PLACEHOLDER: &str = "{{LOGO_URI}}";
 const OUTPUT_WINDOW_WIDTH: f64 = 1080.0;
-const OUTPUT_WINDOW_HEIGHT: f64 = 720.0;
+/// Initial height before JS measures content (kept modest; refined on config load).
+const OUTPUT_WINDOW_HEIGHT: f64 = 520.0;
 const OUTPUT_WINDOW_MIN_WIDTH: f64 = 960.0;
 const OUTPUT_WINDOW_MIN_HEIGHT: f64 = 480.0;
+/// Cap one-time startup fit so a measurement glitch cannot spawn a huge window.
+const OUTPUT_WINDOW_STARTUP_MAX_HEIGHT: f64 = 1250.0;
+/// When the log column is visible, never shrink below this on startup.
+const OUTPUT_WINDOW_STARTUP_CONSOLE_MIN_HEIGHT: f64 = 720.0;
 /// Same width as the device column in the output window (`#main` is two equal columns).
 const COLLIDER_VIZ_WIDTH: f64 = OUTPUT_WINDOW_WIDTH / 2.0;
 /// Taller than the output window so ring + chart fit without clipping the chart.
@@ -59,8 +64,8 @@ const COLLIDER_VIZ_MIN_WIDTH: f64 = 280.0;
 const COLLIDER_VIZ_MIN_HEIGHT: f64 = 420.0;
 
 fn clamp_startup_height(h: f64) -> f64 {
-  // Per request: don't cap to monitor height; just ensure we don't go below the minimum.
   h.max(OUTPUT_WINDOW_MIN_HEIGHT)
+    .min(OUTPUT_WINDOW_STARTUP_MAX_HEIGHT)
 }
 
 static PENDING_MOTOR_BARS: Lazy<Mutex<HashMap<String, f32>>> =
@@ -176,36 +181,21 @@ header {
   background: #000;
 }
 .header-inner {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  width: 100%;
-  max-width: 1080px;
-  min-height: 112px;
-}
-body.ui-large .header-inner { max-width: 2160px; }
-.header-config-col {
   display: flex;
   justify-content: center;
   align-items: center;
-  min-width: 0;
+  width: 100%;
+  max-width: 1080px;
+  padding: 12px 16px 0;
 }
+body.ui-large .header-inner { max-width: 2160px; }
 .header-logo {
   display: block;
-  height: 104px;
+  height: 88px;
   width: auto;
   max-width: 100%;
   object-fit: contain;
-  object-position:  center;
-  padding: 16px 16px 0px 16px;
-}
-.header-log-col {
-  min-width: 0;
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 12px;
-  /* Match right inset of #log-box (log-section padding + log-scroll padding). */
-  padding: 16px 32px 0 16px;
+  object-position: center;
 }
 #main-center {
   flex: 1 1 0;
@@ -225,6 +215,52 @@ body.ui-large .header-inner { max-width: 2160px; }
   height: 100%;
 }
 body.ui-large #main { max-width: 2160px; }
+/* Console hidden: drop log column and center devices in the window. */
+#main.devices-centered-layout {
+  grid-template-columns: minmax(0, 1fr);
+  justify-items: center;
+}
+#main.devices-centered-layout #log-section {
+  display: none;
+}
+#main.devices-centered-layout #config-wrap {
+  width: 100%;
+  max-width: 1080px;
+}
+body.ui-large #main.devices-centered-layout #config-wrap {
+  max-width: 2160px;
+}
+#main.devices-centered-layout #config-scroll {
+  direction: ltr;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+#main.devices-centered-layout #device-list {
+  width: 100%;
+  max-width: 960px;
+  padding-left: 32px;
+  padding-right: 32px;
+  box-sizing: border-box;
+}
+#main.devices-centered-layout .device-card {
+  width: 100%;
+  max-width: 960px;
+}
+#main.devices-centered-layout #config-wrap .btn-row {
+  padding-left: 32px;
+  padding-right: 32px;
+  justify-content: center;
+  max-width: 960px;
+  width: 100%;
+  box-sizing: border-box;
+  margin: 0 auto;
+}
+#main.devices-centered-layout #config-status {
+  margin-left: auto;
+  margin-right: auto;
+  max-width: 960px;
+}
 #config-wrap {
   min-width: 0;
   min-height: 0;
@@ -277,6 +313,13 @@ body.ui-large #config-wrap {
   padding-bottom: 40px;
   padding-top: 32px;
   justify-content: flex-start;
+  align-items: center;
+}
+#config-wrap .btn-row .app-settings-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
 }
 #log-section {
   min-width: 0;
@@ -287,6 +330,10 @@ body.ui-large #config-wrap {
   gap: 12px;
   background: #000;
   overflow: hidden;
+}
+#log-section:not(.console-expanded) #log-scroll,
+#log-section:not(.console-expanded) #log-bottom-spacer {
+  display: none !important;
 }
 #log-scroll {
   flex: 1 1 0;
@@ -1306,6 +1353,9 @@ button.device-status {
 .proximity-band-header-actions .disclosure-toggle-btn:hover {
   background: #3f3f4e;
 }
+#console-panel-toggle.console-visible {
+  border: 2px solid #a855f7;
+}
 .disclosure-toggle-icon {
   display: inline-block;
   font-size: 1.4rem;
@@ -1371,34 +1421,21 @@ button.device-status {
 .btn-danger:hover { background: #7f1d1d; }
 .hint { font-size: 1.6rem; color: #6b6b80; margin-top: 8px; }
 
-#autostart-btn {
-  padding: 12px 18px;
-  font-size: 1.35rem;
+#config-wrap #autostart-btn {
   border: 2px solid #3f3f4e;
-  background: #2a2a36;
-  color: #e8e8f0;
 }
-#autostart-btn:hover { background: #3f3f4e; }
-#autostart-btn.autostart-on { border-color: #a855f7; }
-#autostart-btn:disabled { opacity: 0.75; cursor: default; }
+#config-wrap #autostart-btn.autostart-on { border-color: #a855f7; }
+#config-wrap #autostart-btn:disabled { opacity: 0.75; cursor: default; }
 </style>
 </head>
 <body>
 <header>
   <div class="header-inner">
-    <div class="header-config-col">
-      <img class="header-logo" src="{{LOGO_URI}}" alt="GiggleTech">
-    </div>
-    <div class="header-log-col">
-      <button type="button" class="btn btn-secondary" id="autostart-btn" aria-pressed="false"
-        onclick="toggleAutoStart()">Start with Windows</button>
-      <button type="button" class="btn btn-secondary" id="ui-scale-btn" aria-pressed="false"
-        onclick="toggleUiScale()">VR MODE</button>
-    </div>
+    <img class="header-logo" src="{{LOGO_URI}}" alt="GiggleTech">
   </div>
 </header>
 <div id="main-center">
-  <div id="main">
+  <div id="main" class="devices-centered-layout">
     <div id="config-wrap">
       <div id="config-column-divider" aria-hidden="true"></div>
       <div id="config-status"></div>
@@ -1412,6 +1449,14 @@ button.device-status {
           <input type="text" id="osc-port-input" class="osc-port-input" inputmode="numeric"
             placeholder="9001" maxlength="5" title="UDP listen port"
             onblur="commitOscPortInput()" onkeydown="if (event.key === 'Enter') commitOscPortInput()">
+        </div>
+        <div class="app-settings-group">
+          <button type="button" class="btn btn-secondary" id="autostart-btn" aria-pressed="false"
+            onclick="toggleAutoStart()">Start with Windows</button>
+          <button type="button" class="btn btn-secondary" id="ui-scale-btn" aria-pressed="false"
+            onclick="toggleUiScale()">VR MODE</button>
+          <button type="button" class="btn btn-secondary" id="console-panel-toggle" aria-pressed="false"
+            aria-controls="log-scroll" onclick="toggleConsolePanel()">Show Console</button>
         </div>
         <button type="button" class="btn btn-primary" onclick="saveConfig()">Save</button>
       </div>
@@ -1478,6 +1523,55 @@ function toggleUiScale() {
   setUiLarge(!document.body.classList.contains('ui-large'));
 }
 
+function readConsoleExpandedPref() {
+  try {
+    const v = localStorage.getItem('consoleExpanded');
+    if (v === '0') return false;
+    if (v === '1') return true;
+    const legacy = localStorage.getItem('consolePanelVisible');
+    if (legacy === '0') return false;
+    if (legacy === '1') return true;
+  } catch (_) {}
+  return false;
+}
+
+let consoleExpanded = readConsoleExpandedPref();
+
+function persistConsoleExpanded(expanded) {
+  try {
+    localStorage.setItem('consoleExpanded', expanded ? '1' : '0');
+  } catch (_) {}
+}
+
+function applyConsolePanelUi() {
+  const section = document.getElementById('log-section');
+  if (section) {
+    if (consoleExpanded) section.classList.add('console-expanded');
+    else section.classList.remove('console-expanded');
+  }
+  const main = document.getElementById('main');
+  if (main) main.classList.toggle('devices-centered-layout', !consoleExpanded);
+  const btn = document.getElementById('console-panel-toggle');
+  if (btn) {
+    btn.setAttribute('aria-expanded', consoleExpanded ? 'true' : 'false');
+    btn.setAttribute('aria-pressed', consoleExpanded ? 'true' : 'false');
+    btn.classList.toggle('console-visible', consoleExpanded);
+    btn.textContent = consoleExpanded ? 'Hide Console' : 'Show Console';
+    btn.setAttribute('aria-label', consoleExpanded ? 'Hide console log' : 'Show console log');
+  }
+  syncLogSectionLayout();
+  if (consoleExpanded && typeof lastStatusLines !== 'undefined' && lastStatusLines.length) {
+    requestAnimationFrame(() => renderStatus(lastStatusLines));
+  }
+}
+
+function toggleConsolePanel() {
+  consoleExpanded = !consoleExpanded;
+  persistConsoleExpanded(consoleExpanded);
+  applyConsolePanelUi();
+}
+window.toggleConsolePanel = toggleConsolePanel;
+
 (() => {
   let enabled = false;
   try { enabled = localStorage.getItem('uiLarge') === '1'; } catch (_) {}
@@ -1524,7 +1618,7 @@ let powerPanelVisibleByIndex = (() => {
 
 function isDeviceSetupVisible(index) {
   const v = deviceSetupVisibleByIndex[index];
-  if (v === undefined) return true;
+  if (v === undefined) return false;
   return !!v;
 }
 
@@ -1580,6 +1674,10 @@ function setHeadpatPanelVisible(index, visible) {
   try {
     localStorage.setItem('headpatPanelVisibleByIndex', JSON.stringify(headpatPanelVisibleByIndex));
   } catch (_) {}
+}
+
+function hasHeadpatPanelPreference(index) {
+  return String(index) in headpatPanelVisibleByIndex;
 }
 
 let deviceCardCollapsedByIndex = (() => {
@@ -2020,8 +2118,13 @@ function renderDevices() {
 function syncLogSectionLayout() {
   const btnRow = document.querySelector('#config-wrap .btn-row');
   const spacer = document.getElementById('log-bottom-spacer');
-  if (btnRow && spacer) {
-    spacer.style.height = btnRow.offsetHeight + 'px';
+  const consoleOpen = consoleExpanded;
+  if (spacer) {
+    if (btnRow && consoleOpen) {
+      spacer.style.height = btnRow.offsetHeight + 'px';
+    } else {
+      spacer.style.height = '0px';
+    }
   }
 
   const wrap = document.getElementById('config-wrap');
@@ -2387,7 +2490,11 @@ function togglePanelInfo(event, id) {
 
 function onVelocityControlChange(index, input) {
   if (!editorDevices[index]) return;
-  editorDevices[index].use_velocity_control = !!input.checked;
+  const enabling = !!input.checked;
+  editorDevices[index].use_velocity_control = enabling;
+  if (enabling && !hasHeadpatPanelPreference(index)) {
+    setHeadpatPanelVisible(index, true);
+  }
   syncColliderViz(index);
   renderDevices();
   saveConfig(true);
@@ -2667,42 +2774,57 @@ window.onConfigLoaded = function(state) {
   updateOscPortUi();
   clearConfigStatus();
   startDevicePingLoop();
-
-  // Startup-only: fit window height to the device-card layout (do not change width).
-  requestAnimationFrame(() => {
-    const header = document.querySelector('header');
-    const wrap = document.getElementById('config-wrap');
-    const scroll = document.getElementById('config-scroll');
-    const list = document.getElementById('device-list');
-    const btnRow = document.querySelector('#config-wrap .btn-row');
-    if (!wrap || !scroll || !list || !btnRow) return;
-
-    // We want enough window height to show ONE full device card + the footer row.
-    // (User can manually resize taller to see more.)
-    const wrapZoom = parseFloat(getComputedStyle(wrap).zoom || '1');
-    const zoom = Number.isFinite(wrapZoom) && wrapZoom > 0 ? wrapZoom : 1;
-    const wrapPad = parseFloat(getComputedStyle(wrap).paddingTop || '0')
-      + parseFloat(getComputedStyle(wrap).paddingBottom || '0');
-    const headerH = header ? header.getBoundingClientRect().height : 0;
-    const statusEl = document.getElementById('config-status');
-    const statusH = statusEl ? statusEl.getBoundingClientRect().height : 0;
-    const gap = 12; // matches CSS gap in #config-wrap
-
-    const firstCard = list.querySelector('.device-card');
-    const listStyle = getComputedStyle(list);
-    const listPadTop = parseFloat(listStyle.paddingTop || '0');
-    const listPadBottom = parseFloat(listStyle.paddingBottom || '0');
-    const listGap = parseFloat(listStyle.rowGap || listStyle.gap || '0') || 0;
-    const cardH = firstCard ? firstCard.getBoundingClientRect().height : 0;
-    const deviceOneCardH = Math.max(scroll.getBoundingClientRect().height, listPadTop + cardH + listGap + listPadBottom);
-
-    // Small extra slack to avoid clipping by a few pixels.
-    const slack = 1100;
-    const configH = (wrapPad + statusH + deviceOneCardH + gap + btnRow.getBoundingClientRect().height + 24 + slack) * zoom;
-    const h = Math.max(1, Math.ceil(headerH + configH));
-    window.ipc.postMessage('startup-height:' + JSON.stringify({ h }));
-  });
+  fitStartupWindowHeight();
 };
+
+/** One-time startup height: one device card + footer (+ header). Width unchanged. */
+function fitStartupWindowHeight() {
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      syncLogSectionLayout();
+      const header = document.querySelector('header');
+      const wrap = document.getElementById('config-wrap');
+      const list = document.getElementById('device-list');
+      const btnRow = document.querySelector('#config-wrap .btn-row');
+      if (!wrap || !list || !btnRow) return;
+
+      const headerH = header ? header.getBoundingClientRect().height : 0;
+      const statusEl = document.getElementById('config-status');
+      const statusH = (statusEl && statusEl.classList.contains('err'))
+        ? statusEl.getBoundingClientRect().height : 0;
+      const wrapStyle = getComputedStyle(wrap);
+      const gap = parseFloat(wrapStyle.rowGap || wrapStyle.gap || '0') || 12;
+      const wrapPadY = parseFloat(wrapStyle.paddingTop || '0')
+        + parseFloat(wrapStyle.paddingBottom || '0');
+
+      const firstCard = list.querySelector('.device-card');
+      const hint = list.querySelector('.hint');
+      const listStyle = getComputedStyle(list);
+      const listPadY = parseFloat(listStyle.paddingTop || '0')
+        + parseFloat(listStyle.paddingBottom || '0');
+      let listContentH = 0;
+      if (firstCard) {
+        listContentH = firstCard.getBoundingClientRect().height;
+      } else if (hint) {
+        listContentH = hint.getBoundingClientRect().height;
+      }
+
+      const btnH = btnRow.getBoundingClientRect().height;
+      const configColumnH = wrapPadY + statusH + listPadY + listContentH + gap + btnH;
+      const slack = 32;
+      let h = Math.ceil(headerH + configColumnH + slack);
+
+      if (consoleExpanded) {
+        h = Math.max(h, 720);
+      } else {
+        h = Math.max(h, 480);
+      }
+      h = Math.ceil(h * 1.25);
+
+      window.ipc.postMessage('startup-height:' + JSON.stringify({ h }));
+    });
+  });
+}
 
 window.onConfigSaved = function(opts) {
   opts = opts || {};
@@ -2848,6 +2970,7 @@ if (typeof ResizeObserver !== 'undefined') {
     new ResizeObserver(() => syncLogSectionLayout()).observe(deviceList);
   }
 }
+applyConsolePanelUi();
 requestAnimationFrame(() => syncLogSectionLayout());
 window.ipc.postMessage('load-config');
 </script>
