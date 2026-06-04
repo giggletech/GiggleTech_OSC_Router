@@ -2544,58 +2544,43 @@ impl UiState {
       .evaluate_script(&collider_viz::state_script(state));
   }
 
-  fn flush_collider_live_to(entry: &ColliderVizEntry, prox_batch: &HashMap<String, f32>, headpat_batch: &HashMap<String, String>) {
+  fn flush_collider_live_to(
+    entry: &ColliderVizEntry,
+    prox_batch: &HashMap<String, f32>,
+    headpat_batch: &HashMap<String, String>,
+  ) {
     let active = &entry.state;
     let active_key = collider_viz::batch_key(&active.device_ip, &active.proximity_parameter);
-    if let Some(&value) = prox_batch.get(&active_key) {
-      let _ = entry
-        .webview
-        .evaluate_script(&collider_viz::prox_sample_script(value));
-    }
+    let prox = prox_batch.get(&active_key).copied();
     let device_ip = active.device_ip.trim();
-    if active.velocity {
-      let motor_live = (!device_ip.is_empty())
-        .then(|| PENDING_MOTOR_BARS.lock().unwrap().get(device_ip).copied())
-        .flatten();
-      let fresh = headpat_batch.get(&active_key).cloned();
-      let telemetry = fresh.clone().or_else(|| {
-        LAST_HEADPAT_TELEMETRY
-          .lock()
-          .unwrap()
-          .get(&active_key)
-          .cloned()
-      });
-      if let Some(json) = telemetry {
-        let append = fresh.is_some();
-        let script = motor_live
-          .map(|motor| merge_headpat_telemetry_motor(&json, motor))
-          .unwrap_or(json);
-        let _ = entry.webview.evaluate_script(&collider_viz::headpat_telemetry_script(
-          &script, append,
-        ));
-      } else if let Some(motor) = motor_live {
-        let _ = entry
-          .webview
-          .evaluate_script(&collider_viz::headpat_motor_script(motor));
-      }
-    } else if !device_ip.is_empty() {
-      let motor = PENDING_MOTOR_BARS
+    let motor_live = (!device_ip.is_empty())
+      .then(|| PENDING_MOTOR_BARS.lock().unwrap().get(device_ip).copied())
+      .flatten();
+    let fresh = headpat_batch.get(&active_key).cloned();
+    let telemetry = fresh.clone().or_else(|| {
+      LAST_HEADPAT_TELEMETRY
         .lock()
         .unwrap()
-        .get(device_ip)
-        .copied();
-      if let Some(motor) = motor {
-        if let Ok(json) = serde_json::to_string(&serde_json::json!({
-          "pre": 0.0,
-          "damped": 0.0,
-          "smooth": 0.0,
-          "motor": motor,
-        })) {
-          let _ = entry.webview.evaluate_script(&collider_viz::headpat_telemetry_script(
-            &json, true,
-          ));
-        }
+        .get(&active_key)
+        .cloned()
+    });
+    if let Some(json) = telemetry {
+      let append = fresh.is_some();
+      let script = motor_live
+        .map(|motor| merge_headpat_telemetry_motor(&json, motor))
+        .unwrap_or(json);
+      let script = collider_viz::collider_flush_script(prox, Some(&script), append);
+      if !script.is_empty() {
+        let _ = entry.webview.evaluate_script(&script);
       }
+    } else if let Some(p) = prox {
+      let _ = entry
+        .webview
+        .evaluate_script(&collider_viz::prox_sample_script(p));
+    } else if let Some(motor) = motor_live {
+      let _ = entry
+        .webview
+        .evaluate_script(&collider_viz::headpat_motor_script(motor));
     }
   }
 

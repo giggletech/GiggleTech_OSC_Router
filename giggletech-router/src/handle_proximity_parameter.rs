@@ -75,20 +75,27 @@ pub(crate) async fn handle_proximity_parameter(
     if value == 0.0 {
         // Reset smoothing when proximity fully clears.
         DEVICE_VELOCITY_EMA.lock().await.remove(device_ip.as_str());
-        if device.use_velocity_control {
-            if let Ok(json) = serde_json::to_string(&serde_json::json!({
-                "pre": 0.0,
-                "damped": 0.0,
-                "smooth": 0.0,
-                "motor": 0.0,
-            })) {
-                log_ui::notify_headpat_telemetry(device.device_uri.as_str(), device.proximity_parameter.as_str(), &json);
-            }
+        if let Ok(json) = serde_json::to_string(&serde_json::json!({
+            "pre": 0.0,
+            "damped": 0.0,
+            "smooth": 0.0,
+            "motor": 0.0,
+        })) {
+            log_ui::notify_headpat_telemetry(device.device_uri.as_str(), device.proximity_parameter.as_str(), &json);
         }
         stop_pats::stop_device_with_terminator(device_ip.as_str(), running.clone()).await?;
     } else {
         if !device.use_velocity_control {
             let headpat_tx = data_processing::process_pat(value, &device, last_val);
+            let motor_norm = data_processing::motor_norm_from_tx(headpat_tx, &device);
+            if let Ok(json) = serde_json::to_string(&serde_json::json!({
+                "pre": 0.0,
+                "damped": 0.0,
+                "smooth": 0.0,
+                "motor": motor_norm,
+            })) {
+                log_ui::notify_headpat_telemetry(device.device_uri.as_str(), device.proximity_parameter.as_str(), &json);
+            }
             if headpat_tx == 0 {
                 stop_pats::stop_device_immediate(device_ip.as_str(), running.clone()).await?;
             } else {

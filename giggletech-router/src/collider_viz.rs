@@ -65,6 +65,18 @@ pub fn headpat_motor_script(motor: f32) -> String {
   format!("window.applyHeadpatMotorSample({});", motor)
 }
 
+/// Ring + chart in one WebView call when both samples arrive on the same flush.
+pub fn collider_flush_script(prox: Option<f32>, telemetry_json: Option<&str>, append: bool) -> String {
+  match (prox, telemetry_json) {
+    (Some(p), Some(json)) => format!(
+      "window.applyColliderFlush({p},{json},{{append:{append}}});"
+    ),
+    (Some(p), None) => prox_sample_script(p),
+    (None, Some(json)) => headpat_telemetry_script(json, append),
+    (None, None) => String::new(),
+  }
+}
+
 pub const COLLIDER_VIZ_HTML: &str = r#"<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -303,7 +315,35 @@ const trail = [];
 const TRAIL_ANGLE = -Math.PI / 2;
 const canvas = document.getElementById('ring');
 const ctx = canvas.getContext('2d');
-let animId = 0;
+let paintRaf = 0;
+let needRingPaint = false;
+let needChartPaint = false;
+let layoutRaf = 0;
+
+function schedulePaint() {
+  if (paintRaf) return;
+  paintRaf = requestAnimationFrame(() => {
+    paintRaf = 0;
+    if (needRingPaint) {
+      needRingPaint = false;
+      redraw();
+    }
+    if (needChartPaint) {
+      needChartPaint = false;
+      drawOutputChart();
+    }
+  });
+}
+
+function scheduleRingPaint() {
+  needRingPaint = true;
+  schedulePaint();
+}
+
+function scheduleChartPaint() {
+  needChartPaint = true;
+  schedulePaint();
+}
 
 function displayProx() {
   if (manualProx != null) return manualProx;
@@ -445,11 +485,24 @@ function motorToChartPct(motor) {
   return Math.min(CHART_SCALE_MAX, Math.max(0, motor * 100));
 }
 
-function motorHistoryPct() {
-  const arr = velHistory.motor;
-  const out = new Array(arr.length);
-  for (let i = 0; i < arr.length; i++) out[i] = motorToChartPct(arr[i]);
-  return out;
+function drawMotorSeriesOn(ctx, arr, color, maxV, w, h, dpr, plot) {
+  if (!ctx || arr.length < 2) return;
+  const scale = Math.max(0.001, maxV);
+  const plotW = w - plot.padL - plot.padR;
+  const plotH = h - plot.padT - plot.padB;
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 2 * dpr;
+  ctx.lineJoin = 'round';
+  ctx.beginPath();
+  const step = plotW / Math.max(1, VEL_HISTORY_LEN - 1);
+  const x0 = plot.padL + Math.max(0, VEL_HISTORY_LEN - arr.length) * step;
+  for (let i = 0; i < arr.length; i++) {
+    const x = x0 + i * step;
+    const y = h - plot.padB - (motorToChartPct(arr[i]) / scale) * plotH;
+    if (i === 0) ctx.moveTo(x, y);
+    else ctx.lineTo(x, y);
+  }
+  ctx.stroke();
 }
 
 function updateChartLegend() {
@@ -564,9 +617,9 @@ function drawOutputChart() {
   if (state.velocity) {
     drawSeriesOn(outputCtx, velHistory.pre, '#5b8def', maxV, w, h, dpr, plot);
     drawSeriesOn(outputCtx, velHistory.smooth, '#ffb020', maxV, w, h, dpr, plot);
-    drawSeriesOn(outputCtx, motorHistoryPct(), '#e8e8f0', maxV, w, h, dpr, plot);
+    drawMotorSeriesOn(outputCtx, velHistory.motor, '#e8e8f0', maxV, w, h, dpr, plot);
   } else {
-    drawSeriesOn(outputCtx, motorHistoryPct(), '#e8e8f0', maxV, w, h, dpr, plot);
+    drawMotorSeriesOn(outputCtx, velHistory.motor, '#e8e8f0', maxV, w, h, dpr, plot);
   }
 }
 
@@ -577,14 +630,14 @@ function updateHeadpatPanel() {
     chartTitle.textContent = state.velocity ? 'Vibration control' : 'Motor output';
   }
   updateChartLegend();
-  requestAnimationFrame(layoutAll);
+  scheduleLayoutAll();
 }
 
 function clearVelHistory() {
   velHistory.pre.length = 0;
   velHistory.smooth.length = 0;
   velHistory.motor.length = 0;
-  drawOutputChart();
+  scheduleChartPaint();
 }
 
 function resetColliderSession() {
@@ -620,21 +673,8 @@ window.applyColliderVizState = function(s) {
 };
 
 window.applyHeadpatTelemetry = function(t, opts) {
-  const append = !opts || opts.append !== false;
-  const sample = {
-    pre: Number(t.pre) || 0,
-    smooth: Number(t.smooth) || 0,
-    motor: Math.max(0, Math.min(1, Number(t.motor) || 0))
-  };
-  lastTelemetry = sample;
-  if (append) {
-    pushVelHistory('motor', sample.motor);
-    if (state.velocity) {
-      pushVelHistory('pre', toChartPct(sample.pre));
-      pushVelHistory('smooth', toChartPct(sample.smooth));
-    }
-  }
-  drawOutputChart();
+  ingestHeadpatTelemetry(t, opts);
+  scheduleChartPaint();
 };
 
 window.applyHeadpatMotorSample = function(motor) {
@@ -649,10 +689,10 @@ window.applyHeadpatMotorSample = function(motor) {
     lastTelemetry = { pre: 0, smooth: 0, motor: m };
   }
   pushVelHistory('motor', m);
-  drawOutputChart();
+  scheduleChartPaint();
 };
 
-window.applyColliderProxSample = function(v) {
+function ingestProxSample(v) {
   const p = Math.max(0, Math.min(1, Number(v) || 0));
   liveProx = p;
   if (manualProx == null) {
@@ -660,8 +700,45 @@ window.applyColliderProxSample = function(v) {
       pushTrail(p);
     }
   }
-  redraw();
-  if (state.velocity && lastTelemetry) drawOutputChart();
+  return p;
+}
+
+function ingestHeadpatTelemetry(t, opts) {
+  const append = !opts || opts.append !== false;
+  const sample = {
+    pre: Number(t.pre) || 0,
+    smooth: Number(t.smooth) || 0,
+    motor: Math.max(0, Math.min(1, Number(t.motor) || 0))
+  };
+  lastTelemetry = sample;
+  if (append) {
+    pushVelHistory('motor', sample.motor);
+    if (state.velocity) {
+      pushVelHistory('pre', toChartPct(sample.pre));
+      pushVelHistory('smooth', toChartPct(sample.smooth));
+    }
+  }
+}
+
+window.applyColliderFlush = function(prox, t, opts) {
+  let ring = false;
+  let chart = false;
+  if (typeof prox === 'number') {
+    ingestProxSample(prox);
+    ring = true;
+  }
+  if (t != null && typeof t === 'object') {
+    ingestHeadpatTelemetry(t, opts);
+    chart = true;
+  }
+  if (ring) needRingPaint = true;
+  if (chart) needChartPaint = true;
+  if (ring || chart) schedulePaint();
+};
+
+window.applyColliderProxSample = function(v) {
+  ingestProxSample(v);
+  scheduleRingPaint();
 };
 
 function pointerToProx(clientX, clientY) {
@@ -683,13 +760,13 @@ canvas.addEventListener('pointerdown', (e) => {
   manualProx = pointerToProx(e.clientX, e.clientY);
   pushTrail(manualProx);
   canvas.setPointerCapture(e.pointerId);
-  redraw();
+  scheduleRingPaint();
 });
 canvas.addEventListener('pointermove', (e) => {
   if (!canvas.hasPointerCapture(e.pointerId)) return;
   manualProx = pointerToProx(e.clientX, e.clientY);
   pushTrail(manualProx);
-  redraw();
+  scheduleRingPaint();
 });
 canvas.addEventListener('pointerup', (e) => {
   if (canvas.hasPointerCapture(e.pointerId)) canvas.releasePointerCapture(e.pointerId);
@@ -719,23 +796,31 @@ function syncVizPlotLayout() {
 
 function layoutAll() {
   syncVizPlotLayout();
-  sizeRingCanvas();
-  redraw();
-  drawOutputChart();
+  needRingPaint = true;
+  needChartPaint = true;
+  schedulePaint();
+}
+
+function scheduleLayoutAll() {
+  if (layoutRaf) return;
+  layoutRaf = requestAnimationFrame(() => {
+    layoutRaf = 0;
+    layoutAll();
+  });
 }
 
 function tick() {
   const now = performance.now();
   if (trail.length) {
     while (trail.length && now - trail[0].t > 1600) trail.shift();
-    redraw();
+    scheduleRingPaint();
   }
-  animId = requestAnimationFrame(tick);
+  requestAnimationFrame(tick);
 }
 
-window.addEventListener('resize', layoutAll);
+window.addEventListener('resize', scheduleLayoutAll);
 if (typeof ResizeObserver !== 'undefined') {
-  const ro = new ResizeObserver(() => layoutAll());
+  const ro = new ResizeObserver(() => scheduleLayoutAll());
   const vizColumn = document.querySelector('.viz-column');
   const appScroll = document.querySelector('.app-scroll');
   if (vizColumn) ro.observe(vizColumn);
@@ -748,7 +833,7 @@ if (typeof ResizeObserver !== 'undefined') {
   document.querySelectorAll('.chart-wrap').forEach((el) => ro.observe(el));
   ro.observe(document.body);
 }
-requestAnimationFrame(layoutAll);
+scheduleLayoutAll();
 updateModeText();
 updateHeadpatPanel();
 tick();

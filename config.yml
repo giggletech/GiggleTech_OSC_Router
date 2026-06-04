@@ -6,7 +6,7 @@ devices:
   max_speed: null
   speed_scale: null
   max_speed_parameter: null
-  use_velocity_control: false
+  use_velocity_control: null
   velocity_on_prox_drop: true
   outer_proximity: null
   inner_proximity: null
@@ -25,8 +25,8 @@ devices:
   outer_proximity: null
   inner_proximity: null
   velocity_scalar: 32
-  velocity_softcap: 22
-  velocity_smoothing_ms: 140
+  velocity_softcap: 46
+  velocity_smoothing_ms: 250
 setup:
   port_rx: '9001'
   default_min_speed: 5
