@@ -103,10 +103,13 @@ pub(crate) struct DeviceConfig {
     pub device_uri: Arc<String>,
     pub min_speed: f32,
     pub max_speed: f32,
+    /// When true, `max_speed` was set explicitly in config.yml (not the global default).
+    pub max_speed_fixed: bool,
     pub start_tx: i32,
     pub speed_scale: f32,
     pub proximity_parameter: Arc<String>,
-    pub max_speed_parameter: Arc<String>,
+    /// When `None`, power is not driven by a VRChat max-speed OSC parameter.
+    pub max_speed_parameter: Option<Arc<String>>,
     /// Optional VRChat avatar parameter to send 0/1 online state to.
     /// Stored as full OSC address (e.g. `/avatar/parameters/MyDeviceOnline`).
     pub online_parameter: Option<Arc<String>>,
@@ -222,6 +225,25 @@ impl YamlHashWrapper {
     fn get_yaml(&self, key: &str) -> Option<&Yaml> {
         self.yaml_hash.get(&Yaml::String(key.to_string()))
     }
+}
+
+/// Per-device VRChat max-speed OSC address. Empty/null in YAML = no VRChat power control.
+fn resolve_max_speed_parameter_from_yaml(device_data: &YamlHashWrapper) -> Option<Arc<String>> {
+    if let Some(param) = device_data.get_str("max_speed_parameter") {
+        let short = param.trim();
+        if !short.is_empty() && !short.eq_ignore_ascii_case("null") {
+            return Some(Arc::new(format!("/avatar/parameters/{}", short)));
+        }
+    }
+    if let Some(yaml) = device_data.get_yaml("max_speed") {
+        if let Some(s) = yaml.as_str() {
+            let short = s.trim();
+            if !short.is_empty() {
+                return Some(Arc::new(format!("/avatar/parameters/{}", short)));
+            }
+        }
+    }
+    None
 }
 
 fn resolve_online_parameter_from_yaml(
@@ -484,10 +506,24 @@ fn parse_device_config(
         return Err("Min speed cannot be negative".to_string());
     }
     
-    let max_speed = device_data.get_f64("max_speed").map(|x| (x as f32 / 100.0).max(min_speed).max(global_config.minimum_max_speed)).unwrap_or(global_config.default_max_speed);
-    let start_tx = device_data.get_i64("start_tx").map(|x| x as i32).unwrap_or(global_config.default_start_tx);
-    let speed_scale = device_data.get_f64("speed_scale").map(|x| x as f32 / 100.0).unwrap_or(global_config.default_speed_scale);
-    let max_speed_parameter = device_data.get_str("max_speed_parameter").map(|x| Arc::new(format!("/avatar/parameters/{}", x))).unwrap_or(global_config.default_max_speed_parameter.clone());
+    let max_speed_fixed = device_data.get_f64("max_speed").is_some();
+    let max_speed = device_data
+        .get_f64("max_speed")
+        .map(|x| {
+            (x as f32 / 100.0)
+                .max(min_speed)
+                .max(global_config.minimum_max_speed)
+        })
+        .unwrap_or(global_config.default_max_speed);
+    let start_tx = device_data
+        .get_i64("start_tx")
+        .map(|x| x as i32)
+        .unwrap_or(global_config.default_start_tx);
+    let speed_scale = device_data
+        .get_f64("speed_scale")
+        .map(|x| x as f32 / 100.0)
+        .unwrap_or(global_config.default_speed_scale);
+    let max_speed_parameter = resolve_max_speed_parameter_from_yaml(&device_data);
     let use_velocity_control = device_data.get_bool("use_velocity_control").unwrap_or(global_config.default_use_velocity_control);
     let velocity_on_prox_drop = device_data
         .get_bool("velocity_on_prox_drop")
@@ -509,6 +545,7 @@ fn parse_device_config(
         proximity_parameter,
         min_speed,
         max_speed,
+        max_speed_fixed,
         start_tx,
         speed_scale,
         max_speed_parameter,

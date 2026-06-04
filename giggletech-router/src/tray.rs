@@ -850,6 +850,66 @@ body.ui-large #config-wrap {
 .proximity-band-panel .speed-slider-row {
   padding: 8px 0 12px;
 }
+.device-setup-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  width: 100%;
+  margin-top: 0;
+  margin-bottom: 8px;
+  padding: 28px 32px;
+  border-radius: 20px;
+  background: #12121a;
+  border: 2px solid #2a2a36;
+  box-sizing: border-box;
+}
+.device-setup-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+}
+.device-setup-panel-title {
+  font-size: 2rem;
+  font-weight: 600;
+  color: #e8e8f0;
+  letter-spacing: 0.01em;
+}
+.device-setup-header-actions {
+  flex-shrink: 0;
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+.device-setup-header-actions .btn-sm {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px 20px;
+  border-radius: 999px;
+  border: 2px solid #3f3f4e;
+  background: #2a2a36;
+  color: #e8e8f0;
+  font-size: 1.6rem;
+  font-weight: 600;
+  line-height: 1;
+}
+.device-setup-header-actions .btn-sm:hover {
+  background: #3f3f4e;
+}
+.device-setup-panel-body {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+.device-setup-panel-body.hidden {
+  display: none;
+}
+.device-setup-panel .device-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
 .velocity-toggle-row {
   position: relative;
   flex-direction: row !important;
@@ -1289,6 +1349,25 @@ let colliderAdjustmentVisibleByIndex = (() => {
   return {};
 })();
 
+let deviceSetupVisibleByIndex = (() => {
+  try {
+    const v = localStorage.getItem('deviceSetupVisibleByIndex');
+    if (v) return JSON.parse(v);
+  } catch (_) {}
+  return {};
+})();
+
+function isDeviceSetupVisible(index) {
+  return !!deviceSetupVisibleByIndex[index];
+}
+
+function setDeviceSetupVisible(index, visible) {
+  deviceSetupVisibleByIndex[index] = visible;
+  try {
+    localStorage.setItem('deviceSetupVisibleByIndex', JSON.stringify(deviceSetupVisibleByIndex));
+  } catch (_) {}
+}
+
 function isColliderAdjustmentVisible(index) {
   return !!colliderAdjustmentVisibleByIndex[index];
 }
@@ -1525,27 +1604,46 @@ function renderDevices() {
             <button type="button" class="btn btn-secondary btn-sm" onclick="pingDevice(${i}, true)">Ping</button>
           </div>
           <div class="device-card-body">
-          <div class="device-fields">
-            <label>IP address
-              <div class="ip-input-row">
-                <input type="text" id="device-ip-${i}" value="${escapeHtml(d.ip)}"
-                  oninput="editorDevices[${i}].ip=this.value; onDeviceIpChange(${i}); maybeClearConfigError()">
-                <button type="button" class="btn btn-secondary btn-sm mdns-check-btn" id="mdns-check-btn-${i}" onclick="checkDeviceMdns(${i})">Search IP</button>
-                <span class="mdns-check-hint" id="mdns-check-hint-${i}"></span>
+          <section class="device-setup-panel" aria-label="Device setup for device ${i + 1}">
+            <div class="device-setup-panel-header">
+              <span class="device-setup-panel-title">Device setup</span>
+              <div class="device-setup-header-actions">
+                <button type="button" class="btn btn-secondary btn-sm" id="device-setup-toggle-${i}"
+                  aria-expanded="${isDeviceSetupVisible(i) ? 'true' : 'false'}"
+                  aria-controls="device-setup-${i}"
+                  aria-label="${isDeviceSetupVisible(i) ? 'Hide' : 'Show'} device setup for device ${i + 1}"
+                  onclick="toggleDeviceSetup(${i})">${isDeviceSetupVisible(i) ? 'Hide' : 'Show'}</button>
               </div>
-            </label>
-            <label>Proximity parameter
-              <input type="text" value="${escapeHtml(d.proximity_parameter)}" placeholder="proximity_01"
-                oninput="editorDevices[${i}].proximity_parameter=this.value; maybeClearConfigError()">
-            </label>
-          </div>
+            </div>
+            <div class="device-setup-panel-body${isDeviceSetupVisible(i) ? '' : ' hidden'}" id="device-setup-${i}">
+              <div class="device-fields">
+                <label>IP address
+                  <div class="ip-input-row">
+                    <input type="text" id="device-ip-${i}" value="${escapeHtml(d.ip)}"
+                      oninput="editorDevices[${i}].ip=this.value; onDeviceIpChange(${i}); maybeClearConfigError()">
+                    <button type="button" class="btn btn-secondary btn-sm mdns-check-btn" id="mdns-check-btn-${i}" onclick="checkDeviceMdns(${i})">Search IP</button>
+                    <span class="mdns-check-hint" id="mdns-check-hint-${i}"></span>
+                  </div>
+                </label>
+                <label>Proximity parameter
+                  <input type="text" value="${escapeHtml(d.proximity_parameter)}" placeholder="proximity_01"
+                    oninput="editorDevices[${i}].proximity_parameter=this.value; maybeClearConfigError()">
+                </label>
+                <label>Max speed parameter
+                  <input type="text" value="${escapeHtml(d.max_speed_parameter || '')}"
+                    placeholder="(optional)"
+                    oninput="editorDevices[${i}].max_speed_parameter=this.value; maybeClearConfigError()">
+                </label>
+              </div>
+            </div>
+          </section>
           <label class="slider-field">
             <div class="slider-field-header">
               <span class="slider-field-title">Power</span>
               <span class="speed-value" id="max-speed-val-${i}">${d.max_speed}%</span>
             </div>
             <div class="speed-slider-row">
-              <input type="range" min="0" max="${SPEED_SLIDER_STEPS}"
+              <input type="range" id="max-speed-slider-${i}" min="0" max="${SPEED_SLIDER_STEPS}"
                 aria-label="Power for device ${i + 1}"
                 value="${Math.round(speedToSliderPos(d.max_speed) * SPEED_SLIDER_STEPS)}"
                 oninput="onMaxSpeedChange(${i}, this)" onchange="saveConfig(true)">
@@ -2003,14 +2101,31 @@ function beginSliderDrag(index, trackEl, e) {
   trackEl.addEventListener('lostpointercapture', drag.onLostCapture);
 }
 
-function onMaxSpeedChange(index, input) {
-  const t = parseInt(input.value, 10) / SPEED_SLIDER_STEPS;
-  const speed = sliderPosToSpeed(t);
+function applyMaxSpeedToDeviceUi(index, speed) {
+  const powerMin = editorSpeedDefaults.min || 5;
+  speed = Math.max(powerMin, Math.min(100, Math.round(speed)));
+  if (!editorDevices[index]) return;
   editorDevices[index].max_speed = speed;
-  input.value = Math.round(speedToSliderPos(speed) * SPEED_SLIDER_STEPS);
+  const slider = document.getElementById('max-speed-slider-' + index);
+  if (slider) slider.value = Math.round(speedToSliderPos(speed) * SPEED_SLIDER_STEPS);
   const label = document.getElementById('max-speed-val-' + index);
   if (label) label.textContent = speed + '%';
 }
+
+function onMaxSpeedChange(index, input) {
+  const t = parseInt(input.value, 10) / SPEED_SLIDER_STEPS;
+  applyMaxSpeedToDeviceUi(index, sliderPosToSpeed(t));
+}
+
+window.onMaxSpeedFromVrc = function(payload) {
+  if (!payload || !payload.ip) return;
+  const ip = String(payload.ip).trim();
+  const speed = payload.max_speed;
+  if (speed == null || isNaN(speed)) return;
+  const idx = editorDevices.findIndex((d) => (d.ip || '').trim() === ip);
+  if (idx < 0) return;
+  applyMaxSpeedToDeviceUi(idx, speed);
+};
 
 function togglePanelInfo(event, id) {
   if (event) {
@@ -2048,6 +2163,20 @@ function toggleColliderAdjustment(index) {
     btn.setAttribute('aria-expanded', visible ? 'true' : 'false');
     btn.setAttribute('aria-label', (visible ? 'Hide' : 'Show') + ' collider adjustment for device ' + (index + 1));
   }
+}
+
+function toggleDeviceSetup(index) {
+  const visible = !isDeviceSetupVisible(index);
+  setDeviceSetupVisible(index, visible);
+  const body = document.getElementById('device-setup-' + index);
+  if (body) body.classList.toggle('hidden', !visible);
+  const btn = document.getElementById('device-setup-toggle-' + index);
+  if (btn) {
+    btn.textContent = visible ? 'Hide' : 'Show';
+    btn.setAttribute('aria-expanded', visible ? 'true' : 'false');
+    btn.setAttribute('aria-label', (visible ? 'Hide' : 'Show') + ' device setup for device ' + (index + 1));
+  }
+  syncLogSectionLayout();
 }
 
 function toggleDeviceCardCollapse(index) {
@@ -2132,6 +2261,7 @@ function addDevice() {
     name: editorDevices.length === 0 ? 'Headpats' : '',
     ip: '',
     proximity_parameter: 'proximity_01',
+    max_speed_parameter: '',
     max_speed: editorSpeedDefaults.max,
     use_velocity_control: editorVelocityDefault,
     velocity_on_prox_drop: editorVelocityOnProxDropDefault,
@@ -2253,8 +2383,9 @@ window.onConfigLoaded = function(state) {
   }
   if (state.port_rx != null) editorPortRx = String(state.port_rx);
   const powerMin = editorSpeedDefaults.min;
-  editorDevices = (state.devices || []).map((d) => ({
+  editorDevices = (state.devices || []).map((d, i) => ({
     ...d,
+    max_speed_parameter: (d.max_speed_parameter || '').trim(),
     max_speed: Math.max(powerMin, d.max_speed ?? powerMin),
     use_velocity_control: !!d.use_velocity_control,
     velocity_on_prox_drop: !!d.velocity_on_prox_drop,
@@ -2475,6 +2606,7 @@ enum UserEvent {
   ColliderVizUpdate(String),
   PingResults(String),
   MdnsLookupResult(String),
+  MaxSpeedFromVrc(String),
   ShowOutput,
 }
 
@@ -2976,6 +3108,16 @@ pub fn run(start_minimized: bool, primary: PrimaryInstance) {
     );
   });
 
+  let max_speed_proxy = event_loop.create_proxy();
+  log_ui::set_max_speed_notify(move |device_ip, percent| {
+    if let Ok(json) = serde_json::to_string(&serde_json::json!({
+      "ip": device_ip,
+      "max_speed": percent,
+    })) {
+      let _ = max_speed_proxy.send_event(UserEvent::MaxSpeedFromVrc(json));
+    }
+  });
+
   let proxy = event_loop.create_proxy();
   TrayIconEvent::set_event_handler(Some(move |event| {
     let _ = proxy.send_event(UserEvent::TrayIconEvent(event));
@@ -3090,6 +3232,15 @@ pub fn run(start_minimized: bool, primary: PrimaryInstance) {
         if let Some(output) = &ui_state.output {
           let _ = output.webview.evaluate_script(&format!(
             "window.onDeviceMdnsResult({});",
+            json
+          ));
+        }
+      }
+
+      Event::UserEvent(UserEvent::MaxSpeedFromVrc(json)) => {
+        if let Some(output) = &ui_state.output {
+          let _ = output.webview.evaluate_script(&format!(
+            "window.onMaxSpeedFromVrc({});",
             json
           ));
         }

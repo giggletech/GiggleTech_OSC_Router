@@ -17,6 +17,9 @@ pub struct EditorDevice {
   pub name: String,
   pub ip: String,
   pub proximity_parameter: String,
+  /// VRChat parameter name for live max speed (without `/avatar/parameters/` prefix).
+  #[serde(default)]
+  pub max_speed_parameter: String,
   /// Motor max speed limit as a percentage (e.g. 5–100).
   pub max_speed: u32,
   /// When true, motor follows approach velocity; when false, proximity level.
@@ -64,6 +67,13 @@ pub struct EditorState {
   pub default_velocity_softcap: u32,
   #[serde(default)]
   pub default_velocity_smoothing_ms: u32,
+  /// Global default from `setup.default_max_speed_parameter`.
+  #[serde(default = "default_max_speed_parameter")]
+  pub default_max_speed_parameter: String,
+}
+
+fn default_max_speed_parameter() -> String {
+  "max_speed".to_string()
 }
 
 fn default_port_rx() -> String {
@@ -95,6 +105,7 @@ pub fn load_editor_state() -> Result<EditorState, String> {
   let default_velocity_scalar = cfg.setup.default_velocity_scalar;
   let default_velocity_softcap = cfg.setup.default_velocity_softcap;
   let default_velocity_smoothing_ms = cfg.setup.default_velocity_smoothing_ms;
+  let default_max_speed_parameter = cfg.setup.default_max_speed_parameter.clone();
 
   Ok(EditorState {
     devices: cfg
@@ -104,7 +115,8 @@ pub fn load_editor_state() -> Result<EditorState, String> {
       .map(|(i, d)| EditorDevice {
         name: effective_device_name(i, &d.name.unwrap_or_default()),
         ip: d.ip,
-        proximity_parameter: strip_proximity_prefix(d.proximity_parameter),
+        proximity_parameter: strip_avatar_parameter_short(&d.proximity_parameter),
+        max_speed_parameter: editor_max_speed_parameter_display(d.max_speed_parameter.as_deref()),
         max_speed: d.max_speed.unwrap_or(default_max).max(min_speed),
         use_velocity_control: d
           .use_velocity_control
@@ -137,6 +149,7 @@ pub fn load_editor_state() -> Result<EditorState, String> {
     default_velocity_scalar,
     default_velocity_softcap,
     default_velocity_smoothing_ms,
+    default_max_speed_parameter,
   })
 }
 
@@ -226,7 +239,8 @@ pub fn save_editor_state(state: &EditorState, quiet: bool) -> Result<(), String>
         let mut device = existing[i].clone();
         device.name = name_for_yaml(&effective_device_name(i, &ed.name));
         device.ip = ed.ip.trim().to_string();
-        device.proximity_parameter = normalize_proximity_parameter(&ed.proximity_parameter);
+        device.proximity_parameter = normalize_avatar_parameter_short(&ed.proximity_parameter);
+        device.max_speed_parameter = optional_max_speed_parameter(&ed.max_speed_parameter);
         device.max_speed = if ed.max_speed == default_max {
           None
         } else {
@@ -263,7 +277,7 @@ pub fn save_editor_state(state: &EditorState, quiet: bool) -> Result<(), String>
         Device {
           name: name_for_yaml(&effective_device_name(i, &ed.name)),
           ip: ed.ip.trim().to_string(),
-          proximity_parameter: normalize_proximity_parameter(&ed.proximity_parameter),
+          proximity_parameter: normalize_avatar_parameter_short(&ed.proximity_parameter),
           online_parameter: Some(resolve_online_parameter_for_save(
             i,
             &ed.name,
@@ -276,7 +290,7 @@ pub fn save_editor_state(state: &EditorState, quiet: bool) -> Result<(), String>
             Some(ed.max_speed)
           },
           speed_scale: None,
-          max_speed_parameter: None,
+          max_speed_parameter: optional_max_speed_parameter(&ed.max_speed_parameter),
           use_velocity_control: if ed.use_velocity_control == default_use_velocity_control {
             None
           } else {
@@ -375,12 +389,31 @@ fn online_parameter_to_short(existing: Option<&str>) -> Option<String> {
   Some(short)
 }
 
-fn strip_proximity_prefix(s: String) -> String {
+fn strip_avatar_parameter_short(s: &str) -> String {
   const PREFIX: &str = "/avatar/parameters/";
+  let s = s.trim();
   if s.starts_with(PREFIX) {
     s[PREFIX.len()..].to_string()
   } else {
     s.trim_start_matches('/').to_string()
+  }
+}
+
+fn editor_max_speed_parameter_display(yaml_value: Option<&str>) -> String {
+  match yaml_value {
+    Some(s) if !s.trim().is_empty() && !s.trim().eq_ignore_ascii_case("null") => {
+      strip_avatar_parameter_short(s)
+    }
+    _ => String::new(),
+  }
+}
+
+fn optional_max_speed_parameter(value: &str) -> Option<String> {
+  let short = normalize_avatar_parameter_short(value);
+  if short.is_empty() {
+    None
+  } else {
+    Some(short)
   }
 }
 
@@ -400,10 +433,6 @@ fn optional_u32(value: u32, default: u32) -> Option<u32> {
   }
 }
 
-fn normalize_proximity_parameter(s: &str) -> String {
-  let s = s.trim();
-  if s.starts_with("/avatar/parameters/") {
-    return s["/avatar/parameters/".len()..].to_string();
-  }
-  s.trim_start_matches('/').to_string()
+fn normalize_avatar_parameter_short(s: &str) -> String {
+  strip_avatar_parameter_short(s)
 }

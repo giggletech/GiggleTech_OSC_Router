@@ -36,6 +36,8 @@ static HEADPAT_TELEMETRY_NOTIFY: OnceCell<Box<dyn Fn(&str, &str, &str) + Send + 
 
 static PAT_BAR_NOTIFY: OnceCell<Box<dyn Fn(&str, &str) + Send + Sync>> = OnceCell::new();
 
+static MAX_SPEED_NOTIFY: OnceCell<Box<dyn Fn(&str, u32) + Send + Sync>> = OnceCell::new();
+
 /// When true, status lines are also printed to stdout (`--no-tray` mode).
 pub fn set_console_mirror(enabled: bool) {
   CONSOLE_MIRROR.store(enabled, Ordering::Relaxed);
@@ -96,6 +98,27 @@ pub fn set_motor_ui_devices(entries: Vec<(String, String, f32)>) {
           max_tx,
         },
       );
+    }
+  }
+}
+
+/// Register a callback when VRChat updates a device's max-speed parameter (settings UI Power slider).
+pub fn set_max_speed_notify(notify: impl Fn(&str, u32) + Send + Sync + 'static) {
+  let _ = MAX_SPEED_NOTIFY.set(Box::new(notify));
+}
+
+/// Push a VRChat max-speed change to the settings UI (`percent` is 1–100).
+pub fn notify_max_speed_from_vrc(device_ip: &str, percent: u32) {
+  if let Some(notify) = MAX_SPEED_NOTIFY.get() {
+    notify(device_ip, percent);
+  }
+}
+
+/// Refresh motor-bar normalization after max speed changes at runtime.
+pub fn update_device_motor_max_tx(device_ip: &str, max_tx: f32) {
+  if let Ok(mut map) = MOTOR_UI_BY_IP.lock() {
+    if let Some(params) = map.get_mut(device_ip) {
+      params.max_tx = max_tx.max(1.0);
     }
   }
 }
