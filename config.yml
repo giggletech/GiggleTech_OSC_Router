@@ -6,10 +6,10 @@ devices:
   max_speed: null
   speed_scale: null
   max_speed_parameter: null
-  use_velocity_control: null
+  use_velocity_control: false
   velocity_on_prox_drop: true
-  outer_proximity: 0.25
-  inner_proximity: 0.6700000166893005
+  outer_proximity: null
+  inner_proximity: null
   velocity_scalar: 19
   velocity_softcap: 70
   velocity_smoothing_ms: 250

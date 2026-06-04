@@ -37,6 +37,17 @@ pub fn param_key(s: &str) -> String {
     .to_string()
 }
 
+/// Batch key for prox/telemetry maps (device IP + parameter avoids cross-device bleed).
+pub fn batch_key(device_ip: &str, proximity_parameter: &str) -> String {
+  let ip = device_ip.trim();
+  let param = param_key(proximity_parameter);
+  if ip.is_empty() {
+    param
+  } else {
+    format!("{ip}::{param}")
+  }
+}
+
 pub fn state_script(state: &ColliderVizState) -> String {
   let json = serde_json::to_string(state).unwrap_or_else(|_| "{}".to_string());
   format!("window.applyColliderVizState({});", json)
@@ -46,8 +57,12 @@ pub fn prox_sample_script(value: f32) -> String {
   format!("window.applyColliderProxSample({});", value)
 }
 
-pub fn headpat_telemetry_script(json: &str) -> String {
-  format!("window.applyHeadpatTelemetry({});", json)
+pub fn headpat_telemetry_script(json: &str, append: bool) -> String {
+  format!("window.applyHeadpatTelemetry({json},{{append:{append}}});")
+}
+
+pub fn headpat_motor_script(motor: f32) -> String {
+  format!("window.applyHeadpatMotorSample({});", motor)
 }
 
 pub const COLLIDER_VIZ_HTML: &str = r#"<!DOCTYPE html>
@@ -233,7 +248,7 @@ body:not(.velocity-mode) .pipeline-only { display: none !important; }
 <body>
 <div class="app">
 <div class="header">
-  <h1 id="title">Collider</h1>
+  <h1 id="title">Device</h1>
 </div>
 <div class="app-scroll">
 <div class="viz-column">
@@ -275,6 +290,7 @@ let state = {
   velocity_on_prox_drop: false
 };
 const velHistory = { pre: [], smooth: [], motor: [] };
+let lastTelemetry = null;
 const VEL_HISTORY_LEN = 100;
 const CHART_SCALE_MAX = 100;
 const outputChart = document.getElementById('output-chart');
@@ -558,7 +574,7 @@ function updateHeadpatPanel() {
   document.body.classList.toggle('velocity-mode', !!state.velocity);
   const chartTitle = document.getElementById('chart-section-title');
   if (chartTitle) {
-    chartTitle.textContent = state.velocity ? 'Touch → motor' : 'Motor output';
+    chartTitle.textContent = state.velocity ? 'Vibration control' : 'Motor output';
   }
   updateChartLegend();
   requestAnimationFrame(layoutAll);
@@ -571,33 +587,68 @@ function clearVelHistory() {
   drawOutputChart();
 }
 
+function resetColliderSession() {
+  liveProx = null;
+  manualProx = null;
+  trail.length = 0;
+  lastTelemetry = null;
+  clearVelHistory();
+}
+
 function updateModeText() {
-  document.getElementById('title').textContent = 'Collider · ' + (state.name || 'Device');
+  document.getElementById('title').textContent = state.name || 'Device';
 }
 
 window.applyColliderVizState = function(s) {
   const prevIndex = state.index;
+  const prevParam = state.proximity_parameter;
+  const prevIp = state.device_ip;
+  const prevVelocity = state.velocity;
   state = Object.assign({}, state, s);
   if (state.inner <= state.outer) {
     state.inner = Math.min(1, state.outer + 0.01);
   }
-  if (s.index != null && s.index !== prevIndex) clearVelHistory();
+  const identityChanged =
+    (s.index != null && s.index !== prevIndex) ||
+    (s.proximity_parameter != null && s.proximity_parameter !== prevParam) ||
+    (s.device_ip != null && s.device_ip !== prevIp) ||
+    (s.velocity != null && !!s.velocity !== !!prevVelocity);
+  if (identityChanged) resetColliderSession();
   updateModeText();
   updateHeadpatPanel();
   layoutAll();
 };
 
-window.applyHeadpatTelemetry = function(t) {
+window.applyHeadpatTelemetry = function(t, opts) {
+  const append = !opts || opts.append !== false;
   const sample = {
     pre: Number(t.pre) || 0,
     smooth: Number(t.smooth) || 0,
     motor: Math.max(0, Math.min(1, Number(t.motor) || 0))
   };
-  pushVelHistory('motor', sample.motor);
-  if (state.velocity) {
-    pushVelHistory('pre', toChartPct(sample.pre));
-    pushVelHistory('smooth', toChartPct(sample.smooth));
+  lastTelemetry = sample;
+  if (append) {
+    pushVelHistory('motor', sample.motor);
+    if (state.velocity) {
+      pushVelHistory('pre', toChartPct(sample.pre));
+      pushVelHistory('smooth', toChartPct(sample.smooth));
+    }
   }
+  drawOutputChart();
+};
+
+window.applyHeadpatMotorSample = function(motor) {
+  const m = Math.max(0, Math.min(1, Number(motor) || 0));
+  if (lastTelemetry) {
+    lastTelemetry = {
+      pre: lastTelemetry.pre,
+      smooth: lastTelemetry.smooth,
+      motor: m
+    };
+  } else {
+    lastTelemetry = { pre: 0, smooth: 0, motor: m };
+  }
+  pushVelHistory('motor', m);
   drawOutputChart();
 };
 
@@ -610,6 +661,7 @@ window.applyColliderProxSample = function(v) {
     }
   }
   redraw();
+  if (state.velocity && lastTelemetry) drawOutputChart();
 };
 
 function pointerToProx(clientX, clientY) {

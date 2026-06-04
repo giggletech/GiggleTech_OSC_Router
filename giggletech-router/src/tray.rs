@@ -71,6 +71,8 @@ static PENDING_PROX_SIGNALS: Lazy<Mutex<HashMap<String, f32>>> =
   Lazy::new(|| Mutex::new(HashMap::new()));
 static PENDING_HEADPAT_TELEMETRY: Lazy<Mutex<HashMap<String, String>>> =
   Lazy::new(|| Mutex::new(HashMap::new()));
+static LAST_HEADPAT_TELEMETRY: Lazy<Mutex<HashMap<String, String>>> =
+  Lazy::new(|| Mutex::new(HashMap::new()));
 static LIVE_UI_FLUSH_PENDING: AtomicBool = AtomicBool::new(false);
 
 fn queue_live_ui_flush(proxy: &EventLoopProxy<UserEvent>) {
@@ -93,19 +95,24 @@ fn queue_pat_bar(param: String, graph: String, proxy: &EventLoopProxy<UserEvent>
   queue_live_ui_flush(proxy);
 }
 
-fn queue_prox_signal(param: String, value: f32, proxy: &EventLoopProxy<UserEvent>) {
-  PENDING_PROX_SIGNALS
-    .lock()
-    .unwrap()
-    .insert(collider_viz::param_key(&param), value);
+fn queue_prox_signal(device_ip: String, param: String, value: f32, proxy: &EventLoopProxy<UserEvent>) {
+  let key = collider_viz::batch_key(&device_ip, &param);
+  PENDING_PROX_SIGNALS.lock().unwrap().insert(key, value);
   let _ = proxy.send_event(UserEvent::ColliderProxFlush);
 }
 
-fn queue_headpat_telemetry(param: String, json: String, proxy: &EventLoopProxy<UserEvent>) {
+fn queue_headpat_telemetry(
+  device_ip: String,
+  param: String,
+  json: String,
+  proxy: &EventLoopProxy<UserEvent>,
+) {
+  let key = collider_viz::batch_key(&device_ip, &param);
   PENDING_HEADPAT_TELEMETRY
     .lock()
     .unwrap()
-    .insert(collider_viz::param_key(&param), json);
+    .insert(key.clone(), json.clone());
+  LAST_HEADPAT_TELEMETRY.lock().unwrap().insert(key, json);
   let _ = proxy.send_event(UserEvent::ColliderProxFlush);
 }
 
@@ -400,7 +407,10 @@ body.ui-large #config-wrap {
 .device-card.is-collapsed .device-actions {
   margin-top: 0;
 }
-.device-card.is-collapsed .device-actions > .btn-danger {
+.device-card.is-collapsed .device-actions-start > .btn-danger {
+  display: none;
+}
+.device-card.is-collapsed .device-actions-center {
   display: none;
 }
 .device-card-layout {
@@ -799,13 +809,13 @@ body.ui-large #config-wrap {
   color: #e8e8f0;
   letter-spacing: 0.01em;
 }
-.proximity-band-hide-row {
+.proximity-band-header-actions {
   flex-shrink: 0;
   display: flex;
   gap: 12px;
   align-items: center;
 }
-.proximity-band-hide-row .btn-sm {
+.proximity-band-header-actions .btn-sm {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -818,7 +828,7 @@ body.ui-large #config-wrap {
   font-weight: 600;
   line-height: 1;
 }
-.proximity-band-hide-row .btn-sm:hover {
+.proximity-band-header-actions .btn-sm:hover {
   background: #3f3f4e;
 }
 .proximity-band-panel-body {
@@ -1012,19 +1022,47 @@ body.ui-large #config-wrap {
   opacity: var(--motor-level);
   transition: opacity 0.08s ease-out;
 }
-.device-actions { display: flex; gap: 16px; flex-wrap: wrap; align-items: center; margin-top: 32px; width: 100%; }
-.device-actions .device-card-toggle-btn { margin-left: auto; }
+.device-actions {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 12px;
+  margin-top: 32px;
+  width: 100%;
+}
+.device-actions-start {
+  display: flex;
+  gap: 12px;
+  flex-wrap: nowrap;
+  align-items: center;
+  flex-shrink: 0;
+}
+.device-actions-center {
+  flex: 1 1 auto;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-width: 0;
+}
+.device-actions-end {
+  flex-shrink: 0;
+  margin-left: auto;
+}
 .device-actions .btn[disabled] { opacity: 0.55; cursor: default; }
-.device-actions .btn-sm {
-  /* Make Confirm/Cancel match pill sizing. */
+.device-actions button {
+  box-sizing: border-box;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  padding: 8px 20px;
+  min-width: 10.5rem;
+  height: 3rem;
+  padding: 0 20px;
   border-radius: 999px;
   font-size: 1.6rem;
   font-weight: 600;
   line-height: 1;
+  font-family: inherit;
+  cursor: pointer;
 }
 .device-actions .btn-secondary.btn-sm {
   border: 2px solid #3f3f4e;
@@ -1033,6 +1071,16 @@ body.ui-large #config-wrap {
 }
 .device-actions .btn-secondary.btn-sm:hover {
   background: #3f3f4e;
+}
+.device-actions .btn-secondary.btn-sm.device-viz-btn {
+  border: 2px solid #7c3aed;
+  background: #2a2a36;
+  color: #e8e8f0;
+}
+.device-actions .btn-secondary.btn-sm.device-viz-btn:hover {
+  background: #322847;
+  border-color: #a78bfa;
+  color: #f3e8ff;
 }
 .device-actions .btn-primary.btn-sm {
   border: 2px solid #7f1d1d;
@@ -1043,15 +1091,6 @@ body.ui-large #config-wrap {
   background: #7f1d1d;
 }
 .device-actions .btn-danger {
-  /* Match the status/ping pill sizing in the device header row. */
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: 8px 20px;
-  border-radius: 999px;
-  font-size: 1.6rem;
-  font-weight: 600;
-  line-height: 1;
   border: 2px solid #3f3f4e;
   background: #2a2a36;
   color: #b8b8c8;
@@ -1587,10 +1626,7 @@ function renderDevices() {
           <section class="proximity-band-panel" aria-label="Collider adjustment for device ${i + 1}">
             <div class="proximity-band-panel-header">
               <span class="proximity-band-panel-title">Collider adjustment</span>
-              <div class="proximity-band-hide-row">
-                <button type="button" class="btn btn-secondary btn-sm"
-                  aria-label="Open collider visualization for device ${i + 1}"
-                  onclick="openColliderViz(${i})">Visualize</button>
+              <div class="proximity-band-header-actions">
                 <button type="button" class="btn btn-secondary btn-sm" id="collider-adjust-toggle-${i}"
                   aria-expanded="${isColliderAdjustmentVisible(i) ? 'true' : 'false'}"
                   aria-label="${isColliderAdjustmentVisible(i) ? 'Hide' : 'Show'} collider adjustment for device ${i + 1}"
@@ -1624,15 +1660,24 @@ function renderDevices() {
           </section>
           </div>
           <div class="device-actions">
-            ${pendingRemoveIndex === i
-              ? `<button type="button" class="btn btn-danger" onclick="cancelRemoveDevice()">Remove</button>
-                 <button type="button" class="btn btn-secondary btn-sm" onclick="cancelRemoveDevice()">Cancel</button>
-                 <button type="button" class="btn btn-primary btn-sm" onclick="confirmRemoveDevice(${i})">Confirm</button>`
-              : `<button type="button" class="btn btn-danger" onclick="requestRemoveDevice(${i})">Remove</button>`}
-            <button type="button" class="btn btn-secondary btn-sm device-card-toggle-btn" id="device-card-toggle-${i}"
-              aria-expanded="${isDeviceCardCollapsed(i) ? 'false' : 'true'}"
-              aria-label="${isDeviceCardCollapsed(i) ? 'Show' : 'Hide'} device card details for device ${i + 1}"
-              onclick="toggleDeviceCardCollapse(${i})">${isDeviceCardCollapsed(i) ? 'Show' : 'Hide'}</button>
+            <div class="device-actions-start">
+              ${pendingRemoveIndex === i
+                ? `<button type="button" class="btn btn-danger" onclick="cancelRemoveDevice()">Remove</button>
+                   <button type="button" class="btn btn-secondary btn-sm" onclick="cancelRemoveDevice()">Cancel</button>
+                   <button type="button" class="btn btn-primary btn-sm" onclick="confirmRemoveDevice(${i})">Confirm</button>`
+                : `<button type="button" class="btn btn-danger" onclick="requestRemoveDevice(${i})">Remove</button>`}
+            </div>
+            ${pendingRemoveIndex !== i ? `<div class="device-actions-center">
+              <button type="button" class="btn btn-sm btn-secondary device-viz-btn"
+                aria-label="Open visualizer for device ${i + 1}"
+                onclick="openColliderViz(${i})">Visualizer</button>
+            </div>` : ''}
+            <div class="device-actions-end">
+              <button type="button" class="btn btn-secondary btn-sm device-card-toggle-btn" id="device-card-toggle-${i}"
+                aria-expanded="${isDeviceCardCollapsed(i) ? 'false' : 'true'}"
+                aria-label="${isDeviceCardCollapsed(i) ? 'Show' : 'Hide'} device card details for device ${i + 1}"
+                onclick="toggleDeviceCardCollapse(${i})">${isDeviceCardCollapsed(i) ? 'Show' : 'Hide'}</button>
+            </div>
           </div>
         </div>
         <div class="test-slider-col">
@@ -2501,29 +2546,43 @@ impl UiState {
 
   fn flush_collider_live_to(entry: &ColliderVizEntry, prox_batch: &HashMap<String, f32>, headpat_batch: &HashMap<String, String>) {
     let active = &entry.state;
-    let active_key = collider_viz::param_key(&active.proximity_parameter);
+    let active_key = collider_viz::batch_key(&active.device_ip, &active.proximity_parameter);
     if let Some(&value) = prox_batch.get(&active_key) {
       let _ = entry
         .webview
         .evaluate_script(&collider_viz::prox_sample_script(value));
     }
+    let device_ip = active.device_ip.trim();
     if active.velocity {
-      let motor_live = (!active.device_ip.is_empty())
-        .then(|| PENDING_MOTOR_BARS.lock().unwrap().get(&active.device_ip).copied())
+      let motor_live = (!device_ip.is_empty())
+        .then(|| PENDING_MOTOR_BARS.lock().unwrap().get(device_ip).copied())
         .flatten();
-      if let Some(json) = headpat_batch.get(&active_key) {
+      let fresh = headpat_batch.get(&active_key).cloned();
+      let telemetry = fresh.clone().or_else(|| {
+        LAST_HEADPAT_TELEMETRY
+          .lock()
+          .unwrap()
+          .get(&active_key)
+          .cloned()
+      });
+      if let Some(json) = telemetry {
+        let append = fresh.is_some();
         let script = motor_live
-          .map(|motor| merge_headpat_telemetry_motor(json, motor))
-          .unwrap_or_else(|| json.clone());
+          .map(|motor| merge_headpat_telemetry_motor(&json, motor))
+          .unwrap_or(json);
+        let _ = entry.webview.evaluate_script(&collider_viz::headpat_telemetry_script(
+          &script, append,
+        ));
+      } else if let Some(motor) = motor_live {
         let _ = entry
           .webview
-          .evaluate_script(&collider_viz::headpat_telemetry_script(&script));
+          .evaluate_script(&collider_viz::headpat_motor_script(motor));
       }
-    } else if !active.device_ip.is_empty() {
+    } else if !device_ip.is_empty() {
       let motor = PENDING_MOTOR_BARS
         .lock()
         .unwrap()
-        .get(&active.device_ip)
+        .get(device_ip)
         .copied();
       if let Some(motor) = motor {
         if let Ok(json) = serde_json::to_string(&serde_json::json!({
@@ -2532,9 +2591,9 @@ impl UiState {
           "smooth": 0.0,
           "motor": motor,
         })) {
-          let _ = entry
-            .webview
-            .evaluate_script(&collider_viz::headpat_telemetry_script(&json));
+          let _ = entry.webview.evaluate_script(&collider_viz::headpat_telemetry_script(
+            &json, true,
+          ));
         }
       }
     }
@@ -2555,9 +2614,9 @@ impl UiState {
   fn collider_viz_title(state: &ColliderVizState) -> String {
     let name = state.name.trim();
     if name.is_empty() {
-      format!("Collider · Device {}", state.index + 1)
+      format!("Device {}", state.index + 1)
     } else {
-      format!("Collider · {}", name)
+      name.to_string()
     }
   }
 
@@ -2568,6 +2627,7 @@ impl UiState {
   ) {
     if let Some(entry) = self.collider_viz.get_mut(&state.index) {
       entry.state = state.clone();
+      entry.window.set_title(&Self::collider_viz_title(&state));
       entry.window.set_visible(true);
       entry.window.set_focus();
       Self::push_collider_viz_state(entry, &state);
@@ -2917,13 +2977,18 @@ pub fn run(start_minimized: bool, primary: PrimaryInstance) {
   });
 
   let prox_signal_proxy = event_loop.create_proxy();
-  log_ui::set_prox_signal_notify(move |param, value| {
-    queue_prox_signal(param.to_string(), value, &prox_signal_proxy);
+  log_ui::set_prox_signal_notify(move |device_ip, param, value| {
+    queue_prox_signal(device_ip.to_string(), param.to_string(), value, &prox_signal_proxy);
   });
 
   let headpat_proxy = event_loop.create_proxy();
-  log_ui::set_headpat_telemetry_notify(move |param, json| {
-    queue_headpat_telemetry(param.to_string(), json.to_string(), &headpat_proxy);
+  log_ui::set_headpat_telemetry_notify(move |device_ip, param, json| {
+    queue_headpat_telemetry(
+      device_ip.to_string(),
+      param.to_string(),
+      json.to_string(),
+      &headpat_proxy,
+    );
   });
 
   let proxy = event_loop.create_proxy();
@@ -3059,6 +3124,7 @@ pub fn run(start_minimized: bool, primary: PrimaryInstance) {
         if let Some(state) = collider_viz::parse_state(&json) {
           if let Some(entry) = ui_state.collider_viz.get_mut(&state.index) {
             entry.state = state.clone();
+            entry.window.set_title(&UiState::collider_viz_title(&state));
             UiState::push_collider_viz_state(entry, &state);
           }
         }

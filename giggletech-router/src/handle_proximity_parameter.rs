@@ -70,7 +70,7 @@ pub(crate) async fn handle_proximity_parameter(
         String::new()
     };
     log_ui::notify_pat_bar(device.proximity_parameter.as_str(), &pat_graph);
-    log_ui::notify_prox_signal(device.proximity_parameter.as_str(), value);
+    log_ui::notify_prox_signal(device.device_uri.as_str(), device.proximity_parameter.as_str(), value);
 
     if value == 0.0 {
         // Reset smoothing when proximity fully clears.
@@ -82,7 +82,7 @@ pub(crate) async fn handle_proximity_parameter(
                 "smooth": 0.0,
                 "motor": 0.0,
             })) {
-                log_ui::notify_headpat_telemetry(device.proximity_parameter.as_str(), &json);
+                log_ui::notify_headpat_telemetry(device.device_uri.as_str(), device.proximity_parameter.as_str(), &json);
             }
         }
         stop_pats::stop_device_with_terminator(device_ip.as_str(), running.clone()).await?;
@@ -132,7 +132,7 @@ pub(crate) async fn handle_proximity_parameter(
                 "smooth": ema_vel,
                 "motor": motor_norm,
             })) {
-                log_ui::notify_headpat_telemetry(device.proximity_parameter.as_str(), &json);
+                log_ui::notify_headpat_telemetry(device.device_uri.as_str(), device.proximity_parameter.as_str(), &json);
             }
             if headpat_tx == 0 {
                 // Proximity still non-zero but no velocity pulse — latch motor off (single 0 is often not enough).
