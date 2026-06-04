@@ -410,7 +410,7 @@ body.ui-large #config-wrap {
 .device-card.is-collapsed .device-actions-start > .btn-danger {
   display: none;
 }
-.device-card.is-collapsed .device-actions-center {
+.device-card.is-collapsed .device-actions-end .device-viz-btn {
   display: none;
 }
 .device-card-layout {
@@ -449,26 +449,72 @@ body.ui-large #config-wrap {
 .device-name-row {
   display: flex;
   align-items: center;
-  gap: 20px;
-  flex-wrap: wrap;
+  gap: 12px;
+  flex-wrap: nowrap;
+  /* Align chrome buttons with device-setup-panel show/hide (panel uses 32px horizontal padding). */
+  padding-right: 32px;
+  box-sizing: border-box;
 }
 .device-name-row .device-name-input {
   flex: 1;
   min-width: 16rem;
   margin-bottom: 0;
 }
+.device-name-row-chrome {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-shrink: 0;
+  margin-left: auto;
+}
+button.device-status {
+  margin: 0;
+  appearance: none;
+  -webkit-appearance: none;
+}
 .device-status {
   flex-shrink: 0;
-  font-size: 1.6rem;
-  font-weight: 600;
-  padding: 8px 20px;
+  box-sizing: border-box;
+  width: 3rem;
+  height: 3rem;
+  min-width: 3rem;
+  padding: 0;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  line-height: 1;
-  border-radius: 999px;
+  border-radius: 50%;
   border: 2px solid #3f3f4e;
   background: #0f0f14;
+  color: #8888a0;
+  cursor: pointer;
+}
+.device-status-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 0;
+}
+.device-status-svg {
+  width: 1.25rem;
+  height: 1.25rem;
+  display: block;
+}
+.device-status.online .device-status-svg,
+.device-status.offline .device-status-svg {
+  width: 1.65rem;
+  height: 1.65rem;
+}
+.device-status.checking .device-status-spinner {
+  animation: device-status-spin 0.75s linear infinite;
+}
+@keyframes device-status-spin {
+  to { transform: rotate(360deg); }
+}
+.device-status:hover {
+  filter: brightness(1.12);
+}
+.device-status:active {
+  filter: brightness(0.95);
 }
 .device-status.online {
   color: #86efac;
@@ -491,19 +537,6 @@ body.ui-large #config-wrap {
 .btn-sm {
   padding: 12px 24px;
   font-size: 1.6rem;
-}
-.device-name-row .btn-sm {
-  /* Match the one-line status pill styling/size. */
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: 8px 20px;
-  border-radius: 999px;
-  border: 2px solid #3f3f4e;
-  background: #0f0f14;
-  color: #b8b8c8;
-  font-weight: 600;
-  line-height: 1;
 }
 .device-card label { display: flex; flex-direction: column; gap: 8px; font-size: 1.6rem; color: #a1a1b5; }
 .device-card input:not(.device-name-input) {
@@ -547,6 +580,39 @@ body.ui-large #config-wrap {
   min-height: 56px;
   padding: 0 8px;
 }
+.panel-disclosure-header {
+  display: grid !important;
+  grid-template-columns: minmax(0, 1fr) auto 3rem;
+  align-items: center;
+  column-gap: 24px;
+  padding: 0 !important;
+  min-height: 56px;
+}
+.panel-disclosure-header .panel-title-row,
+.panel-disclosure-header .device-setup-panel-title,
+.panel-disclosure-header .slider-field-title,
+.panel-disclosure-header .proximity-band-panel-title {
+  grid-column: 1;
+  min-width: 0;
+}
+.panel-disclosure-header .device-setup-header-actions,
+.panel-disclosure-header .power-panel-header-actions,
+.panel-disclosure-header .velocity-panel-header-actions,
+.panel-disclosure-header .proximity-band-header-actions {
+  display: contents;
+}
+.panel-disclosure-header .speed-value {
+  grid-column: 2;
+  justify-self: end;
+}
+.panel-disclosure-header .velocity-switch {
+  grid-column: 2;
+  justify-self: end;
+}
+.panel-disclosure-header .disclosure-toggle-btn {
+  grid-column: 3;
+  justify-self: end;
+}
 .slider-field-title {
   font-size: 2rem;
   font-weight: 600;
@@ -557,6 +623,23 @@ body.ui-large #config-wrap {
 .slider-field .speed-value {
   font-size: 2.25rem;
   min-width: 104px;
+}
+.power-panel-header-actions {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.power-panel-header-actions .speed-value {
+  min-width: 0;
+  text-align: right;
+  color: #c4b5fd;
+}
+.power-panel-body.hidden {
+  display: none;
+}
+.power-panel:has(.power-panel-body.hidden) .power-panel-header-actions .speed-value {
+  display: none;
 }
 .speed-slider-row {
   display: flex;
@@ -757,6 +840,19 @@ body.ui-large #config-wrap {
 }
 .panel-info-text.hidden {
   display: none;
+}
+.velocity-panel-header-actions {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.velocity-panel:not(.velocity-enabled) .headpat-panel-toggle {
+  display: none;
+}
+.velocity-panel:not(.velocity-enabled) .velocity-switch {
+  grid-column: 3;
+  justify-self: end;
 }
 .velocity-panel-header .velocity-switch {
   cursor: pointer;
@@ -1086,6 +1182,7 @@ body.ui-large #config-wrap {
   display: flex;
   flex-wrap: nowrap;
   align-items: center;
+  justify-content: flex-start;
   gap: 12px;
   margin-top: 32px;
   width: 100%;
@@ -1097,14 +1194,11 @@ body.ui-large #config-wrap {
   align-items: center;
   flex-shrink: 0;
 }
-.device-actions-center {
-  flex: 1 1 auto;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  min-width: 0;
-}
 .device-actions-end {
+  display: flex;
+  gap: 12px;
+  flex-wrap: nowrap;
+  align-items: center;
   flex-shrink: 0;
   margin-left: auto;
 }
@@ -1157,6 +1251,69 @@ body.ui-large #config-wrap {
 }
 .device-actions .btn-danger:hover {
   background: #3f3f4e;
+}
+.device-actions .device-remove-btn {
+  width: 3rem;
+  height: 3rem;
+  min-width: 3rem;
+  max-width: 3rem;
+  padding: 0;
+  border-radius: 50%;
+}
+.device-actions .device-remove-btn:hover {
+  border-color: #7f1d1d;
+  background: #450a0a;
+  color: #fca5a5;
+}
+.device-remove-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 0;
+}
+.device-remove-svg {
+  width: 1.55rem;
+  height: 1.55rem;
+  display: block;
+}
+.device-name-row-chrome .disclosure-toggle-btn,
+.device-actions .disclosure-toggle-btn,
+.device-setup-header-actions .disclosure-toggle-btn,
+.power-panel-header-actions .disclosure-toggle-btn,
+.velocity-panel-header-actions .disclosure-toggle-btn,
+.proximity-band-header-actions .disclosure-toggle-btn {
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 3rem;
+  height: 3rem;
+  min-width: 3rem;
+  max-width: 3rem;
+  padding: 0;
+  border-radius: 50%;
+  border: 2px solid #3f3f4e;
+  background: #2a2a36;
+  color: #e8e8f0;
+  flex-shrink: 0;
+  cursor: pointer;
+}
+.device-name-row-chrome .disclosure-toggle-btn:hover,
+.device-actions .disclosure-toggle-btn:hover,
+.device-setup-header-actions .disclosure-toggle-btn:hover,
+.power-panel-header-actions .disclosure-toggle-btn:hover,
+.velocity-panel-header-actions .disclosure-toggle-btn:hover,
+.proximity-band-header-actions .disclosure-toggle-btn:hover {
+  background: #3f3f4e;
+}
+.disclosure-toggle-icon {
+  display: inline-block;
+  font-size: 1.4rem;
+  line-height: 1;
+  transition: transform 0.15s ease;
+}
+.disclosure-toggle-btn[aria-expanded="true"] .disclosure-toggle-icon {
+  transform: rotate(180deg);
 }
 .btn-row { display: flex; gap: 16px; flex-wrap: wrap; }
 .btn {
@@ -1357,8 +1514,18 @@ let deviceSetupVisibleByIndex = (() => {
   return {};
 })();
 
+let powerPanelVisibleByIndex = (() => {
+  try {
+    const v = localStorage.getItem('powerPanelVisibleByIndex');
+    if (v) return JSON.parse(v);
+  } catch (_) {}
+  return {};
+})();
+
 function isDeviceSetupVisible(index) {
-  return !!deviceSetupVisibleByIndex[index];
+  const v = deviceSetupVisibleByIndex[index];
+  if (v === undefined) return true;
+  return !!v;
 }
 
 function setDeviceSetupVisible(index, visible) {
@@ -1369,13 +1536,49 @@ function setDeviceSetupVisible(index, visible) {
 }
 
 function isColliderAdjustmentVisible(index) {
-  return !!colliderAdjustmentVisibleByIndex[index];
+  const v = colliderAdjustmentVisibleByIndex[index];
+  if (v === undefined) return false;
+  return !!v;
 }
 
 function setColliderAdjustmentVisible(index, visible) {
   colliderAdjustmentVisibleByIndex[index] = visible;
   try {
     localStorage.setItem('colliderAdjustmentVisibleByIndex', JSON.stringify(colliderAdjustmentVisibleByIndex));
+  } catch (_) {}
+}
+
+function isPowerPanelVisible(index) {
+  const v = powerPanelVisibleByIndex[index];
+  if (v === undefined) return false;
+  return !!v;
+}
+
+function setPowerPanelVisible(index, visible) {
+  powerPanelVisibleByIndex[index] = visible;
+  try {
+    localStorage.setItem('powerPanelVisibleByIndex', JSON.stringify(powerPanelVisibleByIndex));
+  } catch (_) {}
+}
+
+let headpatPanelVisibleByIndex = (() => {
+  try {
+    const v = localStorage.getItem('headpatPanelVisibleByIndex');
+    if (v) return JSON.parse(v);
+  } catch (_) {}
+  return {};
+})();
+
+function isHeadpatPanelVisible(index) {
+  const v = headpatPanelVisibleByIndex[index];
+  if (v === undefined) return false;
+  return !!v;
+}
+
+function setHeadpatPanelVisible(index, visible) {
+  headpatPanelVisibleByIndex[index] = visible;
+  try {
+    localStorage.setItem('headpatPanelVisibleByIndex', JSON.stringify(headpatPanelVisibleByIndex));
   } catch (_) {}
 }
 
@@ -1404,8 +1607,8 @@ function applyDeviceCardCollapsedUi(index, collapsed) {
   card.classList.toggle('is-collapsed', collapsed);
   const btn = document.getElementById('device-card-toggle-' + index);
   if (btn) {
-    btn.textContent = collapsed ? 'Show' : 'Hide';
     btn.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
+    btn.setAttribute('aria-label', (collapsed ? 'Show' : 'Hide') + ' device card details for device ' + (index + 1));
   }
   if (collapsed) {
     const d = editorDevices[index];
@@ -1600,19 +1803,26 @@ function renderDevices() {
               placeholder="${i === 0 ? 'Headpats' : 'Device ' + (i + 1)}"
               oninput="editorDevices[${i}].name=this.value; maybeClearConfigError()"
               aria-label="Device name">
-            <span class="device-status unknown" id="device-status-${i}">—</span>
-            <button type="button" class="btn btn-secondary btn-sm" onclick="pingDevice(${i}, true)">Ping</button>
+            <div class="device-name-row-chrome">
+              <button type="button" class="device-status unknown" id="device-status-${i}"
+                aria-label="Ping device ${i + 1}: Unknown"
+                onclick="pingDevice(${i}, true)">${pingStatusIconMarkup('unknown')}</button>
+              <button type="button" class="btn btn-secondary btn-sm disclosure-toggle-btn" id="device-card-toggle-${i}"
+                aria-expanded="${isDeviceCardCollapsed(i) ? 'false' : 'true'}"
+                aria-label="${isDeviceCardCollapsed(i) ? 'Show' : 'Hide'} device card details for device ${i + 1}"
+                onclick="toggleDeviceCardCollapse(${i})"><span class="disclosure-toggle-icon" aria-hidden="true">▼</span></button>
+            </div>
           </div>
           <div class="device-card-body">
           <section class="device-setup-panel" aria-label="Device setup for device ${i + 1}">
-            <div class="device-setup-panel-header">
+            <div class="device-setup-panel-header panel-disclosure-header">
               <span class="device-setup-panel-title">Device setup</span>
               <div class="device-setup-header-actions">
-                <button type="button" class="btn btn-secondary btn-sm" id="device-setup-toggle-${i}"
+                <button type="button" class="btn btn-secondary btn-sm disclosure-toggle-btn" id="device-setup-toggle-${i}"
                   aria-expanded="${isDeviceSetupVisible(i) ? 'true' : 'false'}"
                   aria-controls="device-setup-${i}"
                   aria-label="${isDeviceSetupVisible(i) ? 'Hide' : 'Show'} device setup for device ${i + 1}"
-                  onclick="toggleDeviceSetup(${i})">${isDeviceSetupVisible(i) ? 'Hide' : 'Show'}</button>
+                  onclick="toggleDeviceSetup(${i})"><span class="disclosure-toggle-icon" aria-hidden="true">▼</span></button>
               </div>
             </div>
             <div class="device-setup-panel-body${isDeviceSetupVisible(i) ? '' : ' hidden'}" id="device-setup-${i}">
@@ -1637,20 +1847,29 @@ function renderDevices() {
               </div>
             </div>
           </section>
-          <label class="slider-field">
-            <div class="slider-field-header">
+          <section class="slider-field power-panel" aria-label="Power for device ${i + 1}">
+            <div class="slider-field-header panel-disclosure-header">
               <span class="slider-field-title">Power</span>
-              <span class="speed-value" id="max-speed-val-${i}">${d.max_speed}%</span>
+              <div class="power-panel-header-actions">
+                <span class="speed-value" id="max-speed-val-${i}">${d.max_speed}%</span>
+                <button type="button" class="btn btn-secondary btn-sm disclosure-toggle-btn" id="power-panel-toggle-${i}"
+                  aria-expanded="${isPowerPanelVisible(i) ? 'true' : 'false'}"
+                  aria-controls="power-panel-${i}"
+                  aria-label="${isPowerPanelVisible(i) ? 'Hide' : 'Show'} power for device ${i + 1}"
+                  onclick="togglePowerPanel(${i})"><span class="disclosure-toggle-icon" aria-hidden="true">▼</span></button>
+              </div>
             </div>
-            <div class="speed-slider-row">
-              <input type="range" id="max-speed-slider-${i}" min="0" max="${SPEED_SLIDER_STEPS}"
-                aria-label="Power for device ${i + 1}"
-                value="${Math.round(speedToSliderPos(d.max_speed) * SPEED_SLIDER_STEPS)}"
-                oninput="onMaxSpeedChange(${i}, this)" onchange="saveConfig(true)">
+            <div class="power-panel-body${isPowerPanelVisible(i) ? '' : ' hidden'}" id="power-panel-${i}">
+              <div class="speed-slider-row">
+                <input type="range" id="max-speed-slider-${i}" min="0" max="${SPEED_SLIDER_STEPS}"
+                  aria-label="Power for device ${i + 1}"
+                  value="${Math.round(speedToSliderPos(d.max_speed) * SPEED_SLIDER_STEPS)}"
+                  oninput="onMaxSpeedChange(${i}, this)" onchange="saveConfig(true)">
+              </div>
             </div>
-          </label>
-          <section class="velocity-panel" aria-label="Headpat Mode for device ${i + 1}">
-            <div class="velocity-panel-header">
+          </section>
+          <section class="velocity-panel${d.use_velocity_control ? ' velocity-enabled' : ''}" aria-label="Headpat Mode for device ${i + 1}">
+            <div class="velocity-panel-header panel-disclosure-header">
               <div class="panel-title-row">
                 <span class="velocity-panel-title">Headpat Mode</span>
                 <button type="button" class="panel-info-btn" aria-expanded="false"
@@ -1658,20 +1877,27 @@ function renderDevices() {
                   aria-label="About Headpat Mode"
                   onclick="togglePanelInfo(event, 'velocity-info-${i}')">i</button>
               </div>
-              <label class="velocity-switch">
-                <input type="checkbox" class="velocity-toggle-input" role="switch"
-                  aria-label="Enable Headpat Mode for device ${i + 1}"
-                  ${d.use_velocity_control ? 'checked' : ''}
-                  onchange="onVelocityControlChange(${i}, this)">
-                <span class="velocity-toggle-track" aria-hidden="true">
-                  <span class="velocity-toggle-thumb"></span>
-                </span>
-              </label>
+              <div class="velocity-panel-header-actions">
+                <label class="velocity-switch">
+                  <input type="checkbox" class="velocity-toggle-input" role="switch"
+                    aria-label="Enable Headpat Mode for device ${i + 1}"
+                    ${d.use_velocity_control ? 'checked' : ''}
+                    onchange="onVelocityControlChange(${i}, this)">
+                  <span class="velocity-toggle-track" aria-hidden="true">
+                    <span class="velocity-toggle-thumb"></span>
+                  </span>
+                </label>
+                <button type="button" class="btn btn-secondary btn-sm disclosure-toggle-btn headpat-panel-toggle" id="headpat-panel-toggle-${i}"
+                  aria-expanded="${isHeadpatPanelVisible(i) ? 'true' : 'false'}"
+                  aria-controls="headpat-panel-${i}"
+                  aria-label="${isHeadpatPanelVisible(i) ? 'Hide' : 'Show'} headpat settings for device ${i + 1}"
+                  onclick="toggleHeadpatPanel(${i})"><span class="disclosure-toggle-icon" aria-hidden="true">▼</span></button>
+              </div>
             </div>
             <p class="panel-info-text hidden" id="velocity-info-${i}">
               Vibratrion strength follows how fast proximity changes, not how close you are.
             </p>
-            <div class="velocity-panel-body${d.use_velocity_control ? '' : ' hidden'}">
+            <div class="velocity-panel-body${d.use_velocity_control && isHeadpatPanelVisible(i) ? '' : ' hidden'}" id="headpat-panel-${i}">
             <label class="velocity-toggle-row velocity-sub-toggle">
               <span class="velocity-toggle-label">Vibrate on pull-away</span>
               <input type="checkbox" class="velocity-toggle-input" role="switch"
@@ -1722,13 +1948,14 @@ function renderDevices() {
             </div>
           </section>
           <section class="proximity-band-panel" aria-label="Collider adjustment for device ${i + 1}">
-            <div class="proximity-band-panel-header">
+            <div class="proximity-band-panel-header panel-disclosure-header">
               <span class="proximity-band-panel-title">Collider adjustment</span>
               <div class="proximity-band-header-actions">
-                <button type="button" class="btn btn-secondary btn-sm" id="collider-adjust-toggle-${i}"
+                <button type="button" class="btn btn-secondary btn-sm disclosure-toggle-btn" id="collider-adjust-toggle-${i}"
                   aria-expanded="${isColliderAdjustmentVisible(i) ? 'true' : 'false'}"
+                  aria-controls="proximity-band-${i}"
                   aria-label="${isColliderAdjustmentVisible(i) ? 'Hide' : 'Show'} collider adjustment for device ${i + 1}"
-                  onclick="toggleColliderAdjustment(${i})">${isColliderAdjustmentVisible(i) ? 'Hide' : 'Show'}</button>
+                  onclick="toggleColliderAdjustment(${i})"><span class="disclosure-toggle-icon" aria-hidden="true">▼</span></button>
               </div>
             </div>
             <div class="proximity-band-panel-body${isColliderAdjustmentVisible(i) ? '' : ' hidden'}" id="proximity-band-${i}">
@@ -1763,18 +1990,13 @@ function renderDevices() {
                 ? `<button type="button" class="btn btn-danger" onclick="cancelRemoveDevice()">Remove</button>
                    <button type="button" class="btn btn-secondary btn-sm" onclick="cancelRemoveDevice()">Cancel</button>
                    <button type="button" class="btn btn-primary btn-sm" onclick="confirmRemoveDevice(${i})">Confirm</button>`
-                : `<button type="button" class="btn btn-danger" onclick="requestRemoveDevice(${i})">Remove</button>`}
+                : `<button type="button" class="btn btn-danger device-remove-btn" aria-label="Remove device ${i + 1}"
+                   onclick="requestRemoveDevice(${i})">${removeDeviceIconMarkup()}</button>`}
             </div>
-            ${pendingRemoveIndex !== i ? `<div class="device-actions-center">
-              <button type="button" class="btn btn-sm btn-secondary device-viz-btn"
-                aria-label="Open visualizer for device ${i + 1}"
-                onclick="openColliderViz(${i})">Visualizer</button>
-            </div>` : ''}
             <div class="device-actions-end">
-              <button type="button" class="btn btn-secondary btn-sm device-card-toggle-btn" id="device-card-toggle-${i}"
-                aria-expanded="${isDeviceCardCollapsed(i) ? 'false' : 'true'}"
-                aria-label="${isDeviceCardCollapsed(i) ? 'Show' : 'Hide'} device card details for device ${i + 1}"
-                onclick="toggleDeviceCardCollapse(${i})">${isDeviceCardCollapsed(i) ? 'Show' : 'Hide'}</button>
+              ${pendingRemoveIndex !== i ? `<button type="button" class="btn btn-sm btn-secondary device-viz-btn"
+                aria-label="Open visualizer for device ${i + 1}"
+                onclick="openColliderViz(${i})">Visualizer</button>` : ''}
             </div>
           </div>
         </div>
@@ -1810,8 +2032,26 @@ function syncLogSectionLayout() {
 function pingStatusLabel(st) {
   if (st === 'online') return 'Online';
   if (st === 'offline') return 'Offline';
-  if (st === 'checking') return 'Checking…';
-  return '—';
+  if (st === 'checking') return 'Checking';
+  return 'Unknown';
+}
+
+function removeDeviceIconMarkup() {
+  return '<span class="device-remove-icon" aria-hidden="true"><svg class="device-remove-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16"/><path d="M10 7V5a2 2 0 0 1 4 0v2"/><path d="M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12"/><path d="M10 11v5"/><path d="M14 11v5"/></svg></span>';
+}
+
+function pingStatusIconMarkup(st) {
+  let svg = '';
+  if (st === 'online') {
+    svg = '<svg class="device-status-svg" viewBox="0 0 24 24"><path d="M5 12.5l5.5 5.5L19 7.5" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+  } else if (st === 'offline') {
+    svg = '<svg class="device-status-svg" viewBox="0 0 24 24"><path d="M7 7l10 10M17 7L7 17" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/></svg>';
+  } else if (st === 'checking') {
+    svg = '<svg class="device-status-svg device-status-spinner" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8" fill="none" stroke="currentColor" stroke-width="2" opacity="0.28"/><path d="M12 4a8 8 0 0 1 8 8" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>';
+  } else {
+    svg = '<svg class="device-status-svg" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8" fill="none" stroke="currentColor" stroke-width="2"/></svg>';
+  }
+  return '<span class="device-status-icon" aria-hidden="true">' + svg + '</span>';
 }
 
 function updatePingBadges() {
@@ -1821,7 +2061,8 @@ function updatePingBadges() {
     const ip = (d.ip || '').trim();
     const st = ip ? (devicePingStatus[ip] || 'unknown') : 'unknown';
     el.className = 'device-status ' + st;
-    el.textContent = pingStatusLabel(st);
+    el.innerHTML = pingStatusIconMarkup(st);
+    el.setAttribute('aria-label', 'Ping device ' + (i + 1) + ': ' + pingStatusLabel(st));
   });
 }
 
@@ -2159,7 +2400,6 @@ function toggleColliderAdjustment(index) {
   if (body) body.classList.toggle('hidden', !visible);
   const btn = document.getElementById('collider-adjust-toggle-' + index);
   if (btn) {
-    btn.textContent = visible ? 'Hide' : 'Show';
     btn.setAttribute('aria-expanded', visible ? 'true' : 'false');
     btn.setAttribute('aria-label', (visible ? 'Hide' : 'Show') + ' collider adjustment for device ' + (index + 1));
   }
@@ -2172,9 +2412,37 @@ function toggleDeviceSetup(index) {
   if (body) body.classList.toggle('hidden', !visible);
   const btn = document.getElementById('device-setup-toggle-' + index);
   if (btn) {
-    btn.textContent = visible ? 'Hide' : 'Show';
     btn.setAttribute('aria-expanded', visible ? 'true' : 'false');
     btn.setAttribute('aria-label', (visible ? 'Hide' : 'Show') + ' device setup for device ' + (index + 1));
+  }
+  syncLogSectionLayout();
+}
+
+function togglePowerPanel(index) {
+  const visible = !isPowerPanelVisible(index);
+  setPowerPanelVisible(index, visible);
+  const body = document.getElementById('power-panel-' + index);
+  if (body) body.classList.toggle('hidden', !visible);
+  const val = document.getElementById('max-speed-val-' + index);
+  if (val) val.style.display = visible ? '' : 'none';
+  const btn = document.getElementById('power-panel-toggle-' + index);
+  if (btn) {
+    btn.setAttribute('aria-expanded', visible ? 'true' : 'false');
+    btn.setAttribute('aria-label', (visible ? 'Hide' : 'Show') + ' power for device ' + (index + 1));
+  }
+  syncLogSectionLayout();
+}
+
+function toggleHeadpatPanel(index) {
+  if (!editorDevices[index] || !editorDevices[index].use_velocity_control) return;
+  const visible = !isHeadpatPanelVisible(index);
+  setHeadpatPanelVisible(index, visible);
+  const body = document.getElementById('headpat-panel-' + index);
+  if (body) body.classList.toggle('hidden', !visible);
+  const btn = document.getElementById('headpat-panel-toggle-' + index);
+  if (btn) {
+    btn.setAttribute('aria-expanded', visible ? 'true' : 'false');
+    btn.setAttribute('aria-label', (visible ? 'Hide' : 'Show') + ' headpat settings for device ' + (index + 1));
   }
   syncLogSectionLayout();
 }
