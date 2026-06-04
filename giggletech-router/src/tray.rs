@@ -1457,19 +1457,14 @@ button.device-status {
 .device-actions .btn-secondary.btn-sm:hover {
   background: #3f3f4e;
 }
-.device-actions .btn-secondary.btn-sm.device-viz-btn {
-  border: 2px solid #7c3aed;
-  background: #2a2a36;
-  color: #e8e8f0;
-}
-.device-actions .btn-secondary.btn-sm.device-viz-btn:hover {
-  background: #322847;
-  border-color: #a78bfa;
-  color: #f3e8ff;
-}
 .device-actions .btn-secondary.btn-sm.device-viz-btn.device-viz-btn-active {
   border-color: #a855f7;
   background: #2e1065;
+  color: #f3e8ff;
+}
+.device-actions .btn-secondary.btn-sm.device-viz-btn.device-viz-btn-active:hover {
+  background: #322847;
+  border-color: #a78bfa;
   color: #f3e8ff;
 }
 .device-actions .btn-primary.btn-sm {
@@ -2146,6 +2141,7 @@ function openColliderViz(index) {
   openColliderVizCard(p);
   window.ipc.postMessage('collider-viz-open:' + JSON.stringify(p));
   updateColliderVizButton(index);
+  applyLogColumnUi();
 }
 
 function editorValidationOk() {
