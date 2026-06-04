@@ -30,6 +30,10 @@ static STATUS_NOTIFY: OnceCell<Box<dyn Fn() + Send + Sync>> = OnceCell::new();
 
 static PROXIMITY_NOTIFY: OnceCell<Box<dyn Fn(&str, f32) + Send + Sync>> = OnceCell::new();
 
+static PROX_SIGNAL_NOTIFY: OnceCell<Box<dyn Fn(&str, f32) + Send + Sync>> = OnceCell::new();
+
+static HEADPAT_TELEMETRY_NOTIFY: OnceCell<Box<dyn Fn(&str, &str) + Send + Sync>> = OnceCell::new();
+
 static PAT_BAR_NOTIFY: OnceCell<Box<dyn Fn(&str, &str) + Send + Sync>> = OnceCell::new();
 
 /// When true, status lines are also printed to stdout (`--no-tray` mode).
@@ -45,6 +49,30 @@ pub fn set_status_notify(notify: impl Fn() + Send + Sync + 'static) {
 /// Register a callback for live motor bars in the output window (`key` = device IP).
 pub fn set_proximity_notify(notify: impl Fn(&str, f32) + Send + Sync + 'static) {
   let _ = PROXIMITY_NOTIFY.set(Box::new(notify));
+}
+
+/// Raw proximity parameter samples (for collider visualization).
+pub fn set_prox_signal_notify(notify: impl Fn(&str, f32) + Send + Sync + 'static) {
+  let _ = PROX_SIGNAL_NOTIFY.set(Box::new(notify));
+}
+
+pub fn notify_prox_signal(parameter: &str, value: f32) {
+  if let Some(notify) = PROX_SIGNAL_NOTIFY.get() {
+    let key = parameter.trim_start_matches("/avatar/parameters/");
+    notify(key, value);
+  }
+}
+
+/// Headpat pipeline samples for the collider viz (`json` = serialized telemetry).
+pub fn set_headpat_telemetry_notify(notify: impl Fn(&str, &str) + Send + Sync + 'static) {
+  let _ = HEADPAT_TELEMETRY_NOTIFY.set(Box::new(notify));
+}
+
+pub fn notify_headpat_telemetry(parameter: &str, json: &str) {
+  if let Some(notify) = HEADPAT_TELEMETRY_NOTIFY.get() {
+    let key = parameter.trim_start_matches("/avatar/parameters/");
+    notify(key, json);
+  }
 }
 
 pub fn notify_proximity(parameter: &str, value: f32) {

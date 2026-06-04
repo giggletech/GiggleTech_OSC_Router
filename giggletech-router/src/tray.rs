@@ -28,6 +28,7 @@ use wry::{WebContext, WebViewBuilder};
 use serde::Deserialize;
 use tao::event_loop::EventLoopProxy;
 
+use crate::collider_viz::{self, ColliderVizState};
 use crate::config_editor;
 use crate::device_discovery;
 use crate::device_ping;
@@ -50,6 +51,12 @@ const OUTPUT_WINDOW_WIDTH: f64 = 1080.0;
 const OUTPUT_WINDOW_HEIGHT: f64 = 720.0;
 const OUTPUT_WINDOW_MIN_WIDTH: f64 = 960.0;
 const OUTPUT_WINDOW_MIN_HEIGHT: f64 = 480.0;
+/// Same width as the device column in the output window (`#main` is two equal columns).
+const COLLIDER_VIZ_WIDTH: f64 = OUTPUT_WINDOW_WIDTH / 2.0;
+/// Taller than the output window so ring + chart fit without clipping the chart.
+const COLLIDER_VIZ_HEIGHT: f64 = OUTPUT_WINDOW_HEIGHT + 100.0;
+const COLLIDER_VIZ_MIN_WIDTH: f64 = 280.0;
+const COLLIDER_VIZ_MIN_HEIGHT: f64 = 420.0;
 
 fn clamp_startup_height(h: f64) -> f64 {
   // Per request: don't cap to monitor height; just ensure we don't go below the minimum.
@@ -59,6 +66,10 @@ fn clamp_startup_height(h: f64) -> f64 {
 static PENDING_MOTOR_BARS: Lazy<Mutex<HashMap<String, f32>>> =
   Lazy::new(|| Mutex::new(HashMap::new()));
 static PENDING_PAT_BARS: Lazy<Mutex<HashMap<String, String>>> =
+  Lazy::new(|| Mutex::new(HashMap::new()));
+static PENDING_PROX_SIGNALS: Lazy<Mutex<HashMap<String, f32>>> =
+  Lazy::new(|| Mutex::new(HashMap::new()));
+static PENDING_HEADPAT_TELEMETRY: Lazy<Mutex<HashMap<String, String>>> =
   Lazy::new(|| Mutex::new(HashMap::new()));
 static LIVE_UI_FLUSH_PENDING: AtomicBool = AtomicBool::new(false);
 
@@ -74,11 +85,37 @@ fn queue_live_ui_flush(proxy: &EventLoopProxy<UserEvent>) {
 fn queue_motor_bar(device_ip: String, value: f32, proxy: &EventLoopProxy<UserEvent>) {
   PENDING_MOTOR_BARS.lock().unwrap().insert(device_ip, value);
   queue_live_ui_flush(proxy);
+  let _ = proxy.send_event(UserEvent::ColliderProxFlush);
 }
 
 fn queue_pat_bar(param: String, graph: String, proxy: &EventLoopProxy<UserEvent>) {
   PENDING_PAT_BARS.lock().unwrap().insert(param, graph);
   queue_live_ui_flush(proxy);
+}
+
+fn queue_prox_signal(param: String, value: f32, proxy: &EventLoopProxy<UserEvent>) {
+  PENDING_PROX_SIGNALS
+    .lock()
+    .unwrap()
+    .insert(collider_viz::param_key(&param), value);
+  let _ = proxy.send_event(UserEvent::ColliderProxFlush);
+}
+
+fn queue_headpat_telemetry(param: String, json: String, proxy: &EventLoopProxy<UserEvent>) {
+  PENDING_HEADPAT_TELEMETRY
+    .lock()
+    .unwrap()
+    .insert(collider_viz::param_key(&param), json);
+  let _ = proxy.send_event(UserEvent::ColliderProxFlush);
+}
+
+/// Prefer live motor bar (post-`send_data`) over velocity-derived estimate in headpat telemetry JSON.
+fn merge_headpat_telemetry_motor(json: &str, motor: f32) -> String {
+  let mut value: serde_json::Value = serde_json::from_str(json).unwrap_or(serde_json::json!({}));
+  if let Some(obj) = value.as_object_mut() {
+    obj.insert("motor".to_string(), serde_json::json!(motor.clamp(0.0, 1.0)));
+  }
+  value.to_string()
 }
 
 fn flush_live_ui(webview: &wry::WebView) {
@@ -764,6 +801,9 @@ body.ui-large #config-wrap {
 }
 .proximity-band-hide-row {
   flex-shrink: 0;
+  display: flex;
+  gap: 12px;
+  align-items: center;
 }
 .proximity-band-hide-row .btn-sm {
   display: inline-flex;
@@ -1352,6 +1392,40 @@ function effectiveVelocitySmoothingMs(d) {
   return d.velocity_smoothing_ms ?? editorVelocityProxDefaults.smoothing_ms;
 }
 
+function deviceDisplayName(index, name) {
+  const trimmed = (name || '').trim();
+  if (trimmed) return trimmed;
+  return index === 0 ? 'Headpats' : 'Device ' + (index + 1);
+}
+
+function colliderVizPayload(index) {
+  const d = editorDevices[index];
+  if (!d) return null;
+  return {
+    index: index,
+    name: deviceDisplayName(index, d.name),
+    device_ip: (d.ip || '').trim(),
+    proximity_parameter: (d.proximity_parameter || 'proximity_01').trim(),
+    outer: effectiveOuterProx(d),
+    inner: effectiveInnerProx(d),
+    velocity: !!d.use_velocity_control,
+    velocity_scalar: effectiveVelocityScalar(d),
+    velocity_softcap: effectiveVelocitySoftcap(d),
+    velocity_smoothing_ms: effectiveVelocitySmoothingMs(d),
+    velocity_on_prox_drop: !!d.velocity_on_prox_drop
+  };
+}
+
+function syncColliderViz(index) {
+  const p = colliderVizPayload(index);
+  if (p) window.ipc.postMessage('collider-viz-update:' + JSON.stringify(p));
+}
+
+function openColliderViz(index) {
+  const p = colliderVizPayload(index);
+  if (p) window.ipc.postMessage('collider-viz-open:' + JSON.stringify(p));
+}
+
 function editorValidationOk() {
   if (!editorDevices.length) return false;
   for (const d of editorDevices) {
@@ -1514,6 +1588,9 @@ function renderDevices() {
             <div class="proximity-band-panel-header">
               <span class="proximity-band-panel-title">Collider adjustment</span>
               <div class="proximity-band-hide-row">
+                <button type="button" class="btn btn-secondary btn-sm"
+                  aria-label="Open collider visualization for device ${i + 1}"
+                  onclick="openColliderViz(${i})">Visualize</button>
                 <button type="button" class="btn btn-secondary btn-sm" id="collider-adjust-toggle-${i}"
                   aria-expanded="${isColliderAdjustmentVisible(i) ? 'true' : 'false'}"
                   aria-label="${isColliderAdjustmentVisible(i) ? 'Hide' : 'Show'} collider adjustment for device ${i + 1}"
@@ -1910,6 +1987,7 @@ function togglePanelInfo(event, id) {
 function onVelocityControlChange(index, input) {
   if (!editorDevices[index]) return;
   editorDevices[index].use_velocity_control = !!input.checked;
+  syncColliderViz(index);
   renderDevices();
   saveConfig(true);
 }
@@ -1938,6 +2016,7 @@ function toggleDeviceCardCollapse(index) {
 function onVelocityOnProxDropChange(index, input) {
   if (!editorDevices[index]) return;
   editorDevices[index].velocity_on_prox_drop = !!input.checked;
+  syncColliderViz(index);
   saveConfig(true);
 }
 
@@ -1950,6 +2029,7 @@ function onInnerProxBandChange(index, input) {
   if (closeEdge <= farEdge) closeEdge = Math.min(1, farEdge + 0.01);
   d.inner_proximity = closeEdge;
   input.value = proxToColliderSliderPct(closeEdge);
+  syncColliderViz(index);
   maybeClearConfigError();
 }
 
@@ -1965,6 +2045,7 @@ function onOuterProxBandChange(index, input) {
     const innerInput = document.getElementById('inner-prox-' + index);
     if (innerInput) innerInput.value = proxToColliderSliderPct(closeEdge);
   }
+  syncColliderViz(index);
   maybeClearConfigError();
 }
 
@@ -1975,6 +2056,7 @@ function onVelocityScalarChange(index, input) {
   d.velocity_scalar = v;
   const label = document.getElementById('velocity-scalar-val-' + index);
   if (label) label.textContent = String(v) + '%';
+  syncColliderViz(index);
   maybeClearConfigError();
 }
 
@@ -1985,6 +2067,7 @@ function onVelocitySoftcapChange(index, input) {
   d.velocity_softcap = dampingPctToVelocitySoftcap(dampingPct);
   const label = document.getElementById('velocity-softcap-val-' + index);
   if (label) label.textContent = String(dampingPct) + '%';
+  syncColliderViz(index);
   maybeClearConfigError();
 }
 
@@ -1995,6 +2078,7 @@ function onVelocitySmoothingChange(index, input) {
   d.velocity_smoothing_ms = v;
   const label = document.getElementById('velocity-smoothing-val-' + index);
   if (label) label.textContent = String(v) + 'ms';
+  syncColliderViz(index);
   maybeClearConfigError();
 }
 
@@ -2340,7 +2424,10 @@ enum UserEvent {
   MenuEvent(tray_icon::menu::MenuEvent),
   StatusUpdated,
   LiveUiFlush,
+  ColliderProxFlush,
   ConfigIpc(String),
+  ColliderVizOpen(String),
+  ColliderVizUpdate(String),
   PingResults(String),
   MdnsLookupResult(String),
   ShowOutput,
@@ -2361,6 +2448,12 @@ struct OutputWindow {
   webview: wry::WebView,
 }
 
+struct ColliderVizEntry {
+  window: Window,
+  webview: wry::WebView,
+  state: ColliderVizState,
+}
+
 const STATUS_FLUSH_INTERVAL: Duration = Duration::from_millis(50);
 
 fn webview_data_directory() -> PathBuf {
@@ -2374,6 +2467,7 @@ fn webview_data_directory() -> PathBuf {
 struct UiState {
   web_context: WebContext,
   output: Option<OutputWindow>,
+  collider_viz: HashMap<usize, ColliderVizEntry>,
   status_synced: usize,
   status_epoch: usize,
   status_pending: bool,
@@ -2386,6 +2480,7 @@ impl UiState {
     Self {
       web_context: WebContext::new(Some(webview_data_directory())),
       output: None,
+      collider_viz: HashMap::new(),
       status_synced: 0,
       status_epoch: log_ui::buffer_epoch(),
       status_pending: false,
@@ -2396,6 +2491,139 @@ impl UiState {
 
   fn output_window_id(&self) -> Option<tao::window::WindowId> {
     self.output.as_ref().map(|o| o.window.id())
+  }
+
+  fn push_collider_viz_state(entry: &ColliderVizEntry, state: &ColliderVizState) {
+    let _ = entry
+      .webview
+      .evaluate_script(&collider_viz::state_script(state));
+  }
+
+  fn flush_collider_live_to(entry: &ColliderVizEntry, prox_batch: &HashMap<String, f32>, headpat_batch: &HashMap<String, String>) {
+    let active = &entry.state;
+    let active_key = collider_viz::param_key(&active.proximity_parameter);
+    if let Some(&value) = prox_batch.get(&active_key) {
+      let _ = entry
+        .webview
+        .evaluate_script(&collider_viz::prox_sample_script(value));
+    }
+    if active.velocity {
+      let motor_live = (!active.device_ip.is_empty())
+        .then(|| PENDING_MOTOR_BARS.lock().unwrap().get(&active.device_ip).copied())
+        .flatten();
+      if let Some(json) = headpat_batch.get(&active_key) {
+        let script = motor_live
+          .map(|motor| merge_headpat_telemetry_motor(json, motor))
+          .unwrap_or_else(|| json.clone());
+        let _ = entry
+          .webview
+          .evaluate_script(&collider_viz::headpat_telemetry_script(&script));
+      }
+    } else if !active.device_ip.is_empty() {
+      let motor = PENDING_MOTOR_BARS
+        .lock()
+        .unwrap()
+        .get(&active.device_ip)
+        .copied();
+      if let Some(motor) = motor {
+        if let Ok(json) = serde_json::to_string(&serde_json::json!({
+          "pre": 0.0,
+          "damped": 0.0,
+          "smooth": 0.0,
+          "motor": motor,
+        })) {
+          let _ = entry
+            .webview
+            .evaluate_script(&collider_viz::headpat_telemetry_script(&json));
+        }
+      }
+    }
+  }
+
+  fn flush_collider_live(&mut self) {
+    if self.collider_viz.is_empty() {
+      return;
+    }
+    let prox_batch: HashMap<String, f32> = PENDING_PROX_SIGNALS.lock().unwrap().drain().collect();
+    let headpat_batch: HashMap<String, String> =
+      PENDING_HEADPAT_TELEMETRY.lock().unwrap().drain().collect();
+    for entry in self.collider_viz.values() {
+      Self::flush_collider_live_to(entry, &prox_batch, &headpat_batch);
+    }
+  }
+
+  fn collider_viz_title(state: &ColliderVizState) -> String {
+    let name = state.name.trim();
+    if name.is_empty() {
+      format!("Collider · Device {}", state.index + 1)
+    } else {
+      format!("Collider · {}", name)
+    }
+  }
+
+  fn show_collider_viz(
+    &mut self,
+    event_loop: &EventLoopWindowTarget<UserEvent>,
+    state: ColliderVizState,
+  ) {
+    if let Some(entry) = self.collider_viz.get_mut(&state.index) {
+      entry.state = state.clone();
+      entry.window.set_visible(true);
+      entry.window.set_focus();
+      Self::push_collider_viz_state(entry, &state);
+      let _ = entry
+        .webview
+        .evaluate_script("requestAnimationFrame(layoutAll);");
+      return;
+    }
+
+    let window = WindowBuilder::new()
+      .with_title(Self::collider_viz_title(&state))
+      .with_inner_size(LogicalSize::new(COLLIDER_VIZ_WIDTH, COLLIDER_VIZ_HEIGHT))
+      .with_min_inner_size(LogicalSize::new(
+        COLLIDER_VIZ_MIN_WIDTH,
+        COLLIDER_VIZ_MIN_HEIGHT,
+      ))
+      .with_resizable(true)
+      .with_window_icon(Some(load_tao_icon_from_ico(32)))
+      .build(event_loop)
+      .expect("Failed to create collider viz window");
+
+    let webview = WebViewBuilder::with_web_context(&mut self.web_context)
+      .with_html(collider_viz::COLLIDER_VIZ_HTML.to_string())
+      .build(&window)
+      .expect("Failed to create collider viz webview");
+
+    let entry = ColliderVizEntry {
+      window,
+      webview,
+      state: state.clone(),
+    };
+    entry.window.set_visible(true);
+    entry.window.set_focus();
+    Self::push_collider_viz_state(&entry, &state);
+    let _ = entry
+      .webview
+      .evaluate_script("requestAnimationFrame(layoutAll);");
+    self.collider_viz.insert(state.index, entry);
+  }
+
+  fn close_collider_viz_if_window(&mut self, window_id: tao::window::WindowId) -> bool {
+    if let Some(index) = self
+      .collider_viz
+      .iter()
+      .find(|(_, e)| e.window.id() == window_id)
+      .map(|(i, _)| *i)
+    {
+      self.collider_viz.remove(&index);
+      true
+    } else {
+      false
+    }
+  }
+
+  fn close_all_collider_viz(&mut self) {
+    self.collider_viz.clear();
   }
 
   fn create_output_window(
@@ -2520,6 +2748,11 @@ impl UiState {
     self.status_epoch = log_ui::buffer_epoch();
     self.status_pending = false;
     self.last_status_flush = None;
+  }
+
+  fn close_all_windows(&mut self) {
+    self.close_output();
+    self.close_all_collider_viz();
   }
 }
 
@@ -2648,6 +2881,10 @@ fn handle_config_ipc(
       let payload = serde_json::to_string(&result).unwrap_or_else(|_| "{}".to_string());
       let _ = proxy.send_event(UserEvent::MdnsLookupResult(payload));
     });
+  } else if let Some(json) = msg.strip_prefix("collider-viz-open:") {
+    let _ = event_proxy.send_event(UserEvent::ColliderVizOpen(json.to_string()));
+  } else if let Some(json) = msg.strip_prefix("collider-viz-update:") {
+    let _ = event_proxy.send_event(UserEvent::ColliderVizUpdate(json.to_string()));
   }
 }
 
@@ -2677,6 +2914,16 @@ pub fn run(start_minimized: bool, primary: PrimaryInstance) {
   let pat_proxy = event_loop.create_proxy();
   log_ui::set_pat_bar_notify(move |param, graph| {
     queue_pat_bar(param.to_string(), graph.to_string(), &pat_proxy);
+  });
+
+  let prox_signal_proxy = event_loop.create_proxy();
+  log_ui::set_prox_signal_notify(move |param, value| {
+    queue_prox_signal(param.to_string(), value, &prox_signal_proxy);
+  });
+
+  let headpat_proxy = event_loop.create_proxy();
+  log_ui::set_headpat_telemetry_notify(move |param, json| {
+    queue_headpat_telemetry(param.to_string(), json.to_string(), &headpat_proxy);
   });
 
   let proxy = event_loop.create_proxy();
@@ -2798,6 +3045,25 @@ pub fn run(start_minimized: bool, primary: PrimaryInstance) {
         }
       }
 
+      Event::UserEvent(UserEvent::ColliderProxFlush) => {
+        ui_state.flush_collider_live();
+      }
+
+      Event::UserEvent(UserEvent::ColliderVizOpen(json)) => {
+        if let Some(state) = collider_viz::parse_state(&json) {
+          ui_state.show_collider_viz(event_loop, state);
+        }
+      }
+
+      Event::UserEvent(UserEvent::ColliderVizUpdate(json)) => {
+        if let Some(state) = collider_viz::parse_state(&json) {
+          if let Some(entry) = ui_state.collider_viz.get_mut(&state.index) {
+            entry.state = state.clone();
+            UiState::push_collider_viz_state(entry, &state);
+          }
+        }
+      }
+
       Event::UserEvent(UserEvent::ShowOutput) => {
         ui_state.show_output(event_loop, &ipc_proxy);
       }
@@ -2816,7 +3082,7 @@ pub fn run(start_minimized: bool, primary: PrimaryInstance) {
           }
         } else if menu_event.id == exit_item.id() {
           tray_icon.take();
-          ui_state.close_output();
+          ui_state.close_all_windows();
           *control_flow = ControlFlow::Exit;
         }
       }
@@ -2836,6 +3102,12 @@ pub fn run(start_minimized: bool, primary: PrimaryInstance) {
       } if Some(window_id) == ui_state.output_window_id() => {
         ui_state.hide_output();
       }
+
+      Event::WindowEvent {
+        window_id,
+        event: WindowEvent::CloseRequested,
+        ..
+      } if ui_state.close_collider_viz_if_window(window_id) => {}
 
       _ => {}
     }

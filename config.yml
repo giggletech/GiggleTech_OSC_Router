@@ -3,18 +3,32 @@ devices:
   ip: 192.168.1.69
   proximity_parameter: proximity_01
   online_parameter: Headpats2_online
-  max_speed: 32
+  max_speed: null
   speed_scale: null
   max_speed_parameter: null
-  use_velocity_control: false
+  use_velocity_control: null
   velocity_on_prox_drop: true
-  outer_proximity: 0.019999999552965164
-  inner_proximity: 0.5299999713897705
-  velocity_scalar: 15
-  velocity_softcap: 41
-  velocity_smoothing_ms: 190
+  outer_proximity: 0.25
+  inner_proximity: 0.6700000166893005
+  velocity_scalar: 19
+  velocity_softcap: 70
+  velocity_smoothing_ms: 250
+- name: Device 2
+  ip: 192.168.1.132
+  proximity_parameter: proximity_02
+  online_parameter: Device_2_online
+  max_speed: 26
+  speed_scale: null
+  max_speed_parameter: null
+  use_velocity_control: null
+  velocity_on_prox_drop: true
+  outer_proximity: null
+  inner_proximity: null
+  velocity_scalar: 32
+  velocity_softcap: 22
+  velocity_smoothing_ms: 140
 setup:
-  port_rx: OSCQuery
+  port_rx: '9001'
   default_min_speed: 5
   default_max_speed: 25
   default_start_tx: 20
