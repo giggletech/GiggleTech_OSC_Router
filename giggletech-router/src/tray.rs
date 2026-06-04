@@ -260,7 +260,6 @@ body.ui-large #main.devices-centered-layout #config-wrap {
   max-width: 2160px;
 }
 #main.devices-centered-layout #config-scroll {
-  direction: rtl;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -327,7 +326,15 @@ body.ui-large #config-wrap {
   scrollbar-gutter: stable;
   overscroll-behavior: contain;
   -webkit-overflow-scrolling: touch;
-  direction: ltr;
+  direction: rtl;
+}
+/* #config-wrap uses zoom: 0.5 in normal mode; double scrollbar metrics to match log column (20px). */
+body:not(.ui-large) #config-scroll::-webkit-scrollbar {
+  width: 40px;
+}
+body:not(.ui-large) #config-scroll::-webkit-scrollbar-thumb {
+  border-radius: 20px;
+  border-width: 4px;
 }
 #device-list,
 #device-list .device-card,
@@ -479,8 +486,8 @@ body.ui-large .log-viz-card .log-card-body {
   overflow-y: visible;
 }
 .log-console-card .log-card-body {
-  min-height: 10rem;
-  max-height: 14rem;
+  min-height: 20rem;
+  max-height: 28rem;
   display: flex;
   flex-direction: column;
 }
@@ -524,7 +531,8 @@ body.ui-large .log-viz-card .log-card-body {
   width: 100%;
   max-width: 100%;
   margin: 0;
-  overflow: hidden;
+  overflow-x: hidden;
+  overflow-y: auto;
   font-family: "Cascadia Code", "Consolas", monospace;
   font-size: 12px;
   line-height: 1.45;
@@ -539,8 +547,8 @@ body.ui-large .log-viz-card .log-card-body {
 }
 #config-status {
   flex-shrink: 0;
-  margin-left: 32px;
-  margin-right: 6px;
+  margin-left: 6px;
+  margin-right: 32px;
   font-size: 1.7rem;
   padding: 16px 24px;
   border-radius: 16px;
@@ -551,15 +559,15 @@ body.ui-large .log-viz-card .log-card-body {
   display: flex;
   flex-direction: column;
   gap: 20px;
-  padding-left: 32px;
-  padding-right: 6px;
+  padding-left: 6px;
+  padding-right: 32px;
 }
 .device-list-actions {
   display: flex;
   align-items: center;
   gap: 16px;
   flex-wrap: wrap;
-  padding: 24px 6px 8px 32px;
+  padding: 24px 32px 8px 6px;
   box-sizing: border-box;
   width: 100%;
 }
@@ -3182,21 +3190,12 @@ function renderPatBars() {
 }
 
 let lastStatusLines = [];
-const STATUS_LINE_PX = 12 * 1.45;
 const STATUS_MAX_LINES = 100;
-
-function statusViewportLines() {
-  const box = document.getElementById('log-box');
-  if (!box) return 40;
-  const pad = 20;
-  return Math.max(4, Math.floor((box.clientHeight - pad) / STATUS_LINE_PX));
-}
 
 function renderStatus(lines) {
   const el = document.getElementById('log');
   if (!el) return;
-  const head = lines.slice(0, statusViewportLines());
-  el.textContent = head.join('\n');
+  el.textContent = lines.join('\n');
 }
 
 function setStatusLines(lines) {
