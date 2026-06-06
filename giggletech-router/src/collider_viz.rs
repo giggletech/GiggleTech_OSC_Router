@@ -146,6 +146,7 @@ body.ui-large .collider-viz-root .cv-viz-column {
   font-size: 0.75rem;
   font-weight: 600;
   color: #c8c8d8;
+  margin: 0;
 }
 .collider-viz-root .cv-diagram-wrap {
   width: 100%;
@@ -168,6 +169,7 @@ body.ui-large .collider-viz-root .cv-viz-column {
   gap: 4px 10px;
   font-size: 0.65rem;
   color: #6b6b80;
+  margin-bottom: 2px;
 }
 .collider-viz-root .cv-chart-legend span {
   display: inline-flex;
@@ -179,7 +181,6 @@ body.ui-large .collider-viz-root .cv-viz-column {
   height: 2px;
   border-radius: 999px;
 }
-.collider-viz-root .swatch.raw { background: #5b8def; }
 .collider-viz-root .swatch.smooth { background: #ffb020; }
 .collider-viz-root .swatch.motor { background: #e8e8f0; }
 .collider-viz-root .chart-wrap canvas {
@@ -193,7 +194,7 @@ body.ui-large .collider-viz-root .cv-viz-column {
 "#;
 
 /// Markup mounted inside each visualizer log card (no device index in DOM — scoped by root).
-pub const COLLIDER_VIZ_CARD_INNER: &str = r#"<div class="collider-viz-root">
+pub const COLLIDER_VIZ_CARD_INNER: &str = r#"<div class="collider-viz-root headpat-mode">
 <div class="cv-app">
 <div class="cv-app-scroll">
 <div class="cv-viz-column">

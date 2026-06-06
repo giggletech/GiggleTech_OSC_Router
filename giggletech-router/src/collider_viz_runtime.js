@@ -266,14 +266,9 @@
   function updateChartLegend(inst) {
     const legend = inst.chartLegendEl;
     if (!legend) return;
-    if (inst.state.velocity) {
-      let html = '<span><i class="swatch raw"></i> Touch raw</span>';
-      html += '<span><i class="swatch smooth"></i> Touch smoothed</span>';
-      html += '<span><i class="swatch motor"></i> Motor</span>';
-      legend.innerHTML = html;
-    } else {
-      legend.innerHTML = '<span><i class="swatch motor"></i> Motor</span>';
-    }
+    legend.innerHTML =
+      '<span><i class="swatch smooth"></i> Smoothed velocity</span>' +
+      '<span><i class="swatch motor"></i> Motor</span>';
   }
 
   function pushVelHistory(inst, key, v) {
@@ -364,17 +359,13 @@
     inst.outputCtx.clearRect(0, 0, w, h);
     const plot = drawChartAxes(inst.outputCtx, w, h, dpr);
     const maxV = plot.maxV;
-    if (inst.state.velocity) {
-      drawSeriesOn(inst.outputCtx, inst.velHistory.pre, '#5b8def', maxV, w, h, dpr, plot);
-      drawSeriesOn(inst.outputCtx, inst.velHistory.smooth, '#ffb020', maxV, w, h, dpr, plot);
-      drawMotorSeriesOn(inst.outputCtx, inst.velHistory.motor, '#e8e8f0', maxV, w, h, dpr, plot);
-    } else {
-      drawMotorSeriesOn(inst.outputCtx, inst.velHistory.motor, '#e8e8f0', maxV, w, h, dpr, plot);
-    }
+    drawSeriesOn(inst.outputCtx, inst.velHistory.smooth, '#ffb020', maxV, w, h, dpr, plot);
+    drawMotorSeriesOn(inst.outputCtx, inst.velHistory.motor, '#e8e8f0', maxV, w, h, dpr, plot);
   }
 
   function updateHeadpatPanel(inst) {
     inst.root.classList.toggle('velocity-mode', !!inst.state.velocity);
+    inst.root.classList.toggle('headpat-mode', !inst.state.velocity);
     if (inst.chartTitleEl) {
       inst.chartTitleEl.textContent = inst.state.velocity ? 'Vibration control' : 'Motor output';
     }
@@ -383,7 +374,6 @@
   }
 
   function clearVelHistory(inst) {
-    inst.velHistory.pre.length = 0;
     inst.velHistory.smooth.length = 0;
     inst.velHistory.motor.length = 0;
     scheduleChartPaint(inst);
@@ -424,10 +414,7 @@
     inst.lastTelemetry = sample;
     if (append) {
       pushVelHistory(inst, 'motor', sample.motor);
-      if (inst.state.velocity) {
-        pushVelHistory(inst, 'pre', toChartPct(sample.pre));
-        pushVelHistory(inst, 'smooth', toChartPct(sample.smooth));
-      }
+      pushVelHistory(inst, 'smooth', toChartPct(sample.smooth));
     }
   }
 
@@ -537,11 +524,12 @@
 
   function createInstance(root, index) {
     const canvas = root.querySelector('.cv-ring');
+    const idx = Number(index);
     const inst = {
       root: root,
-      index: index,
-      state: defaultState(index),
-      velHistory: { pre: [], smooth: [], motor: [] },
+      index: idx,
+      state: defaultState(idx),
+      velHistory: { smooth: [], motor: [] },
       lastTelemetry: null,
       liveProx: null,
       manualProx: null,

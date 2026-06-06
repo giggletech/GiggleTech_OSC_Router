@@ -7,26 +7,12 @@ devices:
   speed_scale: null
   max_speed_parameter: max_speed
   use_velocity_control: null
-  velocity_on_prox_drop: true
-  outer_proximity: null
-  inner_proximity: null
-  velocity_scalar: 15
-  velocity_softcap: 54
-  velocity_smoothing_ms: 215
-- name: Device 2
-  ip: 192.168.1.132
-  proximity_parameter: proximity_02
-  online_parameter: Device_2_online
-  max_speed: 97
-  speed_scale: null
-  max_speed_parameter: null
-  use_velocity_control: false
   velocity_on_prox_drop: null
-  outer_proximity: 0.20000000298023224
-  inner_proximity: null
-  velocity_scalar: null
-  velocity_softcap: null
-  velocity_smoothing_ms: null
+  outer_proximity: null
+  inner_proximity: 0.699999988079071
+  velocity_scalar: 33
+  velocity_softcap: 53
+  velocity_smoothing_ms: 240
 setup:
   port_rx: OSCQuery
   default_min_speed: 5

@@ -2074,6 +2074,14 @@ function openColliderVizCard(payload) {
   } else {
     const h3 = card.querySelector('.log-card-header h3');
     if (h3) h3.textContent = name;
+    const root = card.querySelector('.collider-viz-root');
+    if (root && root.querySelector('.cv-chart-overlays') && window.colliderVizApi) {
+      window.colliderVizApi.unmount(index);
+      const body = card.querySelector('.log-card-body');
+      if (body) body.innerHTML = COLLIDER_VIZ_CARD_INNER_HTML;
+      const freshRoot = card.querySelector('.collider-viz-root');
+      if (freshRoot) window.colliderVizApi.mount(freshRoot, index);
+    }
   }
   if (window.colliderVizApi) window.colliderVizApi.applyState(payload);
   applyLogColumnUi();
