@@ -6,6 +6,7 @@
 use once_cell::sync::Lazy;
 use serde::Serialize;
 use std::collections::{HashMap, HashSet};
+use std::process::Output;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
@@ -55,7 +56,8 @@ impl DevicePingMonitor {
         set.insert(ip.to_string());
       }
     }
-    *self.ips.lock().unwrap() = set;
+    *self.ips.lock().unwrap() = set.clone();
+    self.cache.lock().unwrap().retain(|ip, _| set.contains(ip));
     if self
       .started
       .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
@@ -112,6 +114,19 @@ impl DevicePingMonitor {
   }
 }
 
+fn ping_stdout_indicates_failure(stdout: &[u8]) -> bool {
+  let text = String::from_utf8_lossy(stdout).to_lowercase();
+  text.contains("request timed out")
+    || text.contains("destination host unreachable")
+    || text.contains("could not find host")
+    || text.contains("general failure")
+}
+
+/// Trust ping exit code; only override when stdout clearly says the host is down.
+fn ping_output_online(output: &Output) -> bool {
+  output.status.success() && !ping_stdout_indicates_failure(&output.stdout)
+}
+
 /// Ping a host once (Windows: `ping -n 1 -w 1000`). Does not write to the UI log.
 async fn ping_host(device_ip: &str) -> bool {
   let device_ip = device_ip.trim();
@@ -121,21 +136,20 @@ async fn ping_host(device_ip: &str) -> bool {
 
   #[cfg(windows)]
   {
-    // Since the app runs as a GUI subsystem process in release builds,
-    // spawning `ping.exe` (a console program) can pop up a new console window.
-    // Run it with CREATE_NO_WINDOW so pings are always silent.
     const CREATE_NO_WINDOW: u32 = 0x08000000;
     let ip = device_ip.to_string();
-    return async_std::task::spawn_blocking(move || {
+    return match async_std::task::spawn_blocking(move || {
       use std::os::windows::process::CommandExt;
       std::process::Command::new("ping")
         .creation_flags(CREATE_NO_WINDOW)
         .args(["-n", "1", "-w", "1000", &ip])
         .output()
-        .map(|o| o.status.success())
-        .unwrap_or(false)
     })
-    .await;
+    .await
+    {
+      Ok(output) => ping_output_online(&output),
+      Err(_) => false,
+    };
   }
 
   #[cfg(not(windows))]
@@ -145,8 +159,31 @@ async fn ping_host(device_ip: &str) -> bool {
       .output()
       .await
     {
-      Ok(output) => output.status.success(),
+      Ok(output) => ping_output_online(&output),
       Err(_) => false,
     }
+  }
+}
+
+#[cfg(test)]
+mod tests {
+  use super::ping_stdout_indicates_failure;
+
+  #[test]
+  fn good_echo_is_not_failure() {
+    let out = b"Reply from 192.168.1.69: bytes=32 time=1ms TTL=64\r\n";
+    assert!(!ping_stdout_indicates_failure(out));
+  }
+
+  #[test]
+  fn unreachable_is_failure() {
+    let out = b"Reply from 192.168.1.1: Destination host unreachable.\r\n";
+    assert!(ping_stdout_indicates_failure(out));
+  }
+
+  #[test]
+  fn timeout_is_failure() {
+    let out = b"Request timed out.\r\n";
+    assert!(ping_stdout_indicates_failure(out));
   }
 }

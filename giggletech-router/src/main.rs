@@ -10,6 +10,7 @@
 use std::io;
 
 mod _version;
+mod collider_viz;
 mod config;
 mod config_editor;
 mod device_discovery;

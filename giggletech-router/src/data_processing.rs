@@ -121,8 +121,18 @@ const PROX_VELOCITY_DEADZONE: f32 = 0.002;
 /// does not change the threshold.
 const MAX_RETREAT_PROX_RATE: f32 = 4.0;
 
+/// Apply high-speed damping. At cap ≥ 100 (UI damping 0%) pass through unchanged.
+pub fn apply_velocity_softcap(pre: f32, cap: f32) -> f32 {
+    if pre <= 0.0 {
+        return 0.0;
+    }
+    if cap >= 100.0 {
+        return pre;
+    }
+    softcap(pre, cap)
+}
+
 /// Soft-cap a value so it stays linear at small magnitudes but saturates at high magnitudes.
-/// For x << cap, output ≈ x. For x >> cap, output → cap.
 fn softcap(x: f32, cap: f32) -> f32 {
     if x <= 0.0 {
         return 0.0;
@@ -154,31 +164,38 @@ fn velocity_sample_active(
         && proximity_in_band_velocity(prev_signal, device)
 }
 
-/// Compute the raw velocity (always ≥ 0). Returns 0 when inactive/invalid.
-pub fn compute_proximity_velocity(
+/// Velocity before and after high-speed damping (soft cap).
+#[derive(Debug, Clone, Copy, Default)]
+pub struct VelocityBreakdown {
+    pub pre_softcap: f32,
+    pub post_softcap: f32,
+}
+
+/// Compute sensitivity-scaled velocity and damped output (always ≥ 0).
+pub fn compute_proximity_velocity_breakdown(
     proximity_signal: f32,
     prev_signal: f32,
     delta_t: Duration,
     device: &DeviceConfig,
-) -> f32 {
+) -> VelocityBreakdown {
     let delta = proximity_signal - prev_signal;
     let retreating = delta < 0.0;
     if !velocity_sample_active(proximity_signal, prev_signal, retreating, device) {
-        return 0.0;
+        return VelocityBreakdown::default();
     }
 
     if delta.abs() < PROX_VELOCITY_DEADZONE {
-        return 0.0;
+        return VelocityBreakdown::default();
     }
 
     let active = if device.velocity_on_prox_drop { true } else { delta > 0.0 };
     if !active {
-        return 0.0;
+        return VelocityBreakdown::default();
     }
 
     let delta_secs = delta_t.as_secs_f32();
     if delta_secs <= 0.0 {
-        return 0.0;
+        return VelocityBreakdown::default();
     }
     let delta_secs = delta_secs.max(MIN_VELOCITY_DELTA_SECS);
 
@@ -189,11 +206,43 @@ pub fn compute_proximity_velocity(
     };
     let rate = speed / delta_secs;
     if device.velocity_on_prox_drop && retreating && rate > MAX_RETREAT_PROX_RATE {
-        return 0.0;
+        return VelocityBreakdown::default();
     }
 
-    let vel = f32::max(0.0, rate * device.velocity_scalar);
-    softcap(vel, device.velocity_softcap)
+    let pre_softcap = f32::max(0.0, rate * device.velocity_scalar);
+    let post_softcap = apply_velocity_softcap(pre_softcap, device.velocity_softcap);
+    VelocityBreakdown {
+        pre_softcap,
+        post_softcap,
+    }
+}
+
+/// Compute the damped velocity used as EMA input (always ≥ 0).
+pub fn compute_proximity_velocity(
+    proximity_signal: f32,
+    prev_signal: f32,
+    delta_t: Duration,
+    device: &DeviceConfig,
+) -> f32 {
+    compute_proximity_velocity_breakdown(proximity_signal, prev_signal, delta_t, device).post_softcap
+}
+
+/// Maximum motor TX for this device (used to normalize live UI).
+pub fn motor_max_tx(device: &DeviceConfig) -> i32 {
+    let max_tx = (((device.max_speed - device.min_speed) + device.min_speed)
+        * MOTOR_SPEED_SCALE
+        * device.speed_scale
+        * 255.0)
+        .round() as i32;
+    max_tx.max(1)
+}
+
+/// Motor TX as 0.0–1.0 for visualization.
+pub fn motor_norm_from_tx(motor_tx: i32, device: &DeviceConfig) -> f32 {
+    if motor_tx <= 0 {
+        return 0.0;
+    }
+    (motor_tx as f32 / motor_max_tx(device) as f32).clamp(0.0, 1.0)
 }
 
 /// Convert a (possibly smoothed) velocity value to a motor tx value.
@@ -206,12 +255,7 @@ pub fn motor_tx_from_velocity(vel: f32, device: &DeviceConfig) -> i32 {
         * device.speed_scale
         * 255.0)
         .round() as i32;
-    let max_tx = (((device.max_speed - device.min_speed) + device.min_speed)
-        * MOTOR_SPEED_SCALE
-        * device.speed_scale
-        * 255.0)
-        .round() as i32;
-    headpat_tx.min(max_tx)
+    headpat_tx.min(motor_max_tx(device))
 }
 
 pub fn process_pat_advanced(proximity_signal: f32, prev_signal: f32, delta_t: Duration, device: &DeviceConfig) -> i32 {
@@ -230,10 +274,11 @@ mod tests {
             device_uri: Arc::new("192.168.1.69".to_string()),
             min_speed: 0.05,
             max_speed: 0.16,
+            max_speed_fixed: true,
             start_tx: 20,
             speed_scale: 1.0,
             proximity_parameter: Arc::new("/avatar/parameters/proximity_01".to_string()),
-            max_speed_parameter: Arc::new("/avatar/parameters/max_speed".to_string()),
+            max_speed_parameter: Some(Arc::new("/avatar/parameters/max_speed".to_string())),
             online_parameter: None,
             use_velocity_control: true,
             velocity_on_prox_drop,

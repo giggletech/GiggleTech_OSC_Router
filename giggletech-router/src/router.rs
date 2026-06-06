@@ -271,10 +271,18 @@ async fn process_osc_packet(
       };
 
       for device in devices.iter_mut() {
-        if address == *device.max_speed_parameter {
-          crate::data_processing::print_speed_limit(value);
-          device.max_speed = value.max(global_config.minimum_max_speed);
-        } else if address == *device.proximity_parameter {
+        if let Some(ref max_speed_param) = device.max_speed_parameter {
+          if address == max_speed_param.as_ref() {
+            let new_max = value.max(global_config.minimum_max_speed);
+            device.max_speed = new_max;
+            let percent = (new_max * 100.0).round().clamp(1.0, 100.0) as u32;
+            log_ui::notify_max_speed_from_vrc(device.device_uri.as_ref(), percent);
+            let max_tx = (new_max * 0.66 * device.speed_scale * 255.0).round();
+            log_ui::update_device_motor_max_tx(device.device_uri.as_ref(), max_tx);
+            continue;
+          }
+        }
+        if address == *device.proximity_parameter {
           handle_proximity_parameter::handle_proximity_parameter(
             running.clone(),
             value,

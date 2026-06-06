@@ -28,6 +28,7 @@ use wry::{WebContext, WebViewBuilder};
 use serde::Deserialize;
 use tao::event_loop::EventLoopProxy;
 
+use crate::collider_viz::{self, ColliderVizState};
 use crate::config_editor;
 use crate::device_discovery;
 use crate::device_ping;
@@ -46,19 +47,33 @@ const AUTO_START_VALUE_NAME: &str = "GiggleTechOSCRouter";
 pub const AUTOSTART_ARG: &str = "--autostart";
 const RUN_KEY: &str = r"Software\Microsoft\Windows\CurrentVersion\Run";
 const LOGO_PLACEHOLDER: &str = "{{LOGO_URI}}";
-const OUTPUT_WINDOW_WIDTH: f64 = 1080.0;
-const OUTPUT_WINDOW_HEIGHT: f64 = 720.0;
+const COLLIDER_VIZ_STYLES_PLACEHOLDER: &str = "{{COLLIDER_VIZ_STYLES}}";
+const COLLIDER_VIZ_RUNTIME_PLACEHOLDER: &str = "{{COLLIDER_VIZ_RUNTIME}}";
+const COLLIDER_VIZ_CARD_INNER_PLACEHOLDER: &str = "{{COLLIDER_VIZ_CARD_INNER}}";
 const OUTPUT_WINDOW_MIN_WIDTH: f64 = 960.0;
+/// Initial width matches minimum so the window opens as narrow as allowed.
+const OUTPUT_WINDOW_WIDTH: f64 = OUTPUT_WINDOW_MIN_WIDTH;
+/// Initial height before JS measures content (kept modest; refined on config load).
+const OUTPUT_WINDOW_HEIGHT: f64 = 520.0;
 const OUTPUT_WINDOW_MIN_HEIGHT: f64 = 480.0;
-
+/// Cap one-time startup fit so a measurement glitch cannot spawn a huge window.
+const OUTPUT_WINDOW_STARTUP_MAX_HEIGHT: f64 = 1250.0;
+/// When the log column is visible, never shrink below this on startup.
+const OUTPUT_WINDOW_STARTUP_CONSOLE_MIN_HEIGHT: f64 = 720.0;
 fn clamp_startup_height(h: f64) -> f64 {
-  // Per request: don't cap to monitor height; just ensure we don't go below the minimum.
   h.max(OUTPUT_WINDOW_MIN_HEIGHT)
+    .min(OUTPUT_WINDOW_STARTUP_MAX_HEIGHT)
 }
 
 static PENDING_MOTOR_BARS: Lazy<Mutex<HashMap<String, f32>>> =
   Lazy::new(|| Mutex::new(HashMap::new()));
 static PENDING_PAT_BARS: Lazy<Mutex<HashMap<String, String>>> =
+  Lazy::new(|| Mutex::new(HashMap::new()));
+static PENDING_PROX_SIGNALS: Lazy<Mutex<HashMap<String, f32>>> =
+  Lazy::new(|| Mutex::new(HashMap::new()));
+static PENDING_HEADPAT_TELEMETRY: Lazy<Mutex<HashMap<String, String>>> =
+  Lazy::new(|| Mutex::new(HashMap::new()));
+static LAST_HEADPAT_TELEMETRY: Lazy<Mutex<HashMap<String, String>>> =
   Lazy::new(|| Mutex::new(HashMap::new()));
 static LIVE_UI_FLUSH_PENDING: AtomicBool = AtomicBool::new(false);
 
@@ -74,11 +89,42 @@ fn queue_live_ui_flush(proxy: &EventLoopProxy<UserEvent>) {
 fn queue_motor_bar(device_ip: String, value: f32, proxy: &EventLoopProxy<UserEvent>) {
   PENDING_MOTOR_BARS.lock().unwrap().insert(device_ip, value);
   queue_live_ui_flush(proxy);
+  let _ = proxy.send_event(UserEvent::ColliderProxFlush);
 }
 
 fn queue_pat_bar(param: String, graph: String, proxy: &EventLoopProxy<UserEvent>) {
   PENDING_PAT_BARS.lock().unwrap().insert(param, graph);
   queue_live_ui_flush(proxy);
+}
+
+fn queue_prox_signal(device_ip: String, param: String, value: f32, proxy: &EventLoopProxy<UserEvent>) {
+  let key = collider_viz::batch_key(&device_ip, &param);
+  PENDING_PROX_SIGNALS.lock().unwrap().insert(key, value);
+  let _ = proxy.send_event(UserEvent::ColliderProxFlush);
+}
+
+fn queue_headpat_telemetry(
+  device_ip: String,
+  param: String,
+  json: String,
+  proxy: &EventLoopProxy<UserEvent>,
+) {
+  let key = collider_viz::batch_key(&device_ip, &param);
+  PENDING_HEADPAT_TELEMETRY
+    .lock()
+    .unwrap()
+    .insert(key.clone(), json.clone());
+  LAST_HEADPAT_TELEMETRY.lock().unwrap().insert(key, json);
+  let _ = proxy.send_event(UserEvent::ColliderProxFlush);
+}
+
+/// Prefer live motor bar (post-`send_data`) over velocity-derived estimate in headpat telemetry JSON.
+fn merge_headpat_telemetry_motor(json: &str, motor: f32) -> String {
+  let mut value: serde_json::Value = serde_json::from_str(json).unwrap_or(serde_json::json!({}));
+  if let Some(obj) = value.as_object_mut() {
+    obj.insert("motor".to_string(), serde_json::json!(motor.clamp(0.0, 1.0)));
+  }
+  value.to_string()
 }
 
 fn flush_live_ui(webview: &wry::WebView) {
@@ -134,34 +180,51 @@ header {
 .header-inner {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  align-items: center;
   width: 100%;
   max-width: 1080px;
-  min-height: 112px;
+  min-height: 88px;
 }
 body.ui-large .header-inner { max-width: 2160px; }
-.header-config-col {
+body:has(#main.devices-centered-layout) .header-inner {
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+}
+body:has(#main.devices-centered-layout) .header-col-config {
+  grid-column: 2;
+}
+body:has(#main.devices-centered-layout) .header-col-log {
+  grid-column: 3;
+}
+.header-col-config {
   display: flex;
   justify-content: center;
   align-items: center;
   min-width: 0;
 }
+.header-logo-col {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+.header-col-log {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  min-width: 0;
+  padding: 0 32px 0 16px;
+  box-sizing: border-box;
+}
+.header-right .btn {
+  padding: 12px 18px;
+  font-size: 1.35rem;
+}
 .header-logo {
   display: block;
-  height: 104px;
+  height: 88px;
   width: auto;
   max-width: 100%;
   object-fit: contain;
-  object-position:  center;
-  padding: 16px 16px 0px 16px;
-}
-.header-log-col {
-  min-width: 0;
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 12px;
-  /* Match right inset of #log-box (log-section padding + log-scroll padding). */
-  padding: 16px 32px 0 16px;
+  object-position: center;
 }
 #main-center {
   flex: 1 1 0;
@@ -181,6 +244,51 @@ body.ui-large .header-inner { max-width: 2160px; }
   height: 100%;
 }
 body.ui-large #main { max-width: 2160px; }
+/* Console hidden: drop log column and center devices in the window. */
+#main.devices-centered-layout {
+  grid-template-columns: minmax(0, 1fr);
+  justify-items: center;
+}
+#main.devices-centered-layout #log-section {
+  display: none;
+}
+#main.devices-centered-layout #config-wrap {
+  width: 100%;
+  max-width: 1080px;
+}
+body.ui-large #main.devices-centered-layout #config-wrap {
+  max-width: 2160px;
+}
+#main.devices-centered-layout #config-scroll {
+  display: flex;
+  flex-direction: column;
+  /* Parent is direction: rtl (scrollbar left); flex-end pins card-width rows to the visual left. */
+  align-items: flex-end;
+}
+#main.devices-centered-layout #device-list {
+  width: 100%;
+  max-width: 960px;
+  padding-left: 32px;
+  padding-right: 32px;
+  box-sizing: border-box;
+}
+#main.devices-centered-layout .device-card {
+  width: 100%;
+  max-width: 960px;
+}
+#main.devices-centered-layout .footer-actions,
+#main.devices-centered-layout #config-wrap .config-footer {
+  padding-left: 32px;
+  padding-right: 32px;
+  max-width: 960px;
+  width: 100%;
+  box-sizing: border-box;
+}
+#main.devices-centered-layout #config-status {
+  margin: 0;
+  align-self: flex-start;
+  max-width: 960px;
+}
 #config-wrap {
   min-width: 0;
   min-height: 0;
@@ -218,21 +326,65 @@ body.ui-large #config-wrap {
   -webkit-overflow-scrolling: touch;
   direction: rtl;
 }
+/* #config-wrap uses zoom: 0.5 in normal mode; double scrollbar metrics to match log column (20px). */
+body:not(.ui-large) #config-scroll::-webkit-scrollbar {
+  width: 40px;
+}
+body:not(.ui-large) #config-scroll::-webkit-scrollbar-thumb {
+  border-radius: 20px;
+  border-width: 4px;
+}
 #device-list,
-#device-list .device-card {
+#device-list .device-card,
+.footer-actions,
+#config-wrap .config-footer {
   direction: ltr;
 }
-#config-wrap .btn-row,
+.footer-actions,
+#config-wrap .config-footer,
 #config-wrap > .hint {
   flex-shrink: 0;
 }
-#config-wrap .btn-row {
-  /* Match #device-list inset so buttons line up with card edges. */
-  padding-left: 70px;
-  padding-right: 6px;
-  padding-bottom: 40px;
-  padding-top: 32px;
-  justify-content: flex-start;
+.footer-actions {
+  position: sticky;
+  bottom: 0;
+  z-index: 2;
+  width: 100%;
+  padding: 16px 32px 12px 6px;
+  box-sizing: border-box;
+  background: #000;
+}
+#config-wrap .config-footer {
+  flex-shrink: 0;
+  width: 100%;
+  padding: 12px 32px 28px 6px;
+  box-sizing: border-box;
+  background: #000;
+  zoom: 1;
+  transform-origin: bottom left;
+}
+/* VR MODE: only Add Device + Save scale up; keep settings row at normal visual size. */
+body.ui-large #config-wrap .footer-group-settings {
+  zoom: 0.5;
+  transform-origin: bottom left;
+}
+#config-wrap .footer-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+#config-wrap .footer-group-primary,
+#config-wrap .footer-group-settings {
+  gap: 12px;
+}
+#config-wrap .footer-group-primary .btn,
+#config-wrap .footer-group-settings .btn {
+  min-height: 2.85rem;
+  white-space: nowrap;
+}
+#config-wrap .footer-group-settings .osc-port-row {
+  gap: 12px;
 }
 #log-section {
   min-width: 0;
@@ -244,16 +396,114 @@ body.ui-large #config-wrap {
   background: #000;
   overflow: hidden;
 }
-#log-scroll {
+/* Log column visible when console and/or any visualizer is open. */
+#log-section:not(.log-column-open) #log-cards-scroll,
+#log-section:not(.log-column-open) #log-bottom-spacer {
+  display: none !important;
+}
+#log-section:not(.console-expanded) .log-console-card {
+  display: none !important;
+}
+#log-cards-scroll {
   flex: 1 1 0;
   min-width: 0;
   min-height: 0;
-  overflow: hidden;
-  box-sizing: border-box;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
   padding-right: 16px;
-  background: transparent;
-  border-radius: 0;
-  border: none;
+  box-sizing: border-box;
+}
+#log-cards-list {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  width: 100%;
+}
+#log-viz-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  width: 100%;
+}
+.log-card {
+  width: 100%;
+  background: #16161e;
+  border: 1px solid #2a2a36;
+  border-radius: 10px;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+.log-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 10px 12px;
+  border-bottom: 1px solid #2a2a36;
+  background: #12121a;
+}
+.log-card-header h3 {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: #c4b5fd;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.log-card-close {
+  flex-shrink: 0;
+  width: 1.75rem;
+  height: 1.75rem;
+  padding: 0;
+  border-radius: 50%;
+  border: 1px solid #3f3f4e;
+  background: #2a2a36;
+  color: #e8e8f0;
+  font-size: 1.1rem;
+  line-height: 1;
+  cursor: pointer;
+  font-family: inherit;
+}
+.log-card-close:hover {
+  background: #3f3f4e;
+}
+.log-card-body {
+  min-height: 0;
+}
+.log-viz-card .log-card-body {
+  min-height: 480px;
+  max-height: 720px;
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+body.ui-large .log-viz-card {
+  overflow: visible;
+}
+body.ui-large .log-viz-card .log-card-body {
+  min-height: 0;
+  max-height: none;
+  overflow-x: hidden;
+  overflow-y: visible;
+}
+.log-console-card .log-card-body {
+  min-height: 20rem;
+  max-height: 28rem;
+  display: flex;
+  flex-direction: column;
+}
+#log-box {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 0;
+  min-height: 0;
+  width: 100%;
+  padding: 10px 12px;
+  box-sizing: border-box;
+  overflow: hidden;
 }
 #log-bottom-spacer {
   flex-shrink: 0;
@@ -261,18 +511,7 @@ body.ui-large #config-wrap {
   box-sizing: border-box;
   padding-bottom: 16px;
 }
-#log-box {
-  display: flex;
-  flex-direction: column;
-  width: 100%;
-  height: 100%;
-  background: #16161e;
-  border-radius: 10px;
-  border: 1px solid #2a2a36;
-  padding: 10px 12px;
-  box-sizing: border-box;
-  overflow: hidden;
-}
+{{COLLIDER_VIZ_STYLES}}
 #pat-bars {
   flex-shrink: 0;
   font-family: "Cascadia Code", "Consolas", monospace;
@@ -296,7 +535,8 @@ body.ui-large #config-wrap {
   width: 100%;
   max-width: 100%;
   margin: 0;
-  overflow: hidden;
+  overflow-x: hidden;
+  overflow-y: auto;
   font-family: "Cascadia Code", "Consolas", monospace;
   font-size: 12px;
   line-height: 1.45;
@@ -308,11 +548,30 @@ body.ui-large #config-wrap {
   white-space: pre-wrap;
   overflow-wrap: anywhere;
   word-break: break-word;
+  scrollbar-color: #3f3f4e #16161e;
+  scrollbar-gutter: stable;
+}
+#log::-webkit-scrollbar {
+  width: 12px;
+}
+#log::-webkit-scrollbar-track {
+  background: #16161e;
+}
+#log::-webkit-scrollbar-thumb {
+  background: #3f3f4e;
+  border-radius: 6px;
+  border: 2px solid #16161e;
+}
+#log::-webkit-scrollbar-thumb:hover {
+  background: #5b5b70;
+}
+#log::-webkit-scrollbar-corner {
+  background: #16161e;
 }
 #config-status {
   flex-shrink: 0;
-  margin-left: 32px;
-  margin-right: 6px;
+  margin-left: 6px;
+  margin-right: 32px;
   font-size: 1.7rem;
   padding: 16px 24px;
   border-radius: 16px;
@@ -323,8 +582,8 @@ body.ui-large #config-wrap {
   display: flex;
   flex-direction: column;
   gap: 20px;
-  padding-left: 32px;
-  padding-right: 6px;
+  padding-left: 6px;
+  padding-right: 32px;
 }
 .device-card {
   width: 100%;
@@ -363,7 +622,10 @@ body.ui-large #config-wrap {
 .device-card.is-collapsed .device-actions {
   margin-top: 0;
 }
-.device-card.is-collapsed .device-actions > .btn-danger {
+.device-card.is-collapsed .device-actions-start > .btn-danger {
+  display: none;
+}
+.device-card.is-collapsed .device-actions-end .device-viz-btn {
   display: none;
 }
 .device-card-layout {
@@ -402,26 +664,72 @@ body.ui-large #config-wrap {
 .device-name-row {
   display: flex;
   align-items: center;
-  gap: 20px;
-  flex-wrap: wrap;
+  gap: 12px;
+  flex-wrap: nowrap;
+  /* Align chrome buttons with device-setup-panel show/hide (panel uses 32px horizontal padding). */
+  padding-right: 32px;
+  box-sizing: border-box;
 }
 .device-name-row .device-name-input {
   flex: 1;
   min-width: 16rem;
   margin-bottom: 0;
 }
+.device-name-row-chrome {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-shrink: 0;
+  margin-left: auto;
+}
+button.device-status {
+  margin: 0;
+  appearance: none;
+  -webkit-appearance: none;
+}
 .device-status {
   flex-shrink: 0;
-  font-size: 1.6rem;
-  font-weight: 600;
-  padding: 8px 20px;
+  box-sizing: border-box;
+  width: 3rem;
+  height: 3rem;
+  min-width: 3rem;
+  padding: 0;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  line-height: 1;
-  border-radius: 999px;
+  border-radius: 50%;
   border: 2px solid #3f3f4e;
   background: #0f0f14;
+  color: #8888a0;
+  cursor: pointer;
+}
+.device-status-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 0;
+}
+.device-status-svg {
+  width: 1.25rem;
+  height: 1.25rem;
+  display: block;
+}
+.device-status.online .device-status-svg,
+.device-status.offline .device-status-svg {
+  width: 1.65rem;
+  height: 1.65rem;
+}
+.device-status.checking .device-status-spinner {
+  animation: device-status-spin 0.75s linear infinite;
+}
+@keyframes device-status-spin {
+  to { transform: rotate(360deg); }
+}
+.device-status:hover {
+  filter: brightness(1.12);
+}
+.device-status:active {
+  filter: brightness(0.95);
 }
 .device-status.online {
   color: #86efac;
@@ -444,19 +752,6 @@ body.ui-large #config-wrap {
 .btn-sm {
   padding: 12px 24px;
   font-size: 1.6rem;
-}
-.device-name-row .btn-sm {
-  /* Match the one-line status pill styling/size. */
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: 8px 20px;
-  border-radius: 999px;
-  border: 2px solid #3f3f4e;
-  background: #0f0f14;
-  color: #b8b8c8;
-  font-weight: 600;
-  line-height: 1;
 }
 .device-card label { display: flex; flex-direction: column; gap: 8px; font-size: 1.6rem; color: #a1a1b5; }
 .device-card input:not(.device-name-input) {
@@ -500,6 +795,39 @@ body.ui-large #config-wrap {
   min-height: 56px;
   padding: 0 8px;
 }
+.panel-disclosure-header {
+  display: grid !important;
+  grid-template-columns: minmax(0, 1fr) auto 3rem;
+  align-items: center;
+  column-gap: 24px;
+  padding: 0 !important;
+  min-height: 56px;
+}
+.panel-disclosure-header .panel-title-row,
+.panel-disclosure-header .device-setup-panel-title,
+.panel-disclosure-header .slider-field-title,
+.panel-disclosure-header .proximity-band-panel-title {
+  grid-column: 1;
+  min-width: 0;
+}
+.panel-disclosure-header .device-setup-header-actions,
+.panel-disclosure-header .power-panel-header-actions,
+.panel-disclosure-header .velocity-panel-header-actions,
+.panel-disclosure-header .proximity-band-header-actions {
+  display: contents;
+}
+.panel-disclosure-header .speed-value {
+  grid-column: 2;
+  justify-self: end;
+}
+.panel-disclosure-header .velocity-switch {
+  grid-column: 2;
+  justify-self: end;
+}
+.panel-disclosure-header .disclosure-toggle-btn {
+  grid-column: 3;
+  justify-self: end;
+}
 .slider-field-title {
   font-size: 2rem;
   font-weight: 600;
@@ -510,6 +838,23 @@ body.ui-large #config-wrap {
 .slider-field .speed-value {
   font-size: 2.25rem;
   min-width: 104px;
+}
+.power-panel-header-actions {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.power-panel-header-actions .speed-value {
+  min-width: 0;
+  text-align: right;
+  color: #c4b5fd;
+}
+.power-panel-body.hidden {
+  display: none;
+}
+.power-panel:has(.power-panel-body.hidden) .power-panel-header-actions .speed-value {
+  display: none;
 }
 .speed-slider-row {
   display: flex;
@@ -711,6 +1056,19 @@ body.ui-large #config-wrap {
 .panel-info-text.hidden {
   display: none;
 }
+.velocity-panel-header-actions {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.velocity-panel:not(.velocity-enabled) .headpat-panel-toggle {
+  display: none;
+}
+.velocity-panel:not(.velocity-enabled) .velocity-switch {
+  grid-column: 3;
+  justify-self: end;
+}
 .velocity-panel-header .velocity-switch {
   cursor: pointer;
 }
@@ -762,10 +1120,13 @@ body.ui-large #config-wrap {
   color: #e8e8f0;
   letter-spacing: 0.01em;
 }
-.proximity-band-hide-row {
+.proximity-band-header-actions {
   flex-shrink: 0;
+  display: flex;
+  gap: 12px;
+  align-items: center;
 }
-.proximity-band-hide-row .btn-sm {
+.proximity-band-header-actions .btn-sm {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -778,7 +1139,7 @@ body.ui-large #config-wrap {
   font-weight: 600;
   line-height: 1;
 }
-.proximity-band-hide-row .btn-sm:hover {
+.proximity-band-header-actions .btn-sm:hover {
   background: #3f3f4e;
 }
 .proximity-band-panel-body {
@@ -799,6 +1160,66 @@ body.ui-large #config-wrap {
 }
 .proximity-band-panel .speed-slider-row {
   padding: 8px 0 12px;
+}
+.device-setup-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  width: 100%;
+  margin-top: 0;
+  margin-bottom: 8px;
+  padding: 28px 32px;
+  border-radius: 20px;
+  background: #12121a;
+  border: 2px solid #2a2a36;
+  box-sizing: border-box;
+}
+.device-setup-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+}
+.device-setup-panel-title {
+  font-size: 2rem;
+  font-weight: 600;
+  color: #e8e8f0;
+  letter-spacing: 0.01em;
+}
+.device-setup-header-actions {
+  flex-shrink: 0;
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+.device-setup-header-actions .btn-sm {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px 20px;
+  border-radius: 999px;
+  border: 2px solid #3f3f4e;
+  background: #2a2a36;
+  color: #e8e8f0;
+  font-size: 1.6rem;
+  font-weight: 600;
+  line-height: 1;
+}
+.device-setup-header-actions .btn-sm:hover {
+  background: #3f3f4e;
+}
+.device-setup-panel-body {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+.device-setup-panel-body.hidden {
+  display: none;
+}
+.device-setup-panel .device-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
 }
 .velocity-toggle-row {
   position: relative;
@@ -972,19 +1393,45 @@ body.ui-large #config-wrap {
   opacity: var(--motor-level);
   transition: opacity 0.08s ease-out;
 }
-.device-actions { display: flex; gap: 16px; flex-wrap: wrap; align-items: center; margin-top: 32px; width: 100%; }
-.device-actions .device-card-toggle-btn { margin-left: auto; }
+.device-actions {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 12px;
+  margin-top: 32px;
+  width: 100%;
+}
+.device-actions-start {
+  display: flex;
+  gap: 12px;
+  flex-wrap: nowrap;
+  align-items: center;
+  flex-shrink: 0;
+}
+.device-actions-end {
+  display: flex;
+  gap: 12px;
+  flex-wrap: nowrap;
+  align-items: center;
+  flex-shrink: 0;
+  margin-left: auto;
+}
 .device-actions .btn[disabled] { opacity: 0.55; cursor: default; }
-.device-actions .btn-sm {
-  /* Make Confirm/Cancel match pill sizing. */
+.device-actions button {
+  box-sizing: border-box;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  padding: 8px 20px;
+  min-width: 10.5rem;
+  height: 3rem;
+  padding: 0 20px;
   border-radius: 999px;
   font-size: 1.6rem;
   font-weight: 600;
   line-height: 1;
+  font-family: inherit;
+  cursor: pointer;
 }
 .device-actions .btn-secondary.btn-sm {
   border: 2px solid #3f3f4e;
@@ -993,6 +1440,16 @@ body.ui-large #config-wrap {
 }
 .device-actions .btn-secondary.btn-sm:hover {
   background: #3f3f4e;
+}
+.device-actions .btn-secondary.btn-sm.device-viz-btn.device-viz-btn-active {
+  border-color: #a855f7;
+  background: #2e1065;
+  color: #f3e8ff;
+}
+.device-actions .btn-secondary.btn-sm.device-viz-btn.device-viz-btn-active:hover {
+  background: #322847;
+  border-color: #a78bfa;
+  color: #f3e8ff;
 }
 .device-actions .btn-primary.btn-sm {
   border: 2px solid #7f1d1d;
@@ -1003,15 +1460,6 @@ body.ui-large #config-wrap {
   background: #7f1d1d;
 }
 .device-actions .btn-danger {
-  /* Match the status/ping pill sizing in the device header row. */
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: 8px 20px;
-  border-radius: 999px;
-  font-size: 1.6rem;
-  font-weight: 600;
-  line-height: 1;
   border: 2px solid #3f3f4e;
   background: #2a2a36;
   color: #b8b8c8;
@@ -1019,7 +1467,72 @@ body.ui-large #config-wrap {
 .device-actions .btn-danger:hover {
   background: #3f3f4e;
 }
-.btn-row { display: flex; gap: 16px; flex-wrap: wrap; }
+.device-actions .device-remove-btn {
+  width: 3rem;
+  height: 3rem;
+  min-width: 3rem;
+  max-width: 3rem;
+  padding: 0;
+  border-radius: 50%;
+}
+.device-actions .device-remove-btn:hover {
+  border-color: #7f1d1d;
+  background: #450a0a;
+  color: #fca5a5;
+}
+.device-remove-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 0;
+}
+.device-remove-svg {
+  width: 1.55rem;
+  height: 1.55rem;
+  display: block;
+}
+.device-name-row-chrome .disclosure-toggle-btn,
+.device-actions .disclosure-toggle-btn,
+.device-setup-header-actions .disclosure-toggle-btn,
+.power-panel-header-actions .disclosure-toggle-btn,
+.velocity-panel-header-actions .disclosure-toggle-btn,
+.proximity-band-header-actions .disclosure-toggle-btn {
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 3rem;
+  height: 3rem;
+  min-width: 3rem;
+  max-width: 3rem;
+  padding: 0;
+  border-radius: 50%;
+  border: 2px solid #3f3f4e;
+  background: #2a2a36;
+  color: #e8e8f0;
+  flex-shrink: 0;
+  cursor: pointer;
+}
+.device-name-row-chrome .disclosure-toggle-btn:hover,
+.device-actions .disclosure-toggle-btn:hover,
+.device-setup-header-actions .disclosure-toggle-btn:hover,
+.power-panel-header-actions .disclosure-toggle-btn:hover,
+.velocity-panel-header-actions .disclosure-toggle-btn:hover,
+.proximity-band-header-actions .disclosure-toggle-btn:hover {
+  background: #3f3f4e;
+}
+#console-panel-toggle.console-visible {
+  border: 2px solid #a855f7;
+}
+.disclosure-toggle-icon {
+  display: inline-block;
+  font-size: 1.4rem;
+  line-height: 1;
+  transition: transform 0.15s ease;
+}
+.disclosure-toggle-btn[aria-expanded="true"] .disclosure-toggle-icon {
+  transform: rotate(180deg);
+}
 .btn {
   padding: 18px 28px;
   font-size: 1.7rem;
@@ -1038,9 +1551,6 @@ body.ui-large #config-wrap {
   align-items: center;
   gap: 16px;
 }
-.btn-row .btn-primary {
-  margin-left: auto;
-}
 #osc-mode-btn.osc-query-active {
   border: 2px solid #7c3aed;
   background: #2e1065;
@@ -1055,11 +1565,13 @@ body.ui-large #config-wrap {
 }
 .osc-port-input {
   display: none;
-  width: 11rem;
+  width: calc(5ch + 52px);
+  min-width: calc(5ch + 52px);
   flex-shrink: 0;
   padding: 18px 24px;
   font-size: 1.7rem;
   font-weight: 600;
+  font-variant-numeric: tabular-nums;
   font-family: inherit;
   color: #e8e8f0;
   border-radius: 16px;
@@ -1075,62 +1587,81 @@ body.ui-large #config-wrap {
 .btn-danger:hover { background: #7f1d1d; }
 .hint { font-size: 1.6rem; color: #6b6b80; margin-top: 8px; }
 
-#autostart-btn {
-  padding: 12px 18px;
-  font-size: 1.35rem;
+#config-wrap #autostart-btn {
   border: 2px solid #3f3f4e;
-  background: #2a2a36;
-  color: #e8e8f0;
 }
-#autostart-btn:hover { background: #3f3f4e; }
-#autostart-btn.autostart-on { border-color: #a855f7; }
-#autostart-btn:disabled { opacity: 0.75; cursor: default; }
+#config-wrap #autostart-btn.autostart-on { border-color: #a855f7; }
+#config-wrap #autostart-btn:disabled { opacity: 0.75; cursor: default; }
 </style>
 </head>
 <body>
 <header>
   <div class="header-inner">
-    <div class="header-config-col">
-      <img class="header-logo" src="{{LOGO_URI}}" alt="GiggleTech">
+    <div class="header-col-config">
+      <div class="header-logo-col">
+        <img class="header-logo" src="{{LOGO_URI}}" alt="GiggleTech">
+      </div>
     </div>
-    <div class="header-log-col">
-      <button type="button" class="btn btn-secondary" id="autostart-btn" aria-pressed="false"
-        onclick="toggleAutoStart()">Start with Windows</button>
-      <button type="button" class="btn btn-secondary" id="ui-scale-btn" aria-pressed="false"
-        onclick="toggleUiScale()">VR MODE</button>
+    <div class="header-col-log">
+      <div class="header-right">
+        <button type="button" class="btn btn-secondary" id="ui-scale-btn" aria-pressed="false"
+          onclick="toggleUiScale()">VR MODE</button>
+      </div>
     </div>
   </div>
 </header>
 <div id="main-center">
-  <div id="main">
+  <div id="main" class="devices-centered-layout">
     <div id="config-wrap">
       <div id="config-column-divider" aria-hidden="true"></div>
       <div id="config-status"></div>
       <div id="config-scroll">
         <div id="device-list"></div>
-      </div>
-      <div class="btn-row">
-        <button type="button" class="btn btn-secondary" onclick="addDevice()">+ Add Device</button>
-        <div class="osc-port-row">
-          <button type="button" class="btn btn-secondary" id="osc-mode-btn" onclick="toggleOscMode()">OSC: Query</button>
-          <input type="text" id="osc-port-input" class="osc-port-input" inputmode="numeric"
-            placeholder="9001" maxlength="5" title="UDP listen port"
-            onblur="commitOscPortInput()" onkeydown="if (event.key === 'Enter') commitOscPortInput()">
+        <div class="footer-actions">
+          <div class="footer-group footer-group-primary">
+            <button type="button" class="btn btn-primary footer-save" onclick="saveConfig()">Save</button>
+            <button type="button" class="btn btn-secondary" onclick="addDevice()">+ Add Device</button>
+          </div>
         </div>
-        <button type="button" class="btn btn-primary" onclick="saveConfig()">Save</button>
       </div>
+      <footer class="config-footer">
+        <div class="footer-group footer-group-settings">
+          <div class="osc-port-row">
+            <button type="button" class="btn btn-secondary" id="osc-mode-btn" onclick="toggleOscMode()">OSC: Query</button>
+            <input type="text" id="osc-port-input" class="osc-port-input" inputmode="numeric"
+              placeholder="9001" maxlength="5" title="UDP listen port"
+              onblur="commitOscPortInput()" onkeydown="if (event.key === 'Enter') commitOscPortInput()">
+          </div>
+          <button type="button" class="btn btn-secondary" id="autostart-btn" aria-pressed="false"
+            onclick="toggleAutoStart()">Start with Windows</button>
+          <button type="button" class="btn btn-secondary" id="console-panel-toggle" aria-pressed="false"
+            aria-controls="log-cards-scroll" aria-label="Show console"
+            onclick="toggleConsolePanel()">Console</button>
+        </div>
+      </footer>
     </div>
     <section id="log-section">
-      <div id="log-scroll">
-        <div id="log-box">
-          <pre id="pat-bars" aria-live="polite"></pre>
-          <pre id="log"></pre>
+      <div id="log-cards-scroll">
+        <div id="log-cards-list">
+          <div id="log-viz-cards"></div>
+          <div class="log-card log-console-card" id="log-console-card">
+            <div class="log-card-header">
+              <h3>Console</h3>
+            </div>
+            <div class="log-card-body">
+              <div id="log-box">
+                <pre id="pat-bars" aria-live="polite"></pre>
+                <pre id="log"></pre>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
       <div id="log-bottom-spacer" aria-hidden="true"></div>
     </section>
   </div>
 </div>
+<script>{{COLLIDER_VIZ_RUNTIME}}</script>
 <script>
 let autoStartEnabled = false;
 let autoStartBusy = false;
@@ -1176,11 +1707,84 @@ function setUiLarge(enabled) {
     btn.setAttribute('aria-pressed', enabled ? 'true' : 'false');
   }
   syncLogSectionLayout();
+  requestAnimationFrame(() => {
+    if (window.colliderVizApi && window.colliderVizApi.relayoutAll) {
+      window.colliderVizApi.relayoutAll();
+    }
+  });
 }
 
 function toggleUiScale() {
   setUiLarge(!document.body.classList.contains('ui-large'));
 }
+
+function readConsoleExpandedPref() {
+  try {
+    const v = localStorage.getItem('consoleExpanded');
+    if (v === '0') return false;
+    if (v === '1') return true;
+    const legacy = localStorage.getItem('consolePanelVisible');
+    if (legacy === '0') return false;
+    if (legacy === '1') return true;
+  } catch (_) {}
+  return false;
+}
+
+let consoleExpanded = readConsoleExpandedPref();
+
+function persistConsoleExpanded(expanded) {
+  try {
+    localStorage.setItem('consoleExpanded', expanded ? '1' : '0');
+  } catch (_) {}
+}
+
+function hasOpenColliderViz() {
+  const list = document.getElementById('log-viz-cards');
+  return !!(list && list.querySelector('.log-viz-card'));
+}
+
+function isLogColumnOpen() {
+  return consoleExpanded || hasOpenColliderViz();
+}
+
+function applyLogColumnUi() {
+  const section = document.getElementById('log-section');
+  const main = document.getElementById('main');
+  const logOpen = isLogColumnOpen();
+  if (section) {
+    section.classList.toggle('log-column-open', logOpen);
+    section.classList.toggle('console-expanded', consoleExpanded);
+  }
+  if (main) main.classList.toggle('devices-centered-layout', !logOpen);
+  const btn = document.getElementById('console-panel-toggle');
+  if (btn) {
+    btn.setAttribute('aria-expanded', consoleExpanded ? 'true' : 'false');
+    btn.setAttribute('aria-pressed', consoleExpanded ? 'true' : 'false');
+    btn.classList.toggle('console-visible', consoleExpanded);
+    btn.textContent = 'Console';
+    btn.setAttribute('aria-label', consoleExpanded ? 'Hide console' : 'Show console');
+  }
+  syncLogSectionLayout();
+  if (consoleExpanded && typeof lastStatusLines !== 'undefined' && lastStatusLines.length) {
+    requestAnimationFrame(() => renderStatus(lastStatusLines));
+  }
+  requestAnimationFrame(() => {
+    if (window.colliderVizApi && window.colliderVizApi.relayoutAll) {
+      window.colliderVizApi.relayoutAll();
+    }
+  });
+}
+
+function applyConsolePanelUi() {
+  applyLogColumnUi();
+}
+
+function toggleConsolePanel() {
+  consoleExpanded = !consoleExpanded;
+  persistConsoleExpanded(consoleExpanded);
+  applyConsolePanelUi();
+}
+window.toggleConsolePanel = toggleConsolePanel;
 
 (() => {
   let enabled = false;
@@ -1210,8 +1814,39 @@ let colliderAdjustmentVisibleByIndex = (() => {
   return {};
 })();
 
+let deviceSetupVisibleByIndex = (() => {
+  try {
+    const v = localStorage.getItem('deviceSetupVisibleByIndex');
+    if (v) return JSON.parse(v);
+  } catch (_) {}
+  return {};
+})();
+
+let powerPanelVisibleByIndex = (() => {
+  try {
+    const v = localStorage.getItem('powerPanelVisibleByIndex');
+    if (v) return JSON.parse(v);
+  } catch (_) {}
+  return {};
+})();
+
+function isDeviceSetupVisible(index) {
+  const v = deviceSetupVisibleByIndex[index];
+  if (v === undefined) return false;
+  return !!v;
+}
+
+function setDeviceSetupVisible(index, visible) {
+  deviceSetupVisibleByIndex[index] = visible;
+  try {
+    localStorage.setItem('deviceSetupVisibleByIndex', JSON.stringify(deviceSetupVisibleByIndex));
+  } catch (_) {}
+}
+
 function isColliderAdjustmentVisible(index) {
-  return !!colliderAdjustmentVisibleByIndex[index];
+  const v = colliderAdjustmentVisibleByIndex[index];
+  if (v === undefined) return false;
+  return !!v;
 }
 
 function setColliderAdjustmentVisible(index, visible) {
@@ -1219,6 +1854,44 @@ function setColliderAdjustmentVisible(index, visible) {
   try {
     localStorage.setItem('colliderAdjustmentVisibleByIndex', JSON.stringify(colliderAdjustmentVisibleByIndex));
   } catch (_) {}
+}
+
+function isPowerPanelVisible(index) {
+  const v = powerPanelVisibleByIndex[index];
+  if (v === undefined) return false;
+  return !!v;
+}
+
+function setPowerPanelVisible(index, visible) {
+  powerPanelVisibleByIndex[index] = visible;
+  try {
+    localStorage.setItem('powerPanelVisibleByIndex', JSON.stringify(powerPanelVisibleByIndex));
+  } catch (_) {}
+}
+
+let headpatPanelVisibleByIndex = (() => {
+  try {
+    const v = localStorage.getItem('headpatPanelVisibleByIndex');
+    if (v) return JSON.parse(v);
+  } catch (_) {}
+  return {};
+})();
+
+function isHeadpatPanelVisible(index) {
+  const v = headpatPanelVisibleByIndex[index];
+  if (v === undefined) return false;
+  return !!v;
+}
+
+function setHeadpatPanelVisible(index, visible) {
+  headpatPanelVisibleByIndex[index] = visible;
+  try {
+    localStorage.setItem('headpatPanelVisibleByIndex', JSON.stringify(headpatPanelVisibleByIndex));
+  } catch (_) {}
+}
+
+function hasHeadpatPanelPreference(index) {
+  return String(index) in headpatPanelVisibleByIndex;
 }
 
 let deviceCardCollapsedByIndex = (() => {
@@ -1246,8 +1919,8 @@ function applyDeviceCardCollapsedUi(index, collapsed) {
   card.classList.toggle('is-collapsed', collapsed);
   const btn = document.getElementById('device-card-toggle-' + index);
   if (btn) {
-    btn.textContent = collapsed ? 'Show' : 'Hide';
     btn.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
+    btn.setAttribute('aria-label', (collapsed ? 'Show' : 'Hide') + ' device card details for device ' + (index + 1));
   }
   if (collapsed) {
     const d = editorDevices[index];
@@ -1352,6 +2025,109 @@ function effectiveVelocitySmoothingMs(d) {
   return d.velocity_smoothing_ms ?? editorVelocityProxDefaults.smoothing_ms;
 }
 
+function deviceDisplayName(index, name) {
+  const trimmed = (name || '').trim();
+  if (trimmed) return trimmed;
+  return index === 0 ? 'Headpats' : 'Device ' + (index + 1);
+}
+
+function colliderVizPayload(index) {
+  const d = editorDevices[index];
+  if (!d) return null;
+  return {
+    index: index,
+    name: deviceDisplayName(index, d.name),
+    device_ip: (d.ip || '').trim(),
+    proximity_parameter: (d.proximity_parameter || 'proximity_01').trim(),
+    outer: effectiveOuterProx(d),
+    inner: effectiveInnerProx(d),
+    velocity: !!d.use_velocity_control,
+    velocity_scalar: effectiveVelocityScalar(d),
+    velocity_softcap: effectiveVelocitySoftcap(d),
+    velocity_smoothing_ms: effectiveVelocitySmoothingMs(d),
+    velocity_on_prox_drop: !!d.velocity_on_prox_drop
+  };
+}
+
+const COLLIDER_VIZ_CARD_INNER_HTML = {{COLLIDER_VIZ_CARD_INNER}};
+
+function openColliderVizCard(payload) {
+  const index = payload.index;
+  const list = document.getElementById('log-viz-cards');
+  if (!list) return;
+  const name = (payload.name || '').trim() || ('Device ' + (index + 1));
+  let card = list.querySelector('.log-viz-card[data-viz-index="' + index + '"]');
+  if (!card) {
+    card = document.createElement('div');
+    card.className = 'log-card log-viz-card';
+    card.dataset.vizIndex = String(index);
+    card.innerHTML =
+      '<div class="log-card-header">' +
+        '<h3>' + escapeHtml(name) + '</h3>' +
+        '<button type="button" class="log-card-close" aria-label="Close visualizer for device ' + (index + 1) + '" ' +
+          'onclick="closeColliderViz(' + index + ')">&times;</button>' +
+      '</div>' +
+      '<div class="log-card-body">' + COLLIDER_VIZ_CARD_INNER_HTML + '</div>';
+    list.appendChild(card);
+    const root = card.querySelector('.collider-viz-root');
+    if (root && window.colliderVizApi) window.colliderVizApi.mount(root, index);
+  } else {
+    const h3 = card.querySelector('.log-card-header h3');
+    if (h3) h3.textContent = name;
+  }
+  if (window.colliderVizApi) window.colliderVizApi.applyState(payload);
+  applyLogColumnUi();
+}
+
+function isColliderVizOpen(index) {
+  const list = document.getElementById('log-viz-cards');
+  return !!(list && list.querySelector('.log-viz-card[data-viz-index="' + index + '"]'));
+}
+
+function updateColliderVizButton(index) {
+  const btn = document.querySelector('.device-viz-btn[data-viz-btn-index="' + index + '"]');
+  if (!btn) return;
+  const open = isColliderVizOpen(index);
+  btn.classList.toggle('device-viz-btn-active', open);
+  btn.setAttribute('aria-pressed', open ? 'true' : 'false');
+  btn.setAttribute('aria-label', (open ? 'Close' : 'Open') + ' visualizer for device ' + (index + 1));
+}
+
+function closeColliderViz(index) {
+  const list = document.getElementById('log-viz-cards');
+  const card = list && list.querySelector('.log-viz-card[data-viz-index="' + index + '"]');
+  if (card) {
+    if (window.colliderVizApi) window.colliderVizApi.unmount(index);
+    card.remove();
+  }
+  window.ipc.postMessage('collider-viz-close:' + index);
+  updateColliderVizButton(index);
+  applyLogColumnUi();
+}
+
+function syncColliderViz(index) {
+  const p = colliderVizPayload(index);
+  if (!p) return;
+  const list = document.getElementById('log-viz-cards');
+  if (list && list.querySelector('.log-viz-card[data-viz-index="' + index + '"]')) {
+    if (window.colliderVizApi) window.colliderVizApi.applyState(p);
+  }
+  window.ipc.postMessage('collider-viz-update:' + JSON.stringify(p));
+}
+
+function openColliderViz(index) {
+  if (isColliderVizOpen(index)) {
+    closeColliderViz(index);
+    return;
+  }
+  const p = colliderVizPayload(index);
+  if (!p) return;
+  openColliderVizCard(p);
+  window.ipc.postMessage('collider-viz-open:' + JSON.stringify(p));
+  updateColliderVizButton(index);
+  applyLogColumnUi();
+}
+
 function editorValidationOk() {
   if (!editorDevices.length) return false;
   for (const d of editorDevices) {
@@ -1408,38 +2184,73 @@ function renderDevices() {
               placeholder="${i === 0 ? 'Headpats' : 'Device ' + (i + 1)}"
               oninput="editorDevices[${i}].name=this.value; maybeClearConfigError()"
               aria-label="Device name">
-            <span class="device-status unknown" id="device-status-${i}">—</span>
-            <button type="button" class="btn btn-secondary btn-sm" onclick="pingDevice(${i}, true)">Ping</button>
+            <div class="device-name-row-chrome">
+              <button type="button" class="device-status unknown" id="device-status-${i}"
+                aria-label="Ping device ${i + 1}: Unknown"
+                onclick="pingDevice(${i}, true)">${pingStatusIconMarkup('unknown')}</button>
+              <button type="button" class="btn btn-secondary btn-sm disclosure-toggle-btn" id="device-card-toggle-${i}"
+                aria-expanded="${isDeviceCardCollapsed(i) ? 'false' : 'true'}"
+                aria-label="${isDeviceCardCollapsed(i) ? 'Show' : 'Hide'} device card details for device ${i + 1}"
+                onclick="toggleDeviceCardCollapse(${i})"><span class="disclosure-toggle-icon" aria-hidden="true">▼</span></button>
+            </div>
           </div>
           <div class="device-card-body">
-          <div class="device-fields">
-            <label>IP address
-              <div class="ip-input-row">
-                <input type="text" id="device-ip-${i}" value="${escapeHtml(d.ip)}"
-                  oninput="editorDevices[${i}].ip=this.value; onDeviceIpChange(${i}); maybeClearConfigError()">
-                <button type="button" class="btn btn-secondary btn-sm mdns-check-btn" id="mdns-check-btn-${i}" onclick="checkDeviceMdns(${i})">Search IP</button>
-                <span class="mdns-check-hint" id="mdns-check-hint-${i}"></span>
+          <section class="device-setup-panel" aria-label="Device setup for device ${i + 1}">
+            <div class="device-setup-panel-header panel-disclosure-header">
+              <span class="device-setup-panel-title">Device setup</span>
+              <div class="device-setup-header-actions">
+                <button type="button" class="btn btn-secondary btn-sm disclosure-toggle-btn" id="device-setup-toggle-${i}"
+                  aria-expanded="${isDeviceSetupVisible(i) ? 'true' : 'false'}"
+                  aria-controls="device-setup-${i}"
+                  aria-label="${isDeviceSetupVisible(i) ? 'Hide' : 'Show'} device setup for device ${i + 1}"
+                  onclick="toggleDeviceSetup(${i})"><span class="disclosure-toggle-icon" aria-hidden="true">▼</span></button>
               </div>
-            </label>
-            <label>Proximity parameter
-              <input type="text" value="${escapeHtml(d.proximity_parameter)}" placeholder="proximity_01"
-                oninput="editorDevices[${i}].proximity_parameter=this.value; maybeClearConfigError()">
-            </label>
-          </div>
-          <label class="slider-field">
-            <div class="slider-field-header">
+            </div>
+            <div class="device-setup-panel-body${isDeviceSetupVisible(i) ? '' : ' hidden'}" id="device-setup-${i}">
+              <div class="device-fields">
+                <label>IP address
+                  <div class="ip-input-row">
+                    <input type="text" id="device-ip-${i}" value="${escapeHtml(d.ip)}"
+                      oninput="editorDevices[${i}].ip=this.value; onDeviceIpChange(${i}); maybeClearConfigError()">
+                    <button type="button" class="btn btn-secondary btn-sm mdns-check-btn" id="mdns-check-btn-${i}" onclick="checkDeviceMdns(${i})">Search IP</button>
+                    <span class="mdns-check-hint" id="mdns-check-hint-${i}"></span>
+                  </div>
+                </label>
+                <label>Proximity parameter
+                  <input type="text" value="${escapeHtml(d.proximity_parameter)}" placeholder="proximity_01"
+                    oninput="editorDevices[${i}].proximity_parameter=this.value; maybeClearConfigError()">
+                </label>
+                <label>Max speed parameter
+                  <input type="text" value="${escapeHtml(d.max_speed_parameter || '')}"
+                    placeholder="(optional)"
+                    oninput="editorDevices[${i}].max_speed_parameter=this.value; maybeClearConfigError()">
+                </label>
+              </div>
+            </div>
+          </section>
+          <section class="slider-field power-panel" aria-label="Power for device ${i + 1}">
+            <div class="slider-field-header panel-disclosure-header">
               <span class="slider-field-title">Power</span>
-              <span class="speed-value" id="max-speed-val-${i}">${d.max_speed}%</span>
+              <div class="power-panel-header-actions">
+                <span class="speed-value" id="max-speed-val-${i}">${d.max_speed}%</span>
+                <button type="button" class="btn btn-secondary btn-sm disclosure-toggle-btn" id="power-panel-toggle-${i}"
+                  aria-expanded="${isPowerPanelVisible(i) ? 'true' : 'false'}"
+                  aria-controls="power-panel-${i}"
+                  aria-label="${isPowerPanelVisible(i) ? 'Hide' : 'Show'} power for device ${i + 1}"
+                  onclick="togglePowerPanel(${i})"><span class="disclosure-toggle-icon" aria-hidden="true">▼</span></button>
+              </div>
             </div>
-            <div class="speed-slider-row">
-              <input type="range" min="0" max="${SPEED_SLIDER_STEPS}"
-                aria-label="Power for device ${i + 1}"
-                value="${Math.round(speedToSliderPos(d.max_speed) * SPEED_SLIDER_STEPS)}"
-                oninput="onMaxSpeedChange(${i}, this)" onchange="saveConfig(true)">
+            <div class="power-panel-body${isPowerPanelVisible(i) ? '' : ' hidden'}" id="power-panel-${i}">
+              <div class="speed-slider-row">
+                <input type="range" id="max-speed-slider-${i}" min="0" max="${SPEED_SLIDER_STEPS}"
+                  aria-label="Power for device ${i + 1}"
+                  value="${Math.round(speedToSliderPos(d.max_speed) * SPEED_SLIDER_STEPS)}"
+                  oninput="onMaxSpeedChange(${i}, this)" onchange="saveConfig(true)">
+              </div>
             </div>
-          </label>
-          <section class="velocity-panel" aria-label="Headpat Mode for device ${i + 1}">
-            <div class="velocity-panel-header">
+          </section>
+          <section class="velocity-panel${d.use_velocity_control ? ' velocity-enabled' : ''}" aria-label="Headpat Mode for device ${i + 1}">
+            <div class="velocity-panel-header panel-disclosure-header">
               <div class="panel-title-row">
                 <span class="velocity-panel-title">Headpat Mode</span>
                 <button type="button" class="panel-info-btn" aria-expanded="false"
@@ -1447,20 +2258,27 @@ function renderDevices() {
                   aria-label="About Headpat Mode"
                   onclick="togglePanelInfo(event, 'velocity-info-${i}')">i</button>
               </div>
-              <label class="velocity-switch">
-                <input type="checkbox" class="velocity-toggle-input" role="switch"
-                  aria-label="Enable Headpat Mode for device ${i + 1}"
-                  ${d.use_velocity_control ? 'checked' : ''}
-                  onchange="onVelocityControlChange(${i}, this)">
-                <span class="velocity-toggle-track" aria-hidden="true">
-                  <span class="velocity-toggle-thumb"></span>
-                </span>
-              </label>
+              <div class="velocity-panel-header-actions">
+                <label class="velocity-switch">
+                  <input type="checkbox" class="velocity-toggle-input" role="switch"
+                    aria-label="Enable Headpat Mode for device ${i + 1}"
+                    ${d.use_velocity_control ? 'checked' : ''}
+                    onchange="onVelocityControlChange(${i}, this)">
+                  <span class="velocity-toggle-track" aria-hidden="true">
+                    <span class="velocity-toggle-thumb"></span>
+                  </span>
+                </label>
+                <button type="button" class="btn btn-secondary btn-sm disclosure-toggle-btn headpat-panel-toggle" id="headpat-panel-toggle-${i}"
+                  aria-expanded="${isHeadpatPanelVisible(i) ? 'true' : 'false'}"
+                  aria-controls="headpat-panel-${i}"
+                  aria-label="${isHeadpatPanelVisible(i) ? 'Hide' : 'Show'} headpat settings for device ${i + 1}"
+                  onclick="toggleHeadpatPanel(${i})"><span class="disclosure-toggle-icon" aria-hidden="true">▼</span></button>
+              </div>
             </div>
             <p class="panel-info-text hidden" id="velocity-info-${i}">
               Vibratrion strength follows how fast proximity changes, not how close you are.
             </p>
-            <div class="velocity-panel-body${d.use_velocity_control ? '' : ' hidden'}">
+            <div class="velocity-panel-body${d.use_velocity_control && isHeadpatPanelVisible(i) ? '' : ' hidden'}" id="headpat-panel-${i}">
             <label class="velocity-toggle-row velocity-sub-toggle">
               <span class="velocity-toggle-label">Vibrate on pull-away</span>
               <input type="checkbox" class="velocity-toggle-input" role="switch"
@@ -1511,13 +2329,14 @@ function renderDevices() {
             </div>
           </section>
           <section class="proximity-band-panel" aria-label="Collider adjustment for device ${i + 1}">
-            <div class="proximity-band-panel-header">
+            <div class="proximity-band-panel-header panel-disclosure-header">
               <span class="proximity-band-panel-title">Collider adjustment</span>
-              <div class="proximity-band-hide-row">
-                <button type="button" class="btn btn-secondary btn-sm" id="collider-adjust-toggle-${i}"
+              <div class="proximity-band-header-actions">
+                <button type="button" class="btn btn-secondary btn-sm disclosure-toggle-btn" id="collider-adjust-toggle-${i}"
                   aria-expanded="${isColliderAdjustmentVisible(i) ? 'true' : 'false'}"
+                  aria-controls="proximity-band-${i}"
                   aria-label="${isColliderAdjustmentVisible(i) ? 'Hide' : 'Show'} collider adjustment for device ${i + 1}"
-                  onclick="toggleColliderAdjustment(${i})">${isColliderAdjustmentVisible(i) ? 'Hide' : 'Show'}</button>
+                  onclick="toggleColliderAdjustment(${i})"><span class="disclosure-toggle-icon" aria-hidden="true">▼</span></button>
               </div>
             </div>
             <div class="proximity-band-panel-body${isColliderAdjustmentVisible(i) ? '' : ' hidden'}" id="proximity-band-${i}">
@@ -1547,15 +2366,20 @@ function renderDevices() {
           </section>
           </div>
           <div class="device-actions">
-            ${pendingRemoveIndex === i
-              ? `<button type="button" class="btn btn-danger" onclick="cancelRemoveDevice()">Remove</button>
-                 <button type="button" class="btn btn-secondary btn-sm" onclick="cancelRemoveDevice()">Cancel</button>
-                 <button type="button" class="btn btn-primary btn-sm" onclick="confirmRemoveDevice(${i})">Confirm</button>`
-              : `<button type="button" class="btn btn-danger" onclick="requestRemoveDevice(${i})">Remove</button>`}
-            <button type="button" class="btn btn-secondary btn-sm device-card-toggle-btn" id="device-card-toggle-${i}"
-              aria-expanded="${isDeviceCardCollapsed(i) ? 'false' : 'true'}"
-              aria-label="${isDeviceCardCollapsed(i) ? 'Show' : 'Hide'} device card details for device ${i + 1}"
-              onclick="toggleDeviceCardCollapse(${i})">${isDeviceCardCollapsed(i) ? 'Show' : 'Hide'}</button>
+            <div class="device-actions-start">
+              ${pendingRemoveIndex === i
+                ? `<button type="button" class="btn btn-danger" onclick="cancelRemoveDevice()">Remove</button>
+                   <button type="button" class="btn btn-secondary btn-sm" onclick="cancelRemoveDevice()">Cancel</button>
+                   <button type="button" class="btn btn-primary btn-sm" onclick="confirmRemoveDevice(${i})">Confirm</button>`
+                : `<button type="button" class="btn btn-danger device-remove-btn" aria-label="Remove device ${i + 1}"
+                   onclick="requestRemoveDevice(${i})">${removeDeviceIconMarkup()}</button>`}
+            </div>
+            <div class="device-actions-end">
+              ${pendingRemoveIndex !== i ? `<button type="button" class="btn btn-sm btn-secondary device-viz-btn${isColliderVizOpen(i) ? ' device-viz-btn-active' : ''}"
+                data-viz-btn-index="${i}" aria-pressed="${isColliderVizOpen(i) ? 'true' : 'false'}"
+                aria-label="${isColliderVizOpen(i) ? 'Close' : 'Open'} visualizer for device ${i + 1}"
+                onclick="openColliderViz(${i})">Visualizer</button>` : ''}
+            </div>
           </div>
         </div>
         <div class="test-slider-col">
@@ -1576,10 +2400,15 @@ function renderDevices() {
 }
 
 function syncLogSectionLayout() {
-  const btnRow = document.querySelector('#config-wrap .btn-row');
+  const footer = document.querySelector('#config-wrap .config-footer');
   const spacer = document.getElementById('log-bottom-spacer');
-  if (btnRow && spacer) {
-    spacer.style.height = btnRow.offsetHeight + 'px';
+  const logColumnOpen = isLogColumnOpen();
+  if (spacer) {
+    if (footer && logColumnOpen) {
+      spacer.style.height = footer.offsetHeight + 'px';
+    } else {
+      spacer.style.height = '0px';
+    }
   }
 
   const wrap = document.getElementById('config-wrap');
@@ -1590,8 +2419,26 @@ function syncLogSectionLayout() {
 function pingStatusLabel(st) {
   if (st === 'online') return 'Online';
   if (st === 'offline') return 'Offline';
-  if (st === 'checking') return 'Checking…';
-  return '—';
+  if (st === 'checking') return 'Checking';
+  return 'Unknown';
+}
+
+function removeDeviceIconMarkup() {
+  return '<span class="device-remove-icon" aria-hidden="true"><svg class="device-remove-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16"/><path d="M10 7V5a2 2 0 0 1 4 0v2"/><path d="M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12"/><path d="M10 11v5"/><path d="M14 11v5"/></svg></span>';
+}
+
+function pingStatusIconMarkup(st) {
+  let svg = '';
+  if (st === 'online') {
+    svg = '<svg class="device-status-svg" viewBox="0 0 24 24"><path d="M5 12.5l5.5 5.5L19 7.5" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+  } else if (st === 'offline') {
+    svg = '<svg class="device-status-svg" viewBox="0 0 24 24"><path d="M7 7l10 10M17 7L7 17" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/></svg>';
+  } else if (st === 'checking') {
+    svg = '<svg class="device-status-svg device-status-spinner" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8" fill="none" stroke="currentColor" stroke-width="2" opacity="0.28"/><path d="M12 4a8 8 0 0 1 8 8" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>';
+  } else {
+    svg = '<svg class="device-status-svg" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8" fill="none" stroke="currentColor" stroke-width="2"/></svg>';
+  }
+  return '<span class="device-status-icon" aria-hidden="true">' + svg + '</span>';
 }
 
 function updatePingBadges() {
@@ -1601,7 +2448,8 @@ function updatePingBadges() {
     const ip = (d.ip || '').trim();
     const st = ip ? (devicePingStatus[ip] || 'unknown') : 'unknown';
     el.className = 'device-status ' + st;
-    el.textContent = pingStatusLabel(st);
+    el.innerHTML = pingStatusIconMarkup(st);
+    el.setAttribute('aria-label', 'Ping device ' + (i + 1) + ': ' + pingStatusLabel(st));
   });
 }
 
@@ -1881,14 +2729,31 @@ function beginSliderDrag(index, trackEl, e) {
   trackEl.addEventListener('lostpointercapture', drag.onLostCapture);
 }
 
-function onMaxSpeedChange(index, input) {
-  const t = parseInt(input.value, 10) / SPEED_SLIDER_STEPS;
-  const speed = sliderPosToSpeed(t);
+function applyMaxSpeedToDeviceUi(index, speed) {
+  const powerMin = editorSpeedDefaults.min || 5;
+  speed = Math.max(powerMin, Math.min(100, Math.round(speed)));
+  if (!editorDevices[index]) return;
   editorDevices[index].max_speed = speed;
-  input.value = Math.round(speedToSliderPos(speed) * SPEED_SLIDER_STEPS);
+  const slider = document.getElementById('max-speed-slider-' + index);
+  if (slider) slider.value = Math.round(speedToSliderPos(speed) * SPEED_SLIDER_STEPS);
   const label = document.getElementById('max-speed-val-' + index);
   if (label) label.textContent = speed + '%';
 }
+
+function onMaxSpeedChange(index, input) {
+  const t = parseInt(input.value, 10) / SPEED_SLIDER_STEPS;
+  applyMaxSpeedToDeviceUi(index, sliderPosToSpeed(t));
+}
+
+window.onMaxSpeedFromVrc = function(payload) {
+  if (!payload || !payload.ip) return;
+  const ip = String(payload.ip).trim();
+  const speed = payload.max_speed;
+  if (speed == null || isNaN(speed)) return;
+  const idx = editorDevices.findIndex((d) => (d.ip || '').trim() === ip);
+  if (idx < 0) return;
+  applyMaxSpeedToDeviceUi(idx, speed);
+};
 
 function togglePanelInfo(event, id) {
   if (event) {
@@ -1909,7 +2774,12 @@ function togglePanelInfo(event, id) {
 
 function onVelocityControlChange(index, input) {
   if (!editorDevices[index]) return;
-  editorDevices[index].use_velocity_control = !!input.checked;
+  const enabling = !!input.checked;
+  editorDevices[index].use_velocity_control = enabling;
+  if (enabling && !hasHeadpatPanelPreference(index)) {
+    setHeadpatPanelVisible(index, true);
+  }
+  syncColliderViz(index);
   renderDevices();
   saveConfig(true);
 }
@@ -1921,10 +2791,51 @@ function toggleColliderAdjustment(index) {
   if (body) body.classList.toggle('hidden', !visible);
   const btn = document.getElementById('collider-adjust-toggle-' + index);
   if (btn) {
-    btn.textContent = visible ? 'Hide' : 'Show';
     btn.setAttribute('aria-expanded', visible ? 'true' : 'false');
     btn.setAttribute('aria-label', (visible ? 'Hide' : 'Show') + ' collider adjustment for device ' + (index + 1));
   }
+}
+
+function toggleDeviceSetup(index) {
+  const visible = !isDeviceSetupVisible(index);
+  setDeviceSetupVisible(index, visible);
+  const body = document.getElementById('device-setup-' + index);
+  if (body) body.classList.toggle('hidden', !visible);
+  const btn = document.getElementById('device-setup-toggle-' + index);
+  if (btn) {
+    btn.setAttribute('aria-expanded', visible ? 'true' : 'false');
+    btn.setAttribute('aria-label', (visible ? 'Hide' : 'Show') + ' device setup for device ' + (index + 1));
+  }
+  syncLogSectionLayout();
+}
+
+function togglePowerPanel(index) {
+  const visible = !isPowerPanelVisible(index);
+  setPowerPanelVisible(index, visible);
+  const body = document.getElementById('power-panel-' + index);
+  if (body) body.classList.toggle('hidden', !visible);
+  const val = document.getElementById('max-speed-val-' + index);
+  if (val) val.style.display = visible ? '' : 'none';
+  const btn = document.getElementById('power-panel-toggle-' + index);
+  if (btn) {
+    btn.setAttribute('aria-expanded', visible ? 'true' : 'false');
+    btn.setAttribute('aria-label', (visible ? 'Hide' : 'Show') + ' power for device ' + (index + 1));
+  }
+  syncLogSectionLayout();
+}
+
+function toggleHeadpatPanel(index) {
+  if (!editorDevices[index] || !editorDevices[index].use_velocity_control) return;
+  const visible = !isHeadpatPanelVisible(index);
+  setHeadpatPanelVisible(index, visible);
+  const body = document.getElementById('headpat-panel-' + index);
+  if (body) body.classList.toggle('hidden', !visible);
+  const btn = document.getElementById('headpat-panel-toggle-' + index);
+  if (btn) {
+    btn.setAttribute('aria-expanded', visible ? 'true' : 'false');
+    btn.setAttribute('aria-label', (visible ? 'Hide' : 'Show') + ' headpat settings for device ' + (index + 1));
+  }
+  syncLogSectionLayout();
 }
 
 function toggleDeviceCardCollapse(index) {
@@ -1938,6 +2849,7 @@ function toggleDeviceCardCollapse(index) {
 function onVelocityOnProxDropChange(index, input) {
   if (!editorDevices[index]) return;
   editorDevices[index].velocity_on_prox_drop = !!input.checked;
+  syncColliderViz(index);
   saveConfig(true);
 }
 
@@ -1950,6 +2862,7 @@ function onInnerProxBandChange(index, input) {
   if (closeEdge <= farEdge) closeEdge = Math.min(1, farEdge + 0.01);
   d.inner_proximity = closeEdge;
   input.value = proxToColliderSliderPct(closeEdge);
+  syncColliderViz(index);
   maybeClearConfigError();
 }
 
@@ -1965,6 +2878,7 @@ function onOuterProxBandChange(index, input) {
     const innerInput = document.getElementById('inner-prox-' + index);
     if (innerInput) innerInput.value = proxToColliderSliderPct(closeEdge);
   }
+  syncColliderViz(index);
   maybeClearConfigError();
 }
 
@@ -1975,6 +2889,7 @@ function onVelocityScalarChange(index, input) {
   d.velocity_scalar = v;
   const label = document.getElementById('velocity-scalar-val-' + index);
   if (label) label.textContent = String(v) + '%';
+  syncColliderViz(index);
   maybeClearConfigError();
 }
 
@@ -1985,6 +2900,7 @@ function onVelocitySoftcapChange(index, input) {
   d.velocity_softcap = dampingPctToVelocitySoftcap(dampingPct);
   const label = document.getElementById('velocity-softcap-val-' + index);
   if (label) label.textContent = String(dampingPct) + '%';
+  syncColliderViz(index);
   maybeClearConfigError();
 }
 
@@ -1995,6 +2911,7 @@ function onVelocitySmoothingChange(index, input) {
   d.velocity_smoothing_ms = v;
   const label = document.getElementById('velocity-smoothing-val-' + index);
   if (label) label.textContent = String(v) + 'ms';
+  syncColliderViz(index);
   maybeClearConfigError();
 }
 
@@ -2003,6 +2920,7 @@ function addDevice() {
     name: editorDevices.length === 0 ? 'Headpats' : '',
     ip: '',
     proximity_parameter: 'proximity_01',
+    max_speed_parameter: '',
     max_speed: editorSpeedDefaults.max,
     use_velocity_control: editorVelocityDefault,
     velocity_on_prox_drop: editorVelocityOnProxDropDefault,
@@ -2124,8 +3042,9 @@ window.onConfigLoaded = function(state) {
   }
   if (state.port_rx != null) editorPortRx = String(state.port_rx);
   const powerMin = editorSpeedDefaults.min;
-  editorDevices = (state.devices || []).map((d) => ({
+  editorDevices = (state.devices || []).map((d, i) => ({
     ...d,
+    max_speed_parameter: (d.max_speed_parameter || '').trim(),
     max_speed: Math.max(powerMin, d.max_speed ?? powerMin),
     use_velocity_control: !!d.use_velocity_control,
     velocity_on_prox_drop: !!d.velocity_on_prox_drop,
@@ -2139,42 +3058,59 @@ window.onConfigLoaded = function(state) {
   updateOscPortUi();
   clearConfigStatus();
   startDevicePingLoop();
-
-  // Startup-only: fit window height to the device-card layout (do not change width).
-  requestAnimationFrame(() => {
-    const header = document.querySelector('header');
-    const wrap = document.getElementById('config-wrap');
-    const scroll = document.getElementById('config-scroll');
-    const list = document.getElementById('device-list');
-    const btnRow = document.querySelector('#config-wrap .btn-row');
-    if (!wrap || !scroll || !list || !btnRow) return;
-
-    // We want enough window height to show ONE full device card + the footer row.
-    // (User can manually resize taller to see more.)
-    const wrapZoom = parseFloat(getComputedStyle(wrap).zoom || '1');
-    const zoom = Number.isFinite(wrapZoom) && wrapZoom > 0 ? wrapZoom : 1;
-    const wrapPad = parseFloat(getComputedStyle(wrap).paddingTop || '0')
-      + parseFloat(getComputedStyle(wrap).paddingBottom || '0');
-    const headerH = header ? header.getBoundingClientRect().height : 0;
-    const statusEl = document.getElementById('config-status');
-    const statusH = statusEl ? statusEl.getBoundingClientRect().height : 0;
-    const gap = 12; // matches CSS gap in #config-wrap
-
-    const firstCard = list.querySelector('.device-card');
-    const listStyle = getComputedStyle(list);
-    const listPadTop = parseFloat(listStyle.paddingTop || '0');
-    const listPadBottom = parseFloat(listStyle.paddingBottom || '0');
-    const listGap = parseFloat(listStyle.rowGap || listStyle.gap || '0') || 0;
-    const cardH = firstCard ? firstCard.getBoundingClientRect().height : 0;
-    const deviceOneCardH = Math.max(scroll.getBoundingClientRect().height, listPadTop + cardH + listGap + listPadBottom);
-
-    // Small extra slack to avoid clipping by a few pixels.
-    const slack = 1100;
-    const configH = (wrapPad + statusH + deviceOneCardH + gap + btnRow.getBoundingClientRect().height + 24 + slack) * zoom;
-    const h = Math.max(1, Math.ceil(headerH + configH));
-    window.ipc.postMessage('startup-height:' + JSON.stringify({ h }));
-  });
+  fitStartupWindowHeight();
 };
+
+/** One-time startup height: one device card + footer (+ header). Width unchanged. */
+function fitStartupWindowHeight() {
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      syncLogSectionLayout();
+      const header = document.querySelector('header');
+      const wrap = document.getElementById('config-wrap');
+      const list = document.getElementById('device-list');
+      const footer = document.querySelector('#config-wrap .config-footer');
+      const primaryActions = document.querySelector('.footer-actions');
+      if (!wrap || !list || !footer) return;
+
+      const headerH = header ? header.getBoundingClientRect().height : 0;
+      const statusEl = document.getElementById('config-status');
+      const statusH = (statusEl && statusEl.classList.contains('err'))
+        ? statusEl.getBoundingClientRect().height : 0;
+      const wrapStyle = getComputedStyle(wrap);
+      const gap = parseFloat(wrapStyle.rowGap || wrapStyle.gap || '0') || 12;
+      const wrapPadY = parseFloat(wrapStyle.paddingTop || '0')
+        + parseFloat(wrapStyle.paddingBottom || '0');
+
+      const firstCard = list.querySelector('.device-card');
+      const hint = list.querySelector('.hint');
+      const listStyle = getComputedStyle(list);
+      const listPadY = parseFloat(listStyle.paddingTop || '0')
+        + parseFloat(listStyle.paddingBottom || '0');
+      let listContentH = 0;
+      if (firstCard) {
+        listContentH = firstCard.getBoundingClientRect().height;
+      } else if (hint) {
+        listContentH = hint.getBoundingClientRect().height;
+      }
+
+      const primaryH = primaryActions ? primaryActions.getBoundingClientRect().height : 0;
+      const settingsH = footer.getBoundingClientRect().height;
+      const configColumnH = wrapPadY + statusH + listPadY + listContentH + primaryH + gap + settingsH;
+      const slack = 32;
+      let h = Math.ceil(headerH + configColumnH + slack);
+
+      if (isLogColumnOpen()) {
+        h = Math.max(h, 720);
+      } else {
+        h = Math.max(h, 480);
+      }
+      h = Math.ceil(h * 1.25);
+
+      window.ipc.postMessage('startup-height:' + JSON.stringify({ h }));
+    });
+  });
+}
 
 window.onConfigSaved = function(opts) {
   opts = opts || {};
@@ -2253,21 +3189,12 @@ function renderPatBars() {
 }
 
 let lastStatusLines = [];
-const STATUS_LINE_PX = 12 * 1.45;
 const STATUS_MAX_LINES = 100;
-
-function statusViewportLines() {
-  const box = document.getElementById('log-box');
-  if (!box) return 40;
-  const pad = 20;
-  return Math.max(4, Math.floor((box.clientHeight - pad) / STATUS_LINE_PX));
-}
 
 function renderStatus(lines) {
   const el = document.getElementById('log');
   if (!el) return;
-  const head = lines.slice(0, statusViewportLines());
-  el.textContent = head.join('\n');
+  el.textContent = lines.join('\n');
 }
 
 function setStatusLines(lines) {
@@ -2298,28 +3225,28 @@ function setupPaneScroll(wrapId, scrollId) {
 }
 
 setupPaneScroll('config-wrap', 'config-scroll');
+setupPaneScroll('log-section', 'log-cards-scroll');
 setupTestSliderSafety();
-const logBox = document.getElementById('log-box');
-if (logBox) {
-  new ResizeObserver(() => {
-    if (lastStatusLines.length) renderStatus(lastStatusLines);
-  }).observe(logBox);
-}
 const configScroll = document.getElementById('config-scroll');
 if (configScroll) {
   configScroll.addEventListener('scroll', () => syncLogSectionLayout(), { passive: true });
 }
 window.addEventListener('resize', () => syncLogSectionLayout());
-const configBtnRow = document.querySelector('#config-wrap .btn-row');
+const configFooter = document.querySelector('#config-wrap .config-footer');
+const footerActions = document.querySelector('.footer-actions');
 const deviceList = document.getElementById('device-list');
 if (typeof ResizeObserver !== 'undefined') {
-  if (configBtnRow) {
-    new ResizeObserver(() => syncLogSectionLayout()).observe(configBtnRow);
+  if (configFooter) {
+    new ResizeObserver(() => syncLogSectionLayout()).observe(configFooter);
+  }
+  if (footerActions) {
+    new ResizeObserver(() => syncLogSectionLayout()).observe(footerActions);
   }
   if (deviceList) {
     new ResizeObserver(() => syncLogSectionLayout()).observe(deviceList);
   }
 }
+applyConsolePanelUi();
 requestAnimationFrame(() => syncLogSectionLayout());
 window.ipc.postMessage('load-config');
 </script>
@@ -2332,7 +3259,13 @@ fn output_html() -> String {
     "data:image/png;base64,{}",
     STANDARD.encode(include_bytes!("assets/Giggletech_Black.png"))
   );
-  OUTPUT_HTML.replace(LOGO_PLACEHOLDER, &uri)
+  let card_inner =
+    serde_json::to_string(collider_viz::COLLIDER_VIZ_CARD_INNER).unwrap_or_else(|_| "\"\"".to_string());
+  OUTPUT_HTML
+    .replace(LOGO_PLACEHOLDER, &uri)
+    .replace(COLLIDER_VIZ_STYLES_PLACEHOLDER, collider_viz::COLLIDER_VIZ_STYLES)
+    .replace(COLLIDER_VIZ_RUNTIME_PLACEHOLDER, collider_viz::COLLIDER_VIZ_RUNTIME)
+    .replace(COLLIDER_VIZ_CARD_INNER_PLACEHOLDER, &card_inner)
 }
 
 enum UserEvent {
@@ -2340,9 +3273,14 @@ enum UserEvent {
   MenuEvent(tray_icon::menu::MenuEvent),
   StatusUpdated,
   LiveUiFlush,
+  ColliderProxFlush,
   ConfigIpc(String),
+  ColliderVizOpen(String),
+  ColliderVizUpdate(String),
+  ColliderVizClose(usize),
   PingResults(String),
   MdnsLookupResult(String),
+  MaxSpeedFromVrc(String),
   ShowOutput,
 }
 
@@ -2374,6 +3312,7 @@ fn webview_data_directory() -> PathBuf {
 struct UiState {
   web_context: WebContext,
   output: Option<OutputWindow>,
+  collider_viz_open: HashMap<usize, ColliderVizState>,
   status_synced: usize,
   status_epoch: usize,
   status_pending: bool,
@@ -2386,6 +3325,7 @@ impl UiState {
     Self {
       web_context: WebContext::new(Some(webview_data_directory())),
       output: None,
+      collider_viz_open: HashMap::new(),
       status_synced: 0,
       status_epoch: log_ui::buffer_epoch(),
       status_pending: false,
@@ -2396,6 +3336,92 @@ impl UiState {
 
   fn output_window_id(&self) -> Option<tao::window::WindowId> {
     self.output.as_ref().map(|o| o.window.id())
+  }
+
+  fn push_collider_viz_state(webview: &wry::WebView, state: &ColliderVizState) {
+    let _ = webview.evaluate_script(&collider_viz::state_script(state));
+  }
+
+  fn flush_collider_live_to(
+    webview: &wry::WebView,
+    active: &ColliderVizState,
+    prox_batch: &HashMap<String, f32>,
+    headpat_batch: &HashMap<String, String>,
+  ) {
+    let active_key = collider_viz::batch_key(&active.device_ip, &active.proximity_parameter);
+    let prox = prox_batch.get(&active_key).copied();
+    let device_ip = active.device_ip.trim();
+    let motor_live = (!device_ip.is_empty())
+      .then(|| PENDING_MOTOR_BARS.lock().unwrap().get(device_ip).copied())
+      .flatten();
+    let fresh = headpat_batch.get(&active_key).cloned();
+    let telemetry = fresh.clone().or_else(|| {
+      LAST_HEADPAT_TELEMETRY
+        .lock()
+        .unwrap()
+        .get(&active_key)
+        .cloned()
+    });
+    if let Some(json) = telemetry {
+      let append = fresh.is_some();
+      let script = motor_live
+        .map(|motor| merge_headpat_telemetry_motor(&json, motor))
+        .unwrap_or(json);
+      let script =
+        collider_viz::collider_flush_script(active.index, prox, Some(&script), append);
+      if !script.is_empty() {
+        let _ = webview.evaluate_script(&script);
+      }
+    } else if let Some(p) = prox {
+      let _ = webview.evaluate_script(&collider_viz::prox_sample_script(active.index, p));
+    } else if let Some(motor) = motor_live {
+      let _ = webview.evaluate_script(&collider_viz::headpat_motor_script(active.index, motor));
+    }
+  }
+
+  fn flush_collider_live(&mut self) {
+    if self.collider_viz_open.is_empty() {
+      return;
+    }
+    let Some(output) = &self.output else {
+      return;
+    };
+    let prox_batch: HashMap<String, f32> = PENDING_PROX_SIGNALS.lock().unwrap().drain().collect();
+    let headpat_batch: HashMap<String, String> =
+      PENDING_HEADPAT_TELEMETRY.lock().unwrap().drain().collect();
+    for state in self.collider_viz_open.values() {
+      Self::flush_collider_live_to(&output.webview, state, &prox_batch, &headpat_batch);
+    }
+  }
+
+  fn show_collider_viz(&mut self, state: ColliderVizState) {
+    self.collider_viz_open.insert(state.index, state.clone());
+    if let Some(output) = &self.output {
+      let json = serde_json::to_string(&state).unwrap_or_else(|_| "{}".to_string());
+      let _ = output
+        .webview
+        .evaluate_script(&format!("openColliderVizCard({json});"));
+      Self::push_collider_viz_state(&output.webview, &state);
+    }
+  }
+
+  fn close_collider_viz(&mut self, index: usize) {
+    self.collider_viz_open.remove(&index);
+  }
+
+  fn close_all_collider_viz(&mut self) {
+    self.collider_viz_open.clear();
+    if let Some(output) = &self.output {
+      let _ = output.webview.evaluate_script(
+        "(function(){var list=document.getElementById('log-viz-cards');\
+         if(!list)return;\
+         list.querySelectorAll('.log-viz-card').forEach(function(c){\
+           var i=parseInt(c.dataset.vizIndex,10);\
+           if(window.colliderVizApi)window.colliderVizApi.unmount(i);\
+         });\
+         list.innerHTML='';})();",
+      );
+    }
   }
 
   fn create_output_window(
@@ -2458,6 +3484,12 @@ impl UiState {
       self.status_pending = false;
       self.last_status_flush = Some(Instant::now());
       flush_live_ui(&output.webview);
+      for state in self.collider_viz_open.values() {
+        let json = serde_json::to_string(state).unwrap_or_else(|_| "{}".to_string());
+        let _ = output.webview.evaluate_script(&format!(
+          "if(typeof openColliderVizCard==='function')openColliderVizCard({json});"
+        ));
+      }
     }
   }
 
@@ -2520,6 +3552,11 @@ impl UiState {
     self.status_epoch = log_ui::buffer_epoch();
     self.status_pending = false;
     self.last_status_flush = None;
+  }
+
+  fn close_all_windows(&mut self) {
+    self.close_output();
+    self.close_all_collider_viz();
   }
 }
 
@@ -2648,6 +3685,14 @@ fn handle_config_ipc(
       let payload = serde_json::to_string(&result).unwrap_or_else(|_| "{}".to_string());
       let _ = proxy.send_event(UserEvent::MdnsLookupResult(payload));
     });
+  } else if let Some(json) = msg.strip_prefix("collider-viz-open:") {
+    let _ = event_proxy.send_event(UserEvent::ColliderVizOpen(json.to_string()));
+  } else if let Some(json) = msg.strip_prefix("collider-viz-update:") {
+    let _ = event_proxy.send_event(UserEvent::ColliderVizUpdate(json.to_string()));
+  } else if let Some(index_str) = msg.strip_prefix("collider-viz-close:") {
+    if let Ok(index) = index_str.trim().parse::<usize>() {
+      let _ = event_proxy.send_event(UserEvent::ColliderVizClose(index));
+    }
   }
 }
 
@@ -2677,6 +3722,31 @@ pub fn run(start_minimized: bool, primary: PrimaryInstance) {
   let pat_proxy = event_loop.create_proxy();
   log_ui::set_pat_bar_notify(move |param, graph| {
     queue_pat_bar(param.to_string(), graph.to_string(), &pat_proxy);
+  });
+
+  let prox_signal_proxy = event_loop.create_proxy();
+  log_ui::set_prox_signal_notify(move |device_ip, param, value| {
+    queue_prox_signal(device_ip.to_string(), param.to_string(), value, &prox_signal_proxy);
+  });
+
+  let headpat_proxy = event_loop.create_proxy();
+  log_ui::set_headpat_telemetry_notify(move |device_ip, param, json| {
+    queue_headpat_telemetry(
+      device_ip.to_string(),
+      param.to_string(),
+      json.to_string(),
+      &headpat_proxy,
+    );
+  });
+
+  let max_speed_proxy = event_loop.create_proxy();
+  log_ui::set_max_speed_notify(move |device_ip, percent| {
+    if let Ok(json) = serde_json::to_string(&serde_json::json!({
+      "ip": device_ip,
+      "max_speed": percent,
+    })) {
+      let _ = max_speed_proxy.send_event(UserEvent::MaxSpeedFromVrc(json));
+    }
   });
 
   let proxy = event_loop.create_proxy();
@@ -2798,6 +3868,40 @@ pub fn run(start_minimized: bool, primary: PrimaryInstance) {
         }
       }
 
+      Event::UserEvent(UserEvent::MaxSpeedFromVrc(json)) => {
+        if let Some(output) = &ui_state.output {
+          let _ = output.webview.evaluate_script(&format!(
+            "window.onMaxSpeedFromVrc({});",
+            json
+          ));
+        }
+      }
+
+      Event::UserEvent(UserEvent::ColliderProxFlush) => {
+        ui_state.flush_collider_live();
+      }
+
+      Event::UserEvent(UserEvent::ColliderVizOpen(json)) => {
+        if let Some(state) = collider_viz::parse_state(&json) {
+          ui_state.show_collider_viz(state);
+        }
+      }
+
+      Event::UserEvent(UserEvent::ColliderVizUpdate(json)) => {
+        if let Some(state) = collider_viz::parse_state(&json) {
+          if ui_state.collider_viz_open.contains_key(&state.index) {
+            ui_state.collider_viz_open.insert(state.index, state.clone());
+            if let Some(output) = &ui_state.output {
+              UiState::push_collider_viz_state(&output.webview, &state);
+            }
+          }
+        }
+      }
+
+      Event::UserEvent(UserEvent::ColliderVizClose(index)) => {
+        ui_state.close_collider_viz(index);
+      }
+
       Event::UserEvent(UserEvent::ShowOutput) => {
         ui_state.show_output(event_loop, &ipc_proxy);
       }
@@ -2816,7 +3920,7 @@ pub fn run(start_minimized: bool, primary: PrimaryInstance) {
           }
         } else if menu_event.id == exit_item.id() {
           tray_icon.take();
-          ui_state.close_output();
+          ui_state.close_all_windows();
           *control_flow = ControlFlow::Exit;
         }
       }

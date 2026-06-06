@@ -70,14 +70,32 @@ pub(crate) async fn handle_proximity_parameter(
         String::new()
     };
     log_ui::notify_pat_bar(device.proximity_parameter.as_str(), &pat_graph);
+    log_ui::notify_prox_signal(device.device_uri.as_str(), device.proximity_parameter.as_str(), value);
 
     if value == 0.0 {
         // Reset smoothing when proximity fully clears.
         DEVICE_VELOCITY_EMA.lock().await.remove(device_ip.as_str());
+        if let Ok(json) = serde_json::to_string(&serde_json::json!({
+            "pre": 0.0,
+            "damped": 0.0,
+            "smooth": 0.0,
+            "motor": 0.0,
+        })) {
+            log_ui::notify_headpat_telemetry(device.device_uri.as_str(), device.proximity_parameter.as_str(), &json);
+        }
         stop_pats::stop_device_with_terminator(device_ip.as_str(), running.clone()).await?;
     } else {
         if !device.use_velocity_control {
             let headpat_tx = data_processing::process_pat(value, &device, last_val);
+            let motor_norm = data_processing::motor_norm_from_tx(headpat_tx, &device);
+            if let Ok(json) = serde_json::to_string(&serde_json::json!({
+                "pre": 0.0,
+                "damped": 0.0,
+                "smooth": 0.0,
+                "motor": motor_norm,
+            })) {
+                log_ui::notify_headpat_telemetry(device.device_uri.as_str(), device.proximity_parameter.as_str(), &json);
+            }
             if headpat_tx == 0 {
                 stop_pats::stop_device_immediate(device_ip.as_str(), running.clone()).await?;
             } else {
@@ -92,7 +110,9 @@ pub(crate) async fn handle_proximity_parameter(
             // Simple smoothing: EMA on computed velocity (per device).
             // Higher tau => smoother but more latency.
             let vel_smooth_tau_secs = (device.velocity_smoothing_ms as f32) / 1000.0;
-            let raw_vel = data_processing::compute_proximity_velocity(value, last_val, delta_t, &device);
+            let breakdown =
+                data_processing::compute_proximity_velocity_breakdown(value, last_val, delta_t, &device);
+            let damped_vel = breakdown.post_softcap;
             let dt = delta_t.as_secs_f32();
             let alpha = if dt <= 0.0 || vel_smooth_tau_secs <= 0.0 {
                 1.0
@@ -103,7 +123,7 @@ pub(crate) async fn handle_proximity_parameter(
 
             let mut ema_map = DEVICE_VELOCITY_EMA.lock().await;
             let prev_ema = *ema_map.get(device_ip.as_str()).unwrap_or(&0.0);
-            let ema_vel = prev_ema + alpha * (raw_vel - prev_ema);
+            let ema_vel = prev_ema + alpha * (damped_vel - prev_ema);
             if ema_vel <= 0.0 {
                 ema_map.remove(device_ip.as_str());
             } else {
@@ -112,6 +132,15 @@ pub(crate) async fn handle_proximity_parameter(
             drop(ema_map);
 
             let headpat_tx = data_processing::motor_tx_from_velocity(ema_vel, &device);
+            let motor_norm = data_processing::motor_norm_from_tx(headpat_tx, &device);
+            if let Ok(json) = serde_json::to_string(&serde_json::json!({
+                "pre": breakdown.pre_softcap,
+                "damped": damped_vel,
+                "smooth": ema_vel,
+                "motor": motor_norm,
+            })) {
+                log_ui::notify_headpat_telemetry(device.device_uri.as_str(), device.proximity_parameter.as_str(), &json);
+            }
             if headpat_tx == 0 {
                 // Proximity still non-zero but no velocity pulse — latch motor off (single 0 is often not enough).
                 DEVICE_VELOCITY_EMA.lock().await.remove(device_ip.as_str());
